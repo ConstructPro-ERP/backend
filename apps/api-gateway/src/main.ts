@@ -5,7 +5,9 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const port = Number(process.env.PORT ?? 3000);
+  const envPort = process.env.PORT;
+  const port = envPort ? Number.parseInt(envPort, 10) : 3000;
+  if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);
 
   app.setGlobalPrefix('api');
   app.enableCors();

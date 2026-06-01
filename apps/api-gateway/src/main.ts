@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { Express } from 'express';
 import { AppModule } from './app.module';
@@ -21,11 +22,15 @@ async function bootstrap() {
 
   await app.listen(port);
 
-  console.log(`API Gateway is running on http://localhost:${port}`);
-  console.log(`Health check: http://localhost:${port}/health`);
+  Logger.log(`API Gateway is running on http://localhost:${port}`, 'Bootstrap');
+  Logger.log(`Health check: http://localhost:${port}/health`, 'Bootstrap');
 }
 
 bootstrap().catch((error: unknown) => {
-  console.error('Failed to start API Gateway', error);
+  Logger.error(
+    'Failed to start API Gateway',
+    error instanceof Error ? error.stack : undefined,
+    'Bootstrap',
+  );
   process.exit(1);
 });

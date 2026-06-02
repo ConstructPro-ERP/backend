@@ -1,6 +1,13 @@
 //Those are example code anyone can change those
-// Simple DTO placeholders — move to separate files as needed
+import { IsString, IsNotEmpty } from 'class-validator';
+
 export class LoginDto {
+  @IsString()
+  @IsNotEmpty()
   username!: string;
+
+  @IsString()
+  @IsNotEmpty()
   password!: string;
 }
+

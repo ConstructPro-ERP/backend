@@ -16,24 +16,26 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-   
+    // getAllAndOverride expects the metadata key and an array of targets
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
       ROLES_KEY,
-      context.getHandler(),
-      context.getClass(),
+      [context.getHandler(), context.getClass()],
     );
     if (!requiredRoles || requiredRoles.length === 0) {
       return true; // no roles required
     }
 
     const req = context.switchToHttp().getRequest<AuthRequest>();
-    const user = req.user as any;
+    const user = req.user;
     if (!user) {
       throw new ForbiddenException('User not available for role check');
     }
 
-    const userRoles: string[] =
-      Array.isArray(user.roles) ? user.roles : (user.role ? [String(user.role)] : []);
+    const userRoles: string[] = Array.isArray(user.roles)
+      ? user.roles
+      : user.role
+        ? [String(user.role)]
+        : [];
     const hasRole = requiredRoles.some((r) => userRoles.includes(r));
     if (!hasRole) {
       throw new ForbiddenException('Insufficient role');

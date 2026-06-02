@@ -8,8 +8,18 @@ import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 
 // DTO placeholders
-class LoginDto { username!: string; password!: string; }
-class RegisterDto { username!: string; password!: string; email?: string; }
+class LoginDto {
+  username!: string;
+  password!: string;
+}
+class RegisterDto {
+  username!: string;
+  password!: string;
+  email?: string;
+}
+
+// add an authenticated request type
+type AuthRequest = Request & { user?: any };
 
 @Controller('auth')
 export class AuthGatewayController {
@@ -17,20 +27,24 @@ export class AuthGatewayController {
 
   @Post('login')
   async login(@Body() dto: LoginDto) {
-    const resp = await firstValueFrom(this.httpService.post('http://localhost:3333/auth/login', dto));
+    const resp = await firstValueFrom(
+      this.httpService.post('http://localhost:3333/auth/login', dto),
+    );
     return resp.data;
   }
 
   @Post('register')
   async register(@Body() dto: RegisterDto) {
-    const resp = await firstValueFrom(this.httpService.post('http://localhost:3333/auth/register', dto));
+    const resp = await firstValueFrom(
+      this.httpService.post('http://localhost:3333/auth/register', dto),
+    );
     return resp.data;
   }
 
   // Protected route: token validated by JwtAuthGuard, user attached to req.user
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  async me(@Req() req: Request) {
+  me(@Req() req: AuthRequest) {
     return req.user;
   }
 
@@ -38,7 +52,7 @@ export class AuthGatewayController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
   @Get('admin')
-  async adminOnly(@Req() req: Request) {
-    return { hello: 'admin', user: req.user };
+  adminOnly(@Req() req: AuthRequest) {
+    return { role: 'admin', user: req.user };
   }
 }

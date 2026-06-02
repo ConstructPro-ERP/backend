@@ -21,7 +21,10 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
-  await app.listen(3000);
-  console.log('API gateway listening on http://localhost:3000');
+  const envPort = process.env.PORT;
+  const port = envPort ? Number.parseInt(envPort, 10) : 3000;
+  if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);
+  await app.listen(port);
+  console.log(`API gateway listening on http://localhost:${port}`);
 }
 bootstrap();

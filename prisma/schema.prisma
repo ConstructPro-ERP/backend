@@ -35,12 +35,16 @@ model User {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  role          Role           @relation(fields: [roleId], references: [id])
-  refreshTokens RefreshToken[]
-  auditLogs     AuditLog[]
-
-  // Added in Migration 2
-  assignedLeads Lead[] @relation("AssignedLeads")
+  role              Role           @relation(fields: [roleId], references: [id])
+  refreshTokens     RefreshToken[]
+  auditLogs         AuditLog[]
+  // Migration 2
+  assignedLeads     Lead[]         @relation("AssignedLeads")
+  // Migration 3
+  managedProjects   Project[]      @relation("ProjectManager")
+  assignedTasks     Task[]         @relation("AssignedTasks")
+  recordedExpenses  Expense[]      @relation("RecordedBy")
+  uploadedDocuments Document[]     @relation("UploadedDocuments")
 }
 
 model RefreshToken {
@@ -70,9 +74,6 @@ model AuditLog {
 }
 
 // ─── Migration 2: CRM & Finance Models ───────────────────────────────────────
-// CRM  : Lead, Customer
-// Finance : Quotation, QuotationItem
-// Note: Invoice & Payment depend on Project — added in Migration 3.
 
 enum LeadStatus {
   NEW
@@ -112,8 +113,9 @@ model Customer {
 
   lead       Lead?       @relation(fields: [leadId], references: [id])
   quotations Quotation[]
-
-  // Back-relations added in Migration 3 when Invoice & Payment are introduced
+  // Migration 3 back-relations
+  invoices   Invoice[]
+  payments   Payment[]
 }
 
 model Quotation {
@@ -127,8 +129,8 @@ model Quotation {
 
   customer Customer       @relation(fields: [customerId], references: [id])
   items    QuotationItem[]
-
-  // project Project? back-relation added in Migration 3 when Project is introduced
+  // Migration 3 back-relation (FK lives on Project.quotationId)
+  project  Project?
 }
 
 model QuotationItem {
@@ -142,4 +144,179 @@ model QuotationItem {
   updatedAt   DateTime @updatedAt
 
   quotation Quotation @relation(fields: [quotationId], references: [id])
+}
+
+// ─── Migration 3: Project, Operations, Finance & Documents ───────────────────
+// Anchored by Project. All remaining models depend on it directly or indirectly.
+// Operations : Project, Milestone, Task, Expense
+// Finance    : Invoice, Payment
+// Documents  : DocumentCategory, Document
+// Analytics  : AnalyticsReport
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+}
+
+enum MilestoneStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  COMPLETED
+  BLOCKED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum PaymentMethod {
+  CASH
+  BANK_TRANSFER
+  CHEQUE
+  ONLINE
+}
+
+model Project {
+  id               String        @id @default(uuid())
+  projectName      String
+  location         String?
+  startDate        DateTime
+  endDate          DateTime?
+  budget           Float?
+  quotationId      String?       @unique
+  projectManagerId String
+  status           ProjectStatus @default(PLANNING)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  quotation      Quotation?        @relation(fields: [quotationId], references: [id])
+  projectManager User              @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  milestones     Milestone[]
+  tasks          Task[]
+  expenses       Expense[]
+  invoices       Invoice[]
+  documents      Document[]
+  reports        AnalyticsReport[]
+}
+
+model Milestone {
+  id            String          @id @default(uuid())
+  projectId     String
+  milestoneName String
+  dueDate       DateTime?
+  status        MilestoneStatus @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
+  tasks   Task[]
+}
+
+model Task {
+  id           String     @id @default(uuid())
+  projectId    String
+  milestoneId  String?
+  assignedToId String?
+  taskName     String
+  status       TaskStatus @default(TODO)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  project    Project    @relation(fields: [projectId], references: [id])
+  milestone  Milestone? @relation(fields: [milestoneId], references: [id])
+  assignedTo User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
+}
+
+model Expense {
+  id           String   @id @default(uuid())
+  projectId    String
+  recordedById String
+  amount       Float
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project @relation(fields: [projectId], references: [id])
+  recordedBy User    @relation("RecordedBy", fields: [recordedById], references: [id])
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  projectId   String
+  customerId  String
+  invoiceDate DateTime
+  dueDate     DateTime?
+  totalAmount Float
+  status      InvoiceStatus @default(DRAFT)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  project  Project   @relation(fields: [projectId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+  payments Payment[]
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  invoiceId     String?
+  customerId    String
+  paymentDate   DateTime
+  amount        Float
+  paymentMethod PaymentMethod
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  invoice  Invoice?  @relation(fields: [invoiceId], references: [id])
+  customer Customer  @relation(fields: [customerId], references: [id])
+}
+
+model DocumentCategory {
+  id           String   @id @default(uuid())
+  categoryName String   @unique
+  description  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  documents Document[]
+}
+
+model Document {
+  id           String   @id @default(uuid())
+  projectId    String
+  categoryId   String
+  fileName     String
+  fileUrl      String
+  uploadedById String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  project    Project          @relation(fields: [projectId], references: [id])
+  category   DocumentCategory @relation(fields: [categoryId], references: [id])
+  uploadedBy User?            @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+}
+
+model AnalyticsReport {
+  id                   String   @id @default(uuid())
+  projectId            String
+  totalRevenue         Float
+  expenses             Float
+  profit               Float
+  completionPercentage Float
+  reportDate           DateTime
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id])
 }

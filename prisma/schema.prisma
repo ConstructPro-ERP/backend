@@ -38,6 +38,9 @@ model User {
   role          Role           @relation(fields: [roleId], references: [id])
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+
+  // Added in Migration 2
+  assignedLeads Lead[] @relation("AssignedLeads")
 }
 
 model RefreshToken {
@@ -64,4 +67,79 @@ model AuditLog {
   updatedAt DateTime @updatedAt
 
   user User? @relation(fields: [userId], references: [id])
+}
+
+// ─── Migration 2: CRM & Finance Models ───────────────────────────────────────
+// CRM  : Lead, Customer
+// Finance : Quotation, QuotationItem
+// Note: Invoice & Payment depend on Project — added in Migration 3.
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  CONVERTED
+  LOST
+}
+
+enum QuotationStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+model Lead {
+  id           String     @id @default(uuid())
+  customerName String
+  phone        String?
+  email        String?
+  assignedToId String?
+  status       LeadStatus @default(NEW)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  assignedTo User?     @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  customer   Customer?
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  leadId    String?  @unique
+  fullName  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead       Lead?       @relation(fields: [leadId], references: [id])
+  quotations Quotation[]
+
+  // Back-relations added in Migration 3 when Invoice & Payment are introduced
+}
+
+model Quotation {
+  id            String          @id @default(uuid())
+  customerId    String
+  quotationDate DateTime
+  totalAmount   Float
+  status        QuotationStatus @default(DRAFT)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  customer Customer       @relation(fields: [customerId], references: [id])
+  items    QuotationItem[]
+
+  // project Project? back-relation added in Migration 3 when Project is introduced
+}
+
+model QuotationItem {
+  id          String   @id @default(uuid())
+  quotationId String
+  itemName    String
+  quantity    Int
+  unitPrice   Float
+  amount      Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quotation Quotation @relation(fields: [quotationId], references: [id])
 }

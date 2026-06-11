@@ -9,3 +9,4 @@ export class RoutesController {
     return authRoutes;
   }
 }
+

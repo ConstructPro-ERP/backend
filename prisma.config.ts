@@ -1,7 +1,7 @@
-import { defineConfig } from 'prisma/config'
-import { config } from 'dotenv'
+import { defineConfig } from 'prisma/config';
+import { config } from 'dotenv';
 
-config()
+config();
 
 export default defineConfig({
   schema: 'prisma/schema.prisma',
@@ -11,4 +11,4 @@ export default defineConfig({
   datasource: {
     url: process.env.DIRECT_URL_TEST,
   },
-})
+});

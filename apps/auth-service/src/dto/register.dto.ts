@@ -1,5 +1,5 @@
-//Those are example codes anyone can change those
-import { IsString, IsNotEmpty, IsEmail, IsOptional } from 'class-validator';
+import { IsString, IsNotEmpty, IsEmail, IsOptional, MinLength } from 'class-validator';
+
 export class RegisterDto {
   @IsString()
   @IsNotEmpty()
@@ -7,6 +7,7 @@ export class RegisterDto {
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(6)
   password!: string;
 
   @IsOptional()

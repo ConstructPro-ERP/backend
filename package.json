@@ -11,6 +11,7 @@
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/apps/api-gateway/src/main.js",
     "start:dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
+    "start:dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

@@ -1,5 +1,4 @@
-//Those are example code anyone can change those
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, MinLength } from 'class-validator';
 
 export class LoginDto {
   @IsString()
@@ -8,6 +7,6 @@ export class LoginDto {
 
   @IsString()
   @IsNotEmpty()
+  @MinLength(6)
   password!: string;
 }
-

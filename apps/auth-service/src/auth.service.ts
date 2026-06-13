@@ -2,6 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
+import * as process from 'node:process';
 
 interface JwtPayload {
   sub: string;
@@ -15,8 +16,9 @@ export class AuthService {
     private readonly prisma: PrismaService,
   ) {}
 
-  // ✅ REGISTER USER
-  async register(username: string, password: string, email?: string) {
+  //  REGISTER USER
+  async register(username: string, password: string, email: string) {
+    console.log("ENV is",process.env.DATABASE_URL);
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -29,9 +31,10 @@ export class AuthService {
 
     const user = await this.prisma.user.create({
       data: {
-        username,
+        fullName: username, // was username: username
         password: hashedPassword,
-        email
+        email: email,
+        roleId: 'N/A',
       },
     });
 
@@ -43,9 +46,9 @@ export class AuthService {
   }
 
   // ✅ VALIDATE USER
-  async validateUser(username: string, password: string) {
+  async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({
-      where: { username },
+      where: { email: email },
     });
 
     if (!user) return null;

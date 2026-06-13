@@ -3,18 +3,36 @@ import { Controller, Post, Body, Get, Req } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import type { Request } from 'express';
+import { IsString, IsNotEmpty, IsEmail, MinLength } from 'class-validator';
 
 // use env var with a safe default
-const AUTH_SERVICE_URL = process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333';
+const AUTH_SERVICE_URL =
+  process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333';
 
 class LoginDto {
+  @IsString()
+  @IsNotEmpty()
   username!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
   password!: string;
 }
+
 class RegisterDto {
+  @IsString()
+  @IsNotEmpty()
   username!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(6)
   password!: string;
-  email?: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  email!: string;
 }
 
 @Controller('auth')

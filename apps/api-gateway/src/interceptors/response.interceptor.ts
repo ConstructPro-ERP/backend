@@ -19,8 +19,6 @@ export class ResponseInterceptor implements NestInterceptor {
           method: req?.method,
           data,
         };
-
-        // normalize simple pagination shape
         if (data && typeof data === 'object' && ('items' in data || 'total' in data)) {
           envelope.data = (data as any).items ?? envelope.data;
           envelope.meta = { total: (data as any).total, page: (data as any).page };

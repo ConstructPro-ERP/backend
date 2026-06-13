@@ -25,6 +25,7 @@ export class AuthController {
   // POST /auth/register
   @Post('register')
   async register(@Body() dto: RegisterDto) {
+    console.log('Data is coming');
     return this.authService.register(dto.username, dto.password, dto.email);
   }
 
@@ -43,6 +44,7 @@ export class AuthController {
     if (!user) {
       return { message: 'User not found' };
     }
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...safe } = user;
     return safe;
   }

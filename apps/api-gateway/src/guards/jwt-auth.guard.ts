@@ -1,4 +1,3 @@
-// File: `backend/apps/api-gateway/src/guards/jwt-auth.guard.ts`
 import {
   Injectable,
   CanActivate,
@@ -9,6 +8,7 @@ import {
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 import type { Request } from 'express';
+import { ErrorCode } from '../../../../shared/error-codes';
 
 type AuthRequest = Request & { user?: any };
 
@@ -20,29 +20,37 @@ export class JwtAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const req = context.switchToHttp().getRequest<AuthRequest>();
     const auth = req.headers.authorization;
+
     if (!auth || !auth.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing token');
+      throw new UnauthorizedException({
+        code: ErrorCode.TOKEN_MISSING,
+        message: 'Authorization header is missing or malformed.',
+      });
     }
 
     const token = auth.slice(7);
     try {
-      // forward token to auth service to validate and fetch user
       const resp = await firstValueFrom(
-        this.httpService.get('http://localhost:3333/auth/me', {
-          headers: { authorization: `Bearer ${token}` },
-        }),
+        this.httpService.get(
+          `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/me`,
+          { headers: { authorization: `Bearer ${token}` } },
+        ),
       );
-      // attach validated user to request for downstream use (guards/controllers)
-      req.user = resp.data;
+      req.user = resp.data?.data ?? resp.data;
       return true;
     } catch (err: any) {
-      this.logger.error(
-        `Token validation failed: ${
-          err?.response?.data?.message || err?.message
-        }`,
-      );
+      const downstreamCode =
+        err?.response?.data?.code ?? ErrorCode.TOKEN_INVALID;
+      const isExpired = downstreamCode === ErrorCode.TOKEN_EXPIRED;
 
-      throw new UnauthorizedException('Invalid or expired token');
+      this.logger.warn(`Token validation failed [${downstreamCode}]`);
+
+      throw new UnauthorizedException({
+        code: isExpired ? ErrorCode.TOKEN_EXPIRED : ErrorCode.TOKEN_INVALID,
+        message: isExpired
+          ? 'Your session has expired. Please log in again.'
+          : 'Token is invalid or has been revoked.',
+      });
     }
   }
 }

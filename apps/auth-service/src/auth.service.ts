@@ -2,12 +2,7 @@ import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
-import * as process from 'node:process';
-
-interface JwtPayload {
-  sub: string;
-  username: string;
-}
+import { ErrorCode } from '../../../shared/error-codes';
 
 @Injectable()
 export class AuthService {
@@ -16,74 +11,78 @@ export class AuthService {
     private readonly prisma: PrismaService,
   ) {}
 
-  //  REGISTER USER
-  async register(username: string, password: string, email: string) {
-    console.log("ENV is",process.env.DATABASE_URL);
+  async register(
+    username: string,
+    password: string,
+    email: string,
+    roleId: string,
+  ) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
-
     if (existingUser) {
-      throw new HttpException('User already exists', HttpStatus.CONFLICT);
+      throw new HttpException(
+        {
+          code: ErrorCode.USER_ALREADY_EXISTS,
+          message: 'An account with this email already exists.',
+        },
+        HttpStatus.CONFLICT, // 409
+      );
+    }
+
+
+    if (!roleId) {
+      throw new HttpException(
+        {
+          code: ErrorCode.ROLE_NOT_FOUND,
+          message:
+            'Default role PROJECT_MANAGER is missing. Run the seed script.',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR, // 500
+      );
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-
     const user = await this.prisma.user.create({
       data: {
-        fullName: username, // was username: username
+        fullName: username,
         password: hashedPassword,
-        email: email,
-        roleId: 'N/A',
+        email,
+        roleId: roleId,
+        status: 'ACTIVE',
       },
     });
 
-    return {
-      id: user.id,
-      username: user.fullName,
-      email: user.email,
-    };
+    return { id: user.id, username: user.fullName, email: user.email };
   }
 
-  // ✅ VALIDATE USER
   async validateUser(email: string, password: string) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: email },
-    });
-
+    const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user) return null;
-
     const isMatch = await bcrypt.compare(password, user.password);
     return isMatch ? user : null;
   }
 
-  // ✅ LOGIN USER
-  async login(username: string, password: string) {
-    const user = await this.validateUser(username, password);
-
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
     if (!user) {
-      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+      throw new HttpException(
+        {
+          code: ErrorCode.INVALID_CREDENTIALS,
+          message: 'Email or password is incorrect.',
+        },
+        HttpStatus.UNAUTHORIZED, // 401
+      );
     }
 
-    const payload: JwtPayload = {
-      sub: user.id,
-      username: user.fullName,
-    };
-
+    const payload = { sub: user.id, username: user.fullName };
     return {
       accessToken: this.jwtService.sign(payload),
-      user: {
-        id: user.id,
-        username: user.fullName,
-        email: user.email,
-      },
+      user: { id: user.id, username: user.fullName, email: user.email },
     };
   }
 
-  // ✅ FIND USER BY ID
   findById(id: string) {
-    return this.prisma.user.findUnique({
-      where: { id },
-    });
+    return this.prisma.user.findUnique({ where: { id } });
   }
 }

@@ -1,0 +1,88 @@
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ErrorCode } from '../../../shared/error-codes';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  async register(
+    username: string,
+    password: string,
+    email: string,
+    roleId: string,
+  ) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      throw new HttpException(
+        {
+          code: ErrorCode.USER_ALREADY_EXISTS,
+          message: 'An account with this email already exists.',
+        },
+        HttpStatus.CONFLICT, // 409
+      );
+    }
+
+
+    if (!roleId) {
+      throw new HttpException(
+        {
+          code: ErrorCode.ROLE_NOT_FOUND,
+          message:
+            'Default role PROJECT_MANAGER is missing. Run the seed script.',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR, // 500
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await this.prisma.user.create({
+      data: {
+        fullName: username,
+        password: hashedPassword,
+        email,
+        roleId: roleId,
+        status: 'ACTIVE',
+      },
+    });
+
+    return { id: user.id, username: user.fullName, email: user.email };
+  }
+
+  async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) return null;
+    const isMatch = await bcrypt.compare(password, user.password);
+    return isMatch ? user : null;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    if (!user) {
+      throw new HttpException(
+        {
+          code: ErrorCode.INVALID_CREDENTIALS,
+          message: 'Email or password is incorrect.',
+        },
+        HttpStatus.UNAUTHORIZED, // 401
+      );
+    }
+
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: { id: user.id, username: user.fullName, email: user.email },
+    };
+  }
+
+  findById(id: string) {
+    return this.prisma.user.findUnique({ where: { id } });
+  }
+}

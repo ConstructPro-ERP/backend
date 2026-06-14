@@ -2,7 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { Server } from 'http';
-import { AppModule } from './../apps/api-gateway/src/app.module';
+import { AppModule } from '../apps/api-gateway/src/app.module';
 
 describe('API Gateway (e2e)', () => {
   let app: INestApplication<Server>;

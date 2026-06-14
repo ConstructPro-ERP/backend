@@ -1,38 +1,30 @@
-import { Logger } from '@nestjs/common';
+// File: `backend/apps/api-gateway/src/main.ts` (important lines)
 import { NestFactory } from '@nestjs/core';
-import type { Express } from 'express';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
+import { ResponseInterceptor } from './interceptors/response.interceptor';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { authRoutes } from './routes/auth.routes';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+  app.useGlobalInterceptors(new ResponseInterceptor()); // normalizes successful responses
+  app.useGlobalFilters(new HttpExceptionFilter()); // normalizes errors
+  app.setGlobalPrefix('api');
+  // Log auth route map for visibility
+  console.log(
+    'Auth routes:',
+    authRoutes.map((r) => `${r.method} ${r.path} -> ${r.target}`).join('\n'),
+  );
+  app.enableCors({
+    origin: true,
+    credentials: true,
+  });
   const envPort = process.env.PORT;
   const port = envPort ? Number.parseInt(envPort, 10) : 3000;
   if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);
-
-  app.setGlobalPrefix('api');
-  app.enableCors();
-
-  // Temporary local check endpoint to verify the gateway is alive.
-  const expressApp = app.getHttpAdapter().getInstance() as Express;
-  expressApp.get('/health', (_req, res) => {
-    res.status(200).json({
-      service: 'api-gateway',
-      status: 'ok',
-      timestamp: new Date().toISOString(),
-    });
-  });
-
   await app.listen(port);
-
-  Logger.log(`API Gateway is running on http://localhost:${port}`, 'Bootstrap');
-  Logger.log(`Health check: http://localhost:${port}/health`, 'Bootstrap');
+  console.log(`API gateway listening on http://localhost:${port}`);
 }
-
-bootstrap().catch((error: unknown) => {
-  Logger.error(
-    'Failed to start API Gateway',
-    error instanceof Error ? error.stack : undefined,
-    'Bootstrap',
-  );
-  process.exit(1);
-});
+bootstrap();

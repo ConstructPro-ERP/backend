@@ -4,10 +4,11 @@ import { neonConfig } from '@neondatabase/serverless';
 import bcrypt from 'bcrypt';
 import ws from 'ws';
 
+// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 neonConfig.webSocketConstructor = ws;
 
 const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter } as any);
+const prisma = new PrismaClient({ adapter });
 
 const RESOURCES = [
   'users',

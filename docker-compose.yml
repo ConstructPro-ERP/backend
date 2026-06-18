@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  api-gateway:
+    build:
+      context: .
+      dockerfile: docker/api-gateway.Dockerfile
+    ports:
+      - '3000:3000'
+    environment:
+      PORT: 3000
+      AUTH_SERVICE_URL: http://auth-service:3333
+      QUOTATION_SERVICE_URL: http://quotation-service:3009
+    env_file: .env
+    depends_on:
+      - auth-service
+      - quotation-service
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: docker/auth-service.Dockerfile
+    ports:
+      - '3333:3333'
+    environment:
+      PORT: 3333
+    env_file: .env
+
+  quotation-service:
+    build:
+      context: .
+      dockerfile: docker/quotation-service.Dockerfile
+    ports:
+      - '3009:3009'
+    environment:
+      PORT: 3009
+    env_file: .env

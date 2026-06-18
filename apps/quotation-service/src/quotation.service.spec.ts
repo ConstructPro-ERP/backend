@@ -1,0 +1,163 @@
+import { NotFoundException } from '@nestjs/common';
+import { Test, TestingModule } from '@nestjs/testing';
+import { QuotationService } from './quotation.service';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { DocumentClient } from './document.client';
+
+const mockPrisma = {
+  lead: { findUnique: jest.fn() },
+  quotation: { create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+  $transaction: jest.fn(),
+};
+
+const mockDocumentClient = {
+  generatePdf: jest.fn(),
+};
+
+describe('QuotationService', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  describe('create()', () => {
+    const validDto = {
+      leadId: 'lead-uuid-1',
+      items: [
+        { itemName: 'Concrete', quantity: 3, unitPrice: 100 },
+        { itemName: 'Steel', quantity: 2, unitPrice: 250 },
+      ],
+    };
+
+    it('throws 404 LEAD_NOT_FOUND when lead does not exist', async () => {
+      mockPrisma.lead.findUnique.mockResolvedValue(null);
+
+      await expect(service.create(validDto)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.create(validDto)).rejects.toMatchObject({
+        response: { code: 'LEAD_NOT_FOUND' },
+      });
+    });
+
+    it('computes item amounts and totalAmount server-side', async () => {
+      mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
+      mockDocumentClient.generatePdf.mockResolvedValue(null);
+
+      const savedQuotation = {
+        id: 'quot-1',
+        leadId: 'lead-uuid-1',
+        totalAmount: 800,
+        pdfUrl: null,
+        items: [],
+      };
+
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
+
+      await service.create(validDto);
+
+      const createCall = mockPrisma.quotation.create.mock.calls[0][0];
+
+      // server-computed: 3*100 + 2*250 = 800
+      expect(createCall.data.totalAmount).toBe(800);
+
+      const items = createCall.data.items.create;
+      expect(items[0].amount).toBe(300); // 3 * 100
+      expect(items[1].amount).toBe(500); // 2 * 250
+    });
+
+    it('ignores any total sent by the client — always recomputes', async () => {
+      mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
+      mockDocumentClient.generatePdf.mockResolvedValue(null);
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.quotation.create.mockResolvedValue({
+        id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [],
+      });
+
+      // Client sends no totalAmount — service must compute it
+      await service.create({
+        leadId: 'lead-uuid-1',
+        items: [{ itemName: 'Concrete', quantity: 3, unitPrice: 100 }],
+      });
+
+      const createCall = mockPrisma.quotation.create.mock.calls[0][0];
+      expect(createCall.data.totalAmount).toBe(300); // 3 * 100
+    });
+
+    it('attaches pdfUrl when document client succeeds', async () => {
+      mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
+      mockDocumentClient.generatePdf.mockResolvedValue('https://cdn.example.com/q1.pdf');
+
+      const savedQuotation = { id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [] };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
+      mockPrisma.quotation.update.mockResolvedValue({ ...savedQuotation, pdfUrl: 'https://cdn.example.com/q1.pdf' });
+
+      const result = await service.create({
+        leadId: 'lead-uuid-1',
+        items: [{ itemName: 'Concrete', quantity: 3, unitPrice: 100 }],
+      });
+
+      expect(mockPrisma.quotation.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { pdfUrl: 'https://cdn.example.com/q1.pdf' } }),
+      );
+      expect(result.pdfUrl).toBe('https://cdn.example.com/q1.pdf');
+    });
+
+    it('returns quotation with null pdfUrl when document client fails', async () => {
+      mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
+      mockDocumentClient.generatePdf.mockResolvedValue(null);
+
+      const savedQuotation = { id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [] };
+      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
+
+      const result = await service.create({
+        leadId: 'lead-uuid-1',
+        items: [{ itemName: 'Concrete', quantity: 3, unitPrice: 100 }],
+      });
+
+      expect(mockPrisma.quotation.update).not.toHaveBeenCalled();
+      expect(result.pdfUrl).toBeNull();
+    });
+  });
+
+  describe('findOne()', () => {
+    it('returns quotation with items', async () => {
+      const quotation = {
+        id: 'quot-1',
+        leadId: 'lead-uuid-1',
+        totalAmount: 500,
+        items: [{ id: 'item-1', itemName: 'Steel', quantity: 2, unitPrice: 250, amount: 500 }],
+      };
+      mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+
+      const result = await service.findOne('quot-1');
+
+      expect(result).toEqual(quotation);
+      expect(mockPrisma.quotation.findUnique).toHaveBeenCalledWith({
+        where: { id: 'quot-1' },
+        include: { items: true },
+      });
+    });
+
+    it('throws 404 QUOTATION_NOT_FOUND when not found', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+      await expect(service.findOne('nonexistent')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.findOne('nonexistent')).rejects.toMatchObject({
+        response: { code: 'QUOTATION_NOT_FOUND' },
+      });
+    });
+  });
+});

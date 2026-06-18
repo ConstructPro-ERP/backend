@@ -221,15 +221,14 @@ describe('Client and Lead', () => {
 // ─── Quotation and QuotationItems ─────────────────────────────────────────────
 
 describe('Quotation and QuotationItems', () => {
-  it('creates quotation with items', async () => {
-    const customer = await prisma.customer.create({
-      data: { fullName: 'Build Co.' },
+  it('creates quotation with items linked to a lead', async () => {
+    const lead = await prisma.lead.create({
+      data: { customerName: 'Build Co. Lead', status: 'QUALIFIED' },
     });
 
     const quotation = await prisma.quotation.create({
       data: {
-        customerId: customer.id,
-        quotationDate: new Date('2025-01-10'),
+        leadId: lead.id,
         totalAmount: 4500,
         items: {
           create: [
@@ -241,7 +240,7 @@ describe('Quotation and QuotationItems', () => {
       include: { items: true },
     });
 
-    expect(quotation.totalAmount).toBe(4500);
+    expect(Number(quotation.totalAmount)).toBe(4500);
     expect(quotation.items).toHaveLength(2);
 
     const dbItems = await prisma.quotationItem.findMany({
@@ -256,13 +255,12 @@ describe('Quotation and QuotationItems', () => {
 
   // Requires onDelete: Cascade on QuotationItem.quotationId in schema.prisma
   it('cascade deletes items when quotation deleted', async () => {
-    const customer = await prisma.customer.create({
-      data: { fullName: 'Cascade Co.' },
+    const lead = await prisma.lead.create({
+      data: { customerName: 'Cascade Co. Lead', status: 'NEW' },
     });
     const quotation = await prisma.quotation.create({
       data: {
-        customerId: customer.id,
-        quotationDate: new Date('2025-02-15'),
+        leadId: lead.id,
         totalAmount: 1000,
         items: {
           create: [

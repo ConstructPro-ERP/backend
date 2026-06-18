@@ -105,6 +105,7 @@ enum QuotationStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED
+  CONVERTED
 }
 
 model Lead {
@@ -117,8 +118,9 @@ model Lead {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  assignedTo User?     @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedTo User?       @relation("AssignedLeads", fields: [assignedToId], references: [id])
   customer   Customer?
+  quotations Quotation[]
 }
 
 model Customer {
@@ -128,39 +130,42 @@ model Customer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lead       Lead?       @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  quotations Quotation[]
+  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
   // Migration 3 back-relations
-  invoices   Invoice[]
-  payments   Payment[]
+  invoices Invoice[]
+  payments Payment[]
 }
 
 model Quotation {
   id            String          @id @default(uuid())
-  customerId    String
-  quotationDate DateTime
-  totalAmount   Float
-  status        QuotationStatus @default(DRAFT)
+  leadId        String
+  quotationDate DateTime        @default(now())
+  status        QuotationStatus @default(PENDING_APPROVAL)
+  totalAmount   Decimal         @db.Decimal(12, 2)
+  pdfUrl        String?
+  notes         String?
+  projectId     String?         @unique
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  customer Customer       @relation(fields: [customerId], references: [id])
-  items    QuotationItem[]
-  // Migration 3 back-relation (FK lives on Project.quotationId)
-  project  Project?
+  lead    Lead            @relation(fields: [leadId], references: [id])
+  project Project?        @relation(fields: [projectId], references: [id])
+  items   QuotationItem[]
+
+  @@map("quotation")
 }
 
 model QuotationItem {
-  id          String   @id @default(uuid())
+  id          String  @id @default(uuid())
   quotationId String
   itemName    String
   quantity    Int
-  unitPrice   Float
-  amount      Float
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  unitPrice   Decimal @db.Decimal(12, 2)
+  amount      Decimal @db.Decimal(12, 2)
 
   quotation Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@map("quotation_item")
 }
 
 // ─── Migration 3: Project, Operations, Finance & Documents ───────────────────
@@ -213,13 +218,12 @@ model Project {
   startDate        DateTime
   endDate          DateTime?
   budget           Float?
-  quotationId      String?       @unique
   projectManagerId String
   status           ProjectStatus @default(PLANNING)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  quotation      Quotation?        @relation(fields: [quotationId], references: [id])
+  quotation      Quotation?
   projectManager User              @relation("ProjectManager", fields: [projectManagerId], references: [id])
   milestones     Milestone[]
   tasks          Task[]

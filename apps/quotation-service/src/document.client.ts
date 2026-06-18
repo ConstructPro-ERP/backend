@@ -19,9 +19,10 @@ export class DocumentClient {
         ),
       );
       return resp.data?.pdfUrl ?? null;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `PDF generation failed for quotation ${quotationId}: ${err?.message ?? err}`,
+        `PDF generation failed for quotation ${quotationId}: ${msg}`,
       );
       return null;
     }

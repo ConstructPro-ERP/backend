@@ -25,4 +25,4 @@ async function bootstrap() {
   console.log(`Quotation service listening on http://localhost:${port}`);
 }
 
-bootstrap();
+void bootstrap();

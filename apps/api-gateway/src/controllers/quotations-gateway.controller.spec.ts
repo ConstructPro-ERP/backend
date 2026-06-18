@@ -4,7 +4,10 @@ import { Reflector } from '@nestjs/core';
 import { RolesGuard } from '../guards/roles.guard';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 
-function makeContext(userRoles: string[], handler: () => void): ExecutionContext {
+function makeContext(
+  userRoles: string[],
+  handler: () => void,
+): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => ({ user: { role: userRoles[0], roles: userRoles } }),
@@ -16,7 +19,6 @@ function makeContext(userRoles: string[], handler: () => void): ExecutionContext
 
 describe('RolesGuard — quotations endpoint access', () => {
   let guard: RolesGuard;
-  let reflector: Reflector;
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -24,7 +26,6 @@ describe('RolesGuard — quotations endpoint access', () => {
     }).compile();
 
     guard = module.get<RolesGuard>(RolesGuard);
-    reflector = module.get<Reflector>(Reflector);
   });
 
   function handlerWithRoles(...roles: string[]) {
@@ -34,10 +35,17 @@ describe('RolesGuard — quotations endpoint access', () => {
   }
 
   const createHandler = handlerWithRoles('Sales Manager', 'Admin');
-  const readHandler = handlerWithRoles('Sales Manager', 'Admin', 'Project Manager', 'Accountant');
+  const readHandler = handlerWithRoles(
+    'Sales Manager',
+    'Admin',
+    'Project Manager',
+    'Accountant',
+  );
 
   it('allows Sales Manager to POST /quotations', () => {
-    expect(guard.canActivate(makeContext(['Sales Manager'], createHandler))).toBe(true);
+    expect(
+      guard.canActivate(makeContext(['Sales Manager'], createHandler)),
+    ).toBe(true);
   });
 
   it('allows Admin to POST /quotations', () => {
@@ -57,10 +65,14 @@ describe('RolesGuard — quotations endpoint access', () => {
   });
 
   it('allows Accountant to GET /quotations/:id', () => {
-    expect(guard.canActivate(makeContext(['Accountant'], readHandler))).toBe(true);
+    expect(guard.canActivate(makeContext(['Accountant'], readHandler))).toBe(
+      true,
+    );
   });
 
   it('allows Project Manager to GET /quotations/:id', () => {
-    expect(guard.canActivate(makeContext(['Project Manager'], readHandler))).toBe(true);
+    expect(
+      guard.canActivate(makeContext(['Project Manager'], readHandler)),
+    ).toBe(true);
   });
 });

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-argument */
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import request from 'supertest';
@@ -11,8 +12,10 @@ import { DocumentClient } from './document.client';
 
 neonConfig.webSocketConstructor = ws;
 
-const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL_TEST! });
-const prisma = new PrismaClient({ adapter } as any);
+const adapter = new PrismaNeon({
+  connectionString: process.env.DATABASE_URL_TEST!,
+});
+const prisma = new PrismaClient({ adapter });
 
 jest.setTimeout(30000);
 
@@ -36,7 +39,11 @@ describe('QuotationService — integration', () => {
 
     app = module.createNestApplication();
     app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
+      new ValidationPipe({
+        whitelist: true,
+        transform: true,
+        forbidNonWhitelisted: true,
+      }),
     );
     app.useGlobalFilters(new HttpExceptionFilter());
     await app.init();
@@ -109,7 +116,10 @@ describe('QuotationService — integration', () => {
     it('400 VALIDATION_ERROR — negative quantity is rejected', async () => {
       const res = await request(app.getHttpServer())
         .post('/quotations')
-        .send({ leadId, items: [{ itemName: 'X', quantity: -1, unitPrice: 100 }] })
+        .send({
+          leadId,
+          items: [{ itemName: 'X', quantity: -1, unitPrice: 100 }],
+        })
         .expect(400);
 
       expect(res.body.code).toBe('VALIDATION_ERROR');
@@ -134,7 +144,11 @@ describe('QuotationService — integration', () => {
         data: {
           leadId,
           totalAmount: 500,
-          items: { create: [{ itemName: 'Steel', quantity: 2, unitPrice: 250, amount: 500 }] },
+          items: {
+            create: [
+              { itemName: 'Steel', quantity: 2, unitPrice: 250, amount: 500 },
+            ],
+          },
         },
       });
 

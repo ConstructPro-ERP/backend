@@ -30,14 +30,15 @@ export class HttpExceptionFilter implements ExceptionFilter {
       if (typeof res === 'string') {
         message = res;
       } else if (typeof res === 'object' && res !== null) {
-        const r = res as Record<string, any>;
-        code = r.code ?? r.error ?? 'INTERNAL_ERROR';
+        const r = res as Record<string, unknown>;
+        const rawCode = r.code ?? r.error;
+        code = typeof rawCode === 'string' ? rawCode : 'INTERNAL_ERROR';
         if (Array.isArray(r.message)) {
           code = 'VALIDATION_ERROR';
           message = 'Validation failed.';
           details = r.message as unknown[];
         } else {
-          message = r.message ?? message;
+          if (typeof r.message === 'string') message = r.message;
         }
       }
     } else if (exception instanceof Error) {

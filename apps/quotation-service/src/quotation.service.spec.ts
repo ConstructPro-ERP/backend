@@ -43,7 +43,9 @@ describe('QuotationService', () => {
     it('throws 404 LEAD_NOT_FOUND when lead does not exist', async () => {
       mockPrisma.lead.findUnique.mockResolvedValue(null);
 
-      await expect(service.create(validDto)).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.create(validDto)).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       await expect(service.create(validDto)).rejects.toMatchObject({
         response: { code: 'LEAD_NOT_FOUND' },
       });
@@ -61,12 +63,20 @@ describe('QuotationService', () => {
         items: [],
       };
 
-      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(
+        (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma),
+      );
       mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
 
       await service.create(validDto);
 
-      const createCall = mockPrisma.quotation.create.mock.calls[0][0];
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const createCall = mockPrisma.quotation.create.mock.calls[0][0] as {
+        data: {
+          totalAmount: number;
+          items: { create: Array<{ amount: number }> };
+        };
+      };
 
       // server-computed: 3*100 + 2*250 = 800
       expect(createCall.data.totalAmount).toBe(800);
@@ -79,9 +89,15 @@ describe('QuotationService', () => {
     it('ignores any total sent by the client — always recomputes', async () => {
       mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
       mockDocumentClient.generatePdf.mockResolvedValue(null);
-      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      mockPrisma.$transaction.mockImplementation(
+        (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma),
+      );
       mockPrisma.quotation.create.mockResolvedValue({
-        id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [],
+        id: 'quot-1',
+        leadId: 'lead-uuid-1',
+        totalAmount: 300,
+        pdfUrl: null,
+        items: [],
       });
 
       // Client sends no totalAmount — service must compute it
@@ -90,18 +106,34 @@ describe('QuotationService', () => {
         items: [{ itemName: 'Concrete', quantity: 3, unitPrice: 100 }],
       });
 
-      const createCall = mockPrisma.quotation.create.mock.calls[0][0];
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      const createCall = mockPrisma.quotation.create.mock.calls[0][0] as {
+        data: { totalAmount: number };
+      };
       expect(createCall.data.totalAmount).toBe(300); // 3 * 100
     });
 
     it('attaches pdfUrl when document client succeeds', async () => {
       mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
-      mockDocumentClient.generatePdf.mockResolvedValue('https://cdn.example.com/q1.pdf');
+      mockDocumentClient.generatePdf.mockResolvedValue(
+        'https://cdn.example.com/q1.pdf',
+      );
 
-      const savedQuotation = { id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [] };
-      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      const savedQuotation = {
+        id: 'quot-1',
+        leadId: 'lead-uuid-1',
+        totalAmount: 300,
+        pdfUrl: null,
+        items: [],
+      };
+      mockPrisma.$transaction.mockImplementation(
+        (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma),
+      );
       mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
-      mockPrisma.quotation.update.mockResolvedValue({ ...savedQuotation, pdfUrl: 'https://cdn.example.com/q1.pdf' });
+      mockPrisma.quotation.update.mockResolvedValue({
+        ...savedQuotation,
+        pdfUrl: 'https://cdn.example.com/q1.pdf',
+      });
 
       const result = await service.create({
         leadId: 'lead-uuid-1',
@@ -109,7 +141,9 @@ describe('QuotationService', () => {
       });
 
       expect(mockPrisma.quotation.update).toHaveBeenCalledWith(
-        expect.objectContaining({ data: { pdfUrl: 'https://cdn.example.com/q1.pdf' } }),
+        expect.objectContaining({
+          data: { pdfUrl: 'https://cdn.example.com/q1.pdf' },
+        }),
       );
       expect(result.pdfUrl).toBe('https://cdn.example.com/q1.pdf');
     });
@@ -118,8 +152,16 @@ describe('QuotationService', () => {
       mockPrisma.lead.findUnique.mockResolvedValue({ id: 'lead-uuid-1' });
       mockDocumentClient.generatePdf.mockResolvedValue(null);
 
-      const savedQuotation = { id: 'quot-1', leadId: 'lead-uuid-1', totalAmount: 300, pdfUrl: null, items: [] };
-      mockPrisma.$transaction.mockImplementation(async (fn: any) => fn(mockPrisma));
+      const savedQuotation = {
+        id: 'quot-1',
+        leadId: 'lead-uuid-1',
+        totalAmount: 300,
+        pdfUrl: null,
+        items: [],
+      };
+      mockPrisma.$transaction.mockImplementation(
+        (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma),
+      );
       mockPrisma.quotation.create.mockResolvedValue(savedQuotation);
 
       const result = await service.create({
@@ -138,7 +180,15 @@ describe('QuotationService', () => {
         id: 'quot-1',
         leadId: 'lead-uuid-1',
         totalAmount: 500,
-        items: [{ id: 'item-1', itemName: 'Steel', quantity: 2, unitPrice: 250, amount: 500 }],
+        items: [
+          {
+            id: 'item-1',
+            itemName: 'Steel',
+            quantity: 2,
+            unitPrice: 250,
+            amount: 500,
+          },
+        ],
       };
       mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
 
@@ -154,7 +204,9 @@ describe('QuotationService', () => {
     it('throws 404 QUOTATION_NOT_FOUND when not found', async () => {
       mockPrisma.quotation.findUnique.mockResolvedValue(null);
 
-      await expect(service.findOne('nonexistent')).rejects.toBeInstanceOf(NotFoundException);
+      await expect(service.findOne('nonexistent')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
       await expect(service.findOne('nonexistent')).rejects.toMatchObject({
         response: { code: 'QUOTATION_NOT_FOUND' },
       });

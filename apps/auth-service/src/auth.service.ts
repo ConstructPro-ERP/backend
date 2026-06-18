@@ -30,7 +30,6 @@ export class AuthService {
       );
     }
 
-
     if (!roleId) {
       throw new HttpException(
         {

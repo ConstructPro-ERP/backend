@@ -17,6 +17,10 @@ import { RoutesController } from './controllers/routes.controller';
     }),
     HttpModule,
   ],
-  controllers: [AuthGatewayController, QuotationsGatewayController, RoutesController],
+  controllers: [
+    AuthGatewayController,
+    QuotationsGatewayController,
+    RoutesController,
+  ],
 })
 export class AppModule {}

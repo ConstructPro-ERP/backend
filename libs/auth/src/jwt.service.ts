@@ -14,14 +14,16 @@ export class JwtTokenService {
   signAccess(payload: JwtPayload): string {
     return this.jwt.sign(payload, {
       secret: this.config.get<string>('jwt.secret'),
-      expiresIn: (this.config.get<string>('jwt.expiry') ?? '15m') as SignOptions['expiresIn'],
+      expiresIn: (this.config.get<string>('jwt.expiry') ??
+        '15m') as SignOptions['expiresIn'],
     });
   }
 
   signRefresh(payload: Pick<JwtPayload, 'sub'>): string {
     return this.jwt.sign(payload, {
       secret: this.config.get<string>('jwt.refreshSecret'),
-      expiresIn: (this.config.get<string>('jwt.refreshExpiry') ?? '7d') as SignOptions['expiresIn'],
+      expiresIn: (this.config.get<string>('jwt.refreshExpiry') ??
+        '7d') as SignOptions['expiresIn'],
     });
   }
 

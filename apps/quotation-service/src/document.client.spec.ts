@@ -36,7 +36,9 @@ describe('DocumentClient', () => {
   });
 
   it('returns null and does not throw when the document service fails', async () => {
-    mockHttpService.post.mockReturnValue(throwError(() => new Error('service unavailable')));
+    mockHttpService.post.mockReturnValue(
+      throwError(() => new Error('service unavailable')),
+    );
 
     const result = await client.generatePdf('quot-1');
 

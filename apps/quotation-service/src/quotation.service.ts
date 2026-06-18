@@ -15,7 +15,10 @@ export class QuotationService {
       where: { id: dto.leadId },
     });
     if (!lead) {
-      throw new NotFoundException({ code: 'LEAD_NOT_FOUND', message: 'Lead not found.' });
+      throw new NotFoundException({
+        code: 'LEAD_NOT_FOUND',
+        message: 'Lead not found.',
+      });
     }
 
     const itemsWithAmounts = dto.items.map((item) => {

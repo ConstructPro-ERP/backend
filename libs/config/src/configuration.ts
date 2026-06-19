@@ -19,6 +19,9 @@ export default () => ({
     payment: { port: Number(process.env.PAYMENT_SERVICE_PORT ?? 3005) },
     contractor: { port: Number(process.env.CONTRACTOR_SERVICE_PORT ?? 3006) },
     material: { port: Number(process.env.MATERIAL_SERVICE_PORT ?? 3007) },
-    notification: { port: Number(process.env.NOTIFICATION_SERVICE_PORT ?? 3008) },
+    notification: {
+      port: Number(process.env.NOTIFICATION_SERVICE_PORT ?? 3008),
+    },
+    quotation: { port: Number(process.env.QUOTATION_SERVICE_PORT ?? 3009) },
   },
 });

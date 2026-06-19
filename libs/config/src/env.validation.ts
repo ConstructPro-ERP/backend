@@ -1,7 +1,9 @@
 import Joi from 'joi';
 
 export const envValidationSchema = Joi.object({
-  NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
+  NODE_ENV: Joi.string()
+    .valid('development', 'production', 'test')
+    .default('development'),
   DATABASE_URL: Joi.string().uri().required(),
   DIRECT_URL: Joi.string().uri().required(),
 
@@ -19,4 +21,5 @@ export const envValidationSchema = Joi.object({
   CONTRACTOR_SERVICE_PORT: Joi.number().integer().default(3006),
   MATERIAL_SERVICE_PORT: Joi.number().integer().default(3007),
   NOTIFICATION_SERVICE_PORT: Joi.number().integer().default(3008),
+  QUOTATION_SERVICE_PORT: Joi.number().integer().default(3009),
 });

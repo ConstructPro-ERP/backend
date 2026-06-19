@@ -11,12 +11,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async register(
-    username: string,
-    password: string,
-    email: string,
-    roleId: string,
-  ) {
+  async register(username: string, password: string, email: string) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -30,7 +25,10 @@ export class AuthService {
       );
     }
 
-    if (!roleId) {
+    const defaultRole = await this.prisma.role.findFirst({
+      where: { roleName: 'PROJECT_MANAGER' },
+    });
+    if (!defaultRole) {
       throw new HttpException(
         {
           code: ErrorCode.ROLE_NOT_FOUND,
@@ -47,7 +45,7 @@ export class AuthService {
         fullName: username,
         password: hashedPassword,
         email,
-        roleId: roleId,
+        roleId: defaultRole.id,
         status: 'ACTIVE',
       },
     });

@@ -6,10 +6,15 @@ import ws from 'ws';
 neonConfig.webSocketConstructor = ws;
 
 function createPrismaClient() {
-  const adapter = new PrismaNeon({ connectionString: process.env.DATABASE_URL! });
+  const adapter = new PrismaNeon({
+    connectionString: process.env.DATABASE_URL!,
+  });
   return new PrismaClient({
     adapter,
-    log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+    log:
+      process.env.NODE_ENV === 'development'
+        ? ['query', 'error', 'warn']
+        : ['error'],
   } as any);
 }
 

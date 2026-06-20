@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   HttpCode,
@@ -23,5 +24,10 @@ export class QuotationController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.quotationService.findOne(id);
+  }
+
+  @Patch(':id/approve')
+  approveAndConvert(@Param('id') id: string) {
+    return this.quotationService.approveAndConvert(id);
   }
 }

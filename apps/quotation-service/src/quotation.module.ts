@@ -5,17 +5,25 @@ import { join } from 'node:path';
 import { QuotationController } from './quotation.controller';
 import { QuotationService } from './quotation.service';
 import { DocumentClient } from './document.client';
+import { ProjectClient } from './project.client';
+import { NotificationClient } from './notification.client';
 import { PrismaService } from '../../../prisma/prisma.service';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
-      envFilePath: join(process.cwd(), '.env'),
+      envFilePath: join(__dirname, '../../.env'),
     }),
     HttpModule,
   ],
   controllers: [QuotationController],
-  providers: [QuotationService, DocumentClient, PrismaService],
+  providers: [
+    QuotationService,
+    DocumentClient,
+    ProjectClient,
+    NotificationClient,
+    PrismaService,
+  ],
 })
 export class QuotationModule {}

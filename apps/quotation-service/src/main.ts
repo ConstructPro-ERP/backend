@@ -18,7 +18,7 @@ async function bootstrap() {
   app.enableCors();
 
   const envPort = process.env.PORT;
-  const port = envPort ? Number.parseInt(envPort, 10) : 3009;
+  const port = envPort ? Number.parseInt(envPort, 10) : 4009;
   if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);
 
   await app.listen(port);

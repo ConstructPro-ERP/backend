@@ -1,7 +1,7 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { z } from 'zod';
 
-export class RefreshTokenDto {
-  @IsString()
-  @IsNotEmpty()
-  refreshToken!: string;
-}
+export const RefreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, 'Refresh token is required'),
+});
+
+export type RefreshTokenDto = z.infer<typeof RefreshTokenSchema>;

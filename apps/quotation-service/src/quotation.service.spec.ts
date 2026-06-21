@@ -1,8 +1,14 @@
-import { NotFoundException } from '@nestjs/common';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { QuotationService } from './quotation.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { DocumentClient } from './document.client';
+import { ProjectClient } from './project.client';
+import { NotificationClient } from './notification.client';
 
 const mockPrisma = {
   lead: { findUnique: jest.fn() },
@@ -12,6 +18,14 @@ const mockPrisma = {
 
 const mockDocumentClient = {
   generatePdf: jest.fn(),
+};
+
+const mockProjectClient = {
+  createFromQuotation: jest.fn(),
+};
+
+const mockNotificationClient = {
+  notifyProjectCreated: jest.fn(),
 };
 
 describe('QuotationService', () => {
@@ -25,6 +39,8 @@ describe('QuotationService', () => {
         QuotationService,
         { provide: PrismaService, useValue: mockPrisma },
         { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
       ],
     }).compile();
 
@@ -210,6 +226,184 @@ describe('QuotationService', () => {
       await expect(service.findOne('nonexistent')).rejects.toMatchObject({
         response: { code: 'QUOTATION_NOT_FOUND' },
       });
+    });
+  });
+
+  describe('approveAndConvert()', () => {
+    const baseQuotation = {
+      id: 'quot-1',
+      leadId: 'lead-uuid-1',
+      totalAmount: 5000,
+      status: 'PENDING_APPROVAL',
+      projectId: null,
+      items: [
+        {
+          id: 'item-1',
+          itemName: 'Concrete',
+          quantity: 5,
+          unitPrice: 1000,
+          amount: 5000,
+        },
+      ],
+    };
+
+    const convertedQuotation = {
+      ...baseQuotation,
+      status: 'CONVERTED',
+      projectId: 'proj-abc',
+    };
+
+    it('happy path: approves, calls project service, stores projectId, notifies', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(baseQuotation);
+      mockPrisma.quotation.update
+        .mockResolvedValueOnce({ ...baseQuotation, status: 'APPROVED' }) // first update: APPROVED
+        .mockResolvedValueOnce(convertedQuotation); // second update: CONVERTED
+      mockProjectClient.createFromQuotation.mockResolvedValue({
+        projectId: 'proj-abc',
+        status: 'PLANNING',
+      });
+      mockNotificationClient.notifyProjectCreated.mockResolvedValue(undefined);
+
+      const result = await service.approveAndConvert('quot-1');
+
+      // project service called with correct args
+      expect(mockProjectClient.createFromQuotation).toHaveBeenCalledWith(
+        'quot-1',
+        'lead-uuid-1',
+        5000,
+      );
+
+      // second update stores CONVERTED + projectId
+      expect(mockPrisma.quotation.update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: { status: 'CONVERTED', projectId: 'proj-abc' },
+        }),
+      );
+
+      // notification sent
+      expect(mockNotificationClient.notifyProjectCreated).toHaveBeenCalledWith(
+        'quot-1',
+        'proj-abc',
+      );
+
+      expect(result).toEqual({
+        quotation: convertedQuotation,
+        projectId: 'proj-abc',
+      });
+    });
+
+    it('throws 409 ALREADY_CONVERTED when status is CONVERTED and does NOT call project service', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue({
+        ...baseQuotation,
+        status: 'CONVERTED',
+        projectId: 'existing-proj',
+      });
+
+      await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
+        ConflictException,
+      );
+      await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
+        response: { code: 'ALREADY_CONVERTED' },
+      });
+
+      expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
+    });
+
+    it('throws 409 ALREADY_CONVERTED when projectId is set (even if status differs) and does NOT call project service', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue({
+        ...baseQuotation,
+        status: 'APPROVED',
+        projectId: 'existing-proj',
+      });
+
+      await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
+        response: { code: 'ALREADY_CONVERTED' },
+      });
+
+      expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
+    });
+
+    it('throws 400 QUOTATION_REJECTED when status is REJECTED', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue({
+        ...baseQuotation,
+        status: 'REJECTED',
+      });
+
+      await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
+        response: { code: 'QUOTATION_REJECTED' },
+      });
+
+      expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 QUOTATION_NOT_FOUND when quotation does not exist', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+      await expect(service.approveAndConvert('missing')).rejects.toBeInstanceOf(
+        NotFoundException,
+      );
+    });
+
+    it('notify failure does NOT fail the conversion — result is still returned', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(baseQuotation);
+      mockPrisma.quotation.update
+        .mockResolvedValueOnce({ ...baseQuotation, status: 'APPROVED' })
+        .mockResolvedValueOnce(convertedQuotation);
+      mockProjectClient.createFromQuotation.mockResolvedValue({
+        projectId: 'proj-abc',
+        status: 'PLANNING',
+      });
+      mockNotificationClient.notifyProjectCreated.mockRejectedValue(
+        new Error('notification service down'),
+      );
+
+      const result = await service.approveAndConvert('quot-1');
+
+      // conversion still succeeds despite notification error
+      expect(result.projectId).toBe('proj-abc');
+      expect(result.quotation.status).toBe('CONVERTED');
+    });
+
+    it('notify failure with non-Error thrown still completes conversion', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(baseQuotation);
+      mockPrisma.quotation.update
+        .mockResolvedValueOnce({ ...baseQuotation, status: 'APPROVED' })
+        .mockResolvedValueOnce(convertedQuotation);
+      mockProjectClient.createFromQuotation.mockResolvedValue({
+        projectId: 'proj-abc',
+        status: 'PLANNING',
+      });
+      // Throw a non-Error value (exercises the String(err) branch at line 142)
+      mockNotificationClient.notifyProjectCreated.mockRejectedValue('timeout');
+
+      const result = await service.approveAndConvert('quot-1');
+
+      expect(result.projectId).toBe('proj-abc');
+    });
+
+    it('propagates project service error as-is (502) without marking quotation CONVERTED', async () => {
+      mockPrisma.quotation.findUnique.mockResolvedValue(baseQuotation);
+      mockPrisma.quotation.update.mockResolvedValueOnce({
+        ...baseQuotation,
+        status: 'APPROVED',
+      });
+      mockProjectClient.createFromQuotation.mockRejectedValue(
+        new Error('project service down'),
+      );
+
+      await expect(service.approveAndConvert('quot-1')).rejects.toThrow(
+        'project service down',
+      );
+
+      // second update (CONVERTED + projectId) must NOT have been called
+      expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);
+      expect(
+        mockNotificationClient.notifyProjectCreated,
+      ).not.toHaveBeenCalled();
     });
   });
 });

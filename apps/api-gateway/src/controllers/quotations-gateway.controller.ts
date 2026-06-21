@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Patch,
   Body,
   Param,
   Req,
@@ -18,7 +19,7 @@ import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
 
 const QUOTATION_SERVICE_URL =
-  process.env.QUOTATION_SERVICE_URL ?? 'http://localhost:3009';
+  process.env.QUOTATION_SERVICE_URL ?? 'http://localhost:4009';
 
 interface DownstreamError {
   statusCode?: number;
@@ -60,6 +61,22 @@ export class QuotationsGatewayController {
       this.httpService.get(`${QUOTATION_SERVICE_URL}/quotations/${id}`, {
         headers: { authorization: req.headers.authorization },
       }),
+    );
+  }
+
+  @Patch(':id/approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Admin', 'Management')
+  async approveAndConvert(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/approve`,
+        {},
+        { headers: { authorization: req.headers.authorization } },
+      ),
     );
   }
 

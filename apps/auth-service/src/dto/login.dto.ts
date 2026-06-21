@@ -1,12 +1,8 @@
-import { IsString, IsNotEmpty, MinLength } from 'class-validator';
+import { z } from 'zod';
 
-export class LoginDto {
-  @IsString()
-  @IsNotEmpty()
-  email!: string;
+export const LoginSchema = z.object({
+  email: z.string().email('Must be a valid email address'),
+  password: z.string().min(6, 'Password must be at least 6 characters'),
+});
 
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(6)
-  password!: string;
-}
+export type LoginDto = z.infer<typeof LoginSchema>;

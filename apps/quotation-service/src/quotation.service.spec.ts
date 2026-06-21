@@ -236,7 +236,15 @@ describe('QuotationService', () => {
       totalAmount: 5000,
       status: 'PENDING_APPROVAL',
       projectId: null,
-      items: [{ id: 'item-1', itemName: 'Concrete', quantity: 5, unitPrice: 1000, amount: 5000 }],
+      items: [
+        {
+          id: 'item-1',
+          itemName: 'Concrete',
+          quantity: 5,
+          unitPrice: 1000,
+          amount: 5000,
+        },
+      ],
     };
 
     const convertedQuotation = {
@@ -279,7 +287,10 @@ describe('QuotationService', () => {
         'proj-abc',
       );
 
-      expect(result).toEqual({ quotation: convertedQuotation, projectId: 'proj-abc' });
+      expect(result).toEqual({
+        quotation: convertedQuotation,
+        projectId: 'proj-abc',
+      });
     });
 
     it('throws 409 ALREADY_CONVERTED when status is CONVERTED and does NOT call project service', async () => {
@@ -390,7 +401,9 @@ describe('QuotationService', () => {
 
       // second update (CONVERTED + projectId) must NOT have been called
       expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);
-      expect(mockNotificationClient.notifyProjectCreated).not.toHaveBeenCalled();
+      expect(
+        mockNotificationClient.notifyProjectCreated,
+      ).not.toHaveBeenCalled();
     });
   });
 });

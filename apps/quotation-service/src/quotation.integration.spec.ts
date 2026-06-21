@@ -79,7 +79,9 @@ describe('QuotationService — integration', () => {
       .overrideProvider(ProjectClient)
       .useValue(mockProjectClient)
       .overrideProvider(NotificationClient)
-      .useValue({ notifyProjectCreated: jest.fn().mockResolvedValue(undefined) })
+      .useValue({
+        notifyProjectCreated: jest.fn().mockResolvedValue(undefined),
+      })
       .compile();
 
     app = module.createNestApplication();
@@ -220,7 +222,14 @@ describe('QuotationService — integration', () => {
           totalAmount: 8000,
           status: 'PENDING_APPROVAL',
           items: {
-            create: [{ itemName: 'Bricks', quantity: 800, unitPrice: 10, amount: 8000 }],
+            create: [
+              {
+                itemName: 'Bricks',
+                quantity: 800,
+                unitPrice: 10,
+                amount: 8000,
+              },
+            ],
           },
         },
       });
@@ -232,7 +241,9 @@ describe('QuotationService — integration', () => {
       expect(res.body.projectId).toBe(realProjectId);
       expect(res.body.quotation.status).toBe('CONVERTED');
 
-      const db = await prisma.quotation.findUnique({ where: { id: quotation.id } });
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
       expect(db!.projectId).toBe(realProjectId);
       expect(db!.status).toBe('CONVERTED');
     });
@@ -246,7 +257,9 @@ describe('QuotationService — integration', () => {
           status: 'CONVERTED',
           projectId: realProjectId,
           items: {
-            create: [{ itemName: 'Tiles', quantity: 300, unitPrice: 10, amount: 3000 }],
+            create: [
+              { itemName: 'Tiles', quantity: 300, unitPrice: 10, amount: 3000 },
+            ],
           },
         },
       });

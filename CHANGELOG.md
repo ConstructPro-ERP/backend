@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `NotificationClient` — best-effort HTTP client for `POST {NOTIFICATION_SERVICE_URL}/notifications/project-created`; failure is logged as `warn` and never propagates to the caller
   - **ADR-09** (`docs/adr/ADR-09-quotation-orchestrates-project-creation.md`) — records why the quotation service orchestrates the approve → create → notify chain
   - Tests: 16 unit tests on `approveAndConvert` (≥87.5% branch coverage; `approveAndConvert` at 100%); 3 integration tests (happy path + 409 idempotency + 404); 5 gateway RBAC tests for the new endpoint (Sales/Accountant/PM → 403); total 39 tests, all green
-- **quotation-service** (`apps/quotation-service`) — new NestJS microservice on port 3009
+- **quotation-service** (`apps/quotation-service`) — new NestJS microservice on port 4009
   - `POST /quotations` — creates a quotation for a lead; server-computes all item amounts and `totalAmount` (Decimal 12,2); status defaults to `PENDING_APPROVAL`; triggers async PDF generation via document-service and stores `pdfUrl` (non-blocking — failure is logged, quotation still returns)
   - `GET /quotations/:id` — returns a quotation with its line items
   - `DocumentClient` — isolated HTTP client for document-service calls; reads `DOCUMENT_SERVICE_URL` from env

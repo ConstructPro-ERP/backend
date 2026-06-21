@@ -79,13 +79,15 @@ describe('RolesGuard — quotations endpoint access', () => {
 
   // PATCH /quotations/:id/approve — Admin and Management only
   it('allows Admin to PATCH /quotations/:id/approve', () => {
-    expect(guard.canActivate(makeContext(['Admin'], approveHandler))).toBe(true);
+    expect(guard.canActivate(makeContext(['Admin'], approveHandler))).toBe(
+      true,
+    );
   });
 
   it('allows Management to PATCH /quotations/:id/approve', () => {
-    expect(
-      guard.canActivate(makeContext(['Management'], approveHandler)),
-    ).toBe(true);
+    expect(guard.canActivate(makeContext(['Management'], approveHandler))).toBe(
+      true,
+    );
   });
 
   it('throws 403 when Sales role tries to PATCH /quotations/:id/approve', () => {

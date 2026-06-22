@@ -25,6 +25,7 @@ import {
   CreateInvoiceDto,
   CreateProjectInvoiceDto,
 } from '../../../invoice-service/src/dto/create-invoice.dto';
+import { GenerateInvoicePdfDto } from '../../../invoice-service/src/dto/generate-invoice-pdf.dto';
 import { ListInvoicesQueryDto } from '../../../invoice-service/src/dto/list-invoices-query.dto';
 import { UpdateInvoiceDto } from '../../../invoice-service/src/dto/update-invoice.dto';
 import { Roles } from '../decorators/roles.decorator';
@@ -125,6 +126,20 @@ export class InvoicesGatewayController {
         {},
         { headers: this.forwardHeaders(req) },
       ),
+    );
+  }
+
+  @Post('invoices/:id/pdf')
+  @ApiOperation({ summary: 'Generate and store an invoice PDF' })
+  generatePdf(
+    @Param('id') id: string,
+    @Body() body: GenerateInvoicePdfDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.post(this.url(`/invoices/${id}/pdf`), body, {
+        headers: this.forwardHeaders(req),
+      }),
     );
   }
 

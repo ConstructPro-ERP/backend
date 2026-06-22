@@ -6,6 +6,7 @@ import {
   InvoiceController,
   ProjectInvoiceController,
 } from './invoice.controller';
+import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { InvoiceService } from './invoice.service';
 import { InvoiceRepository } from './repositories/invoice.repository';
 
@@ -17,6 +18,11 @@ import { InvoiceRepository } from './repositories/invoice.repository';
     }),
   ],
   controllers: [InvoiceController, ProjectInvoiceController],
-  providers: [InvoiceService, InvoiceRepository, PrismaService],
+  providers: [
+    InvoiceService,
+    InvoiceRepository,
+    InvoicePdfService,
+    PrismaService,
+  ],
 })
 export class InvoiceModule {}

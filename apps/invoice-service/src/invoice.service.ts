@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
+import { GenerateInvoicePdfDto } from './dto/generate-invoice-pdf.dto';
 import {
   InvoiceSortByDto,
   ListInvoicesQueryDto,
 } from './dto/list-invoices-query.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
+import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import {
   InvoiceRepository,
   InvoiceWithDetails,
@@ -23,7 +25,10 @@ const EDITABLE_STATUSES = new Set<InvoiceStatus>([
 
 @Injectable()
 export class InvoiceService {
-  constructor(private readonly invoices: InvoiceRepository) {}
+  constructor(
+    private readonly invoices: InvoiceRepository,
+    private readonly invoicePdfService: InvoicePdfService,
+  ) {}
 
   async create(dto: CreateInvoiceDto, actorId?: string) {
     await this.validateProjectCustomer(dto.projectId, dto.customerId);
@@ -32,6 +37,10 @@ export class InvoiceService {
     const invoice = await this.invoices.create({
       projectId: dto.projectId,
       customerId: dto.customerId,
+      invoiceNumber:
+        dto.status === InvoiceStatus.ISSUED
+          ? await this.generateInvoiceNumber(new Date(dto.invoiceDate))
+          : undefined,
       invoiceDate: new Date(dto.invoiceDate),
       dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
       totalAmount: dto.totalAmount,
@@ -117,9 +126,16 @@ export class InvoiceService {
     const dueDate = dto.dueDate ? new Date(dto.dueDate) : invoice.dueDate;
     this.validateDates(invoiceDate.toISOString(), dueDate?.toISOString());
 
+    const nextStatus = dto.status ?? invoice.status;
+    const invoiceNumber =
+      !invoice.invoiceNumber && nextStatus === InvoiceStatus.ISSUED
+        ? await this.generateInvoiceNumber(invoiceDate)
+        : undefined;
+
     const updated = await this.invoices.update(id, {
       projectId: dto.projectId,
       customerId: dto.customerId,
+      invoiceNumber,
       invoiceDate: dto.invoiceDate ? invoiceDate : undefined,
       dueDate: dto.dueDate ? (dueDate ?? undefined) : undefined,
       totalAmount: dto.totalAmount,
@@ -149,6 +165,55 @@ export class InvoiceService {
       updatedBy: actorId,
     });
     return this.toResponse(cancelled);
+  }
+
+  async generatePdf(
+    id: string,
+    dto: GenerateInvoicePdfDto,
+    actorId?: string,
+  ) {
+    const invoice = await this.requireInvoice(id);
+
+    if (invoice.status === InvoiceStatus.CANCELLED) {
+      throw new ConflictException({
+        code: 'CANCELLED_INVOICE_PDF_BLOCKED',
+        message: 'Cancelled invoices cannot generate PDF documents.',
+      });
+    }
+
+    if (invoice.pdfUrl && !dto.forceRegenerate) {
+      return this.toResponse(invoice);
+    }
+
+    const invoiceNumber =
+      invoice.invoiceNumber ??
+      (await this.generateInvoiceNumber(invoice.invoiceDate));
+
+    const pdf = await this.invoicePdfService.generate({
+      invoiceId: invoice.id,
+      invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      dueDate: invoice.dueDate,
+      status: invoice.status,
+      customerName: invoice.customer.fullName,
+      customerId: invoice.customer.id,
+      projectName: invoice.project.projectName,
+      projectId: invoice.project.id,
+      totalAmount: money(invoice.totalAmount),
+      paidAmount: money(invoice.paidAmount),
+      outstandingAmount: money(invoice.outstandingAmount),
+      notes: invoice.notes,
+    });
+
+    const updated = await this.invoices.update(id, {
+      invoiceNumber,
+      pdfPath: pdf.filePath,
+      pdfUrl: pdf.publicUrl,
+      pdfGeneratedAt: pdf.generatedAt,
+      updatedBy: actorId,
+    });
+
+    return this.toResponse(updated);
   }
 
   private async requireInvoice(id: string): Promise<InvoiceWithDetails> {
@@ -223,6 +288,23 @@ export class InvoiceService {
     }
   }
 
+  private async generateInvoiceNumber(invoiceDate: Date): Promise<string> {
+    const year = invoiceDate.getUTCFullYear();
+    const month = String(invoiceDate.getUTCMonth() + 1).padStart(2, '0');
+    const prefix = `INV-${year}${month}`;
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const count = await this.invoices.countByInvoiceNumberPrefix(prefix);
+      const sequence = String(count + attempt + 1).padStart(4, '0');
+      return `${prefix}-${sequence}`;
+    }
+
+    throw new ConflictException({
+      code: 'INVOICE_NUMBER_GENERATION_FAILED',
+      message: 'Unable to generate a unique invoice number.',
+    });
+  }
+
   private toResponse(invoice: InvoiceWithDetails) {
     const totalAmount = money(invoice.totalAmount);
     const paidAmount = money(invoice.paidAmount);
@@ -231,11 +313,15 @@ export class InvoiceService {
       id: invoice.id,
       projectId: invoice.projectId,
       customerId: invoice.customerId,
+      invoiceNumber: invoice.invoiceNumber,
       invoiceDate: invoice.invoiceDate,
       dueDate: invoice.dueDate,
       totalAmount,
       paidAmount,
       outstandingAmount: money(invoice.outstandingAmount),
+      pdfPath: invoice.pdfPath,
+      pdfUrl: invoice.pdfUrl,
+      pdfGeneratedAt: invoice.pdfGeneratedAt,
       notes: invoice.notes,
       status: invoice.status,
       createdBy: invoice.createdBy,

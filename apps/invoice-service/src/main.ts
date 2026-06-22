@@ -1,6 +1,8 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import express from 'express';
+import { join } from 'node:path';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { InvoiceModule } from './invoice.module';
 
@@ -15,10 +17,11 @@ async function bootstrap() {
   );
   app.useGlobalFilters(new HttpExceptionFilter());
   app.enableCors();
+  app.use('/files/invoices', express.static(join(process.cwd(), 'storage', 'invoices')));
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('ConstructPro Invoice Service')
-    .setDescription('DDP-23 invoice CRUD and project invoice generation')
+    .setDescription('DDP-23 invoice CRUD plus DDP-26 invoice numbering and PDF generation')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

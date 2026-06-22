@@ -5,6 +5,7 @@ import {
 } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InvoiceService } from './invoice.service';
+import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { InvoiceRepository } from './repositories/invoice.repository';
 import { InvoiceSortByDto, SortOrderDto } from './dto/list-invoices-query.dto';
 
@@ -15,6 +16,11 @@ const repository = {
   findManyAndCount: jest.fn(),
   findById: jest.fn(),
   update: jest.fn(),
+  countByInvoiceNumberPrefix: jest.fn(),
+};
+
+const pdfService = {
+  generate: jest.fn(),
 };
 
 const project = {
@@ -39,6 +45,10 @@ const baseInvoice = {
   totalAmount: new Prisma.Decimal(1000),
   paidAmount: new Prisma.Decimal(0),
   outstandingAmount: new Prisma.Decimal(1000),
+  invoiceNumber: null,
+  pdfPath: null,
+  pdfUrl: null,
+  pdfGeneratedAt: null,
   notes: null,
   status: InvoiceStatus.DRAFT,
   createdBy: '00000000-0000-4000-8000-000000000004',
@@ -55,9 +65,13 @@ describe('InvoiceService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new InvoiceService(repository as unknown as InvoiceRepository);
+    service = new InvoiceService(
+      repository as unknown as InvoiceRepository,
+      pdfService as unknown as InvoicePdfService,
+    );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
+    repository.countByInvoiceNumberPrefix.mockResolvedValue(0);
   });
 
   it('creates a DRAFT invoice linked to an existing project and customer', async () => {
@@ -236,6 +250,64 @@ describe('InvoiceService', () => {
       }),
     );
     expect(result.status).toBe(InvoiceStatus.ISSUED);
+  });
+
+  it('generates an invoice number when an invoice is issued', async () => {
+    repository.findById.mockResolvedValue(baseInvoice);
+    repository.update.mockResolvedValue({
+      ...baseInvoice,
+      invoiceNumber: 'INV-202606-0001',
+      status: InvoiceStatus.ISSUED,
+    });
+
+    const result = await service.update(
+      baseInvoice.id,
+      { status: InvoiceStatus.ISSUED },
+      'actor-2',
+    );
+
+    expect(repository.update).toHaveBeenCalledWith(
+      baseInvoice.id,
+      expect.objectContaining({
+        invoiceNumber: 'INV-202606-0001',
+      }),
+    );
+    expect(result.invoiceNumber).toBe('INV-202606-0001');
+  });
+
+  it('generates and stores invoice PDF metadata', async () => {
+    repository.findById.mockResolvedValue({
+      ...baseInvoice,
+      invoiceNumber: 'INV-202606-0001',
+      status: InvoiceStatus.ISSUED,
+    });
+    pdfService.generate.mockResolvedValue({
+      filePath: 'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
+      publicUrl: 'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
+      generatedAt: new Date('2026-06-22T01:00:00.000Z'),
+    });
+    repository.update.mockResolvedValue({
+      ...baseInvoice,
+      invoiceNumber: 'INV-202606-0001',
+      status: InvoiceStatus.ISSUED,
+      pdfPath: 'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
+      pdfUrl: 'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
+      pdfGeneratedAt: new Date('2026-06-22T01:00:00.000Z'),
+    });
+
+    const result = await service.generatePdf(baseInvoice.id, {});
+
+    expect(pdfService.generate).toHaveBeenCalled();
+    expect(repository.update).toHaveBeenCalledWith(
+      baseInvoice.id,
+      expect.objectContaining({
+        invoiceNumber: 'INV-202606-0001',
+        pdfUrl: 'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
+      }),
+    );
+    expect(result.pdfUrl).toBe(
+      'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
+    );
   });
 
   it('cancels an active invoice and records the actor', async () => {

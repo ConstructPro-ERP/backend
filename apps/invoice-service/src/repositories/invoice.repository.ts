@@ -56,11 +56,15 @@ export class InvoiceRepository {
   create(data: {
     projectId: string;
     customerId: string;
+    invoiceNumber?: string;
     invoiceDate: Date;
     dueDate?: Date;
     totalAmount: number;
     paidAmount: number;
     outstandingAmount: number;
+    pdfPath?: string;
+    pdfUrl?: string;
+    pdfGeneratedAt?: Date;
     notes?: string;
     status: InvoiceStatus;
     createdBy?: string;
@@ -96,10 +100,14 @@ export class InvoiceRepository {
     data: {
       projectId?: string;
       customerId?: string;
+      invoiceNumber?: string;
       invoiceDate?: Date;
       dueDate?: Date;
       totalAmount?: number;
       outstandingAmount?: number;
+      pdfPath?: string;
+      pdfUrl?: string;
+      pdfGeneratedAt?: Date;
       notes?: string;
       status?: InvoiceStatus;
       updatedBy?: string;
@@ -109,6 +117,16 @@ export class InvoiceRepository {
       where: { id },
       data,
       include: invoiceInclude,
+    });
+  }
+
+  countByInvoiceNumberPrefix(prefix: string) {
+    return this.prisma.invoice.count({
+      where: {
+        invoiceNumber: {
+          startsWith: prefix,
+        },
+      },
     });
   }
 }

@@ -278,11 +278,15 @@ model Invoice {
   id                String        @id @default(uuid())
   projectId         String
   customerId        String
+  invoiceNumber     String?       @unique
   invoiceDate       DateTime
   dueDate           DateTime?
   totalAmount       Decimal       @db.Decimal(12, 2)
   paidAmount        Decimal       @default(0) @db.Decimal(12, 2)
   outstandingAmount Decimal       @default(0) @db.Decimal(12, 2)
+  pdfPath           String?
+  pdfUrl            String?
+  pdfGeneratedAt    DateTime?
   notes             String?
   status            InvoiceStatus @default(DRAFT)
   createdBy         String?
@@ -297,6 +301,7 @@ model Invoice {
   @@index([projectId])
   @@index([customerId])
   @@index([status])
+  @@index([invoiceNumber])
 }
 
 model Payment {

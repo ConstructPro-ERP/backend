@@ -7,14 +7,21 @@ export interface CreateInvoicePayload {
 }
 
 export interface CreatePaymentPayload {
-  invoiceId?: string;
-  customerId: string;
+  invoiceId: string;
+  referenceNumber: string;
   paymentDate: string;
   amount: number;
   paymentMethod: 'CASH' | 'BANK_TRANSFER' | 'CHEQUE' | 'ONLINE';
+  notes?: string;
 }
 
 export interface UpdateInvoiceStatusPayload {
   id: string;
-  status: 'DRAFT' | 'SENT' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+  status:
+    | 'DRAFT'
+    | 'ISSUED'
+    | 'PARTIALLY_PAID'
+    | 'PAID'
+    | 'OVERDUE'
+    | 'CANCELLED';
 }

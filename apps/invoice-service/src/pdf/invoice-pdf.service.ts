@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 interface InvoicePdfData {
   invoiceId: string;
@@ -25,7 +25,8 @@ export class InvoicePdfService {
     const fileName = `${sanitize(data.invoiceNumber)}.pdf`;
     const filePath = join(directory, fileName);
     const publicBaseUrl =
-      process.env.INVOICE_PDF_BASE_URL ?? 'http://localhost:4010/files/invoices';
+      process.env.INVOICE_PDF_BASE_URL ??
+      'http://localhost:4010/files/invoices';
 
     await mkdir(directory, { recursive: true });
     await writeFile(filePath, buildPdf(data), 'binary');
@@ -45,7 +46,10 @@ function sanitize(value: string): string {
 }
 
 function escapePdfText(value: string): string {
-  return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
 }
 
 function money(value: number): string {

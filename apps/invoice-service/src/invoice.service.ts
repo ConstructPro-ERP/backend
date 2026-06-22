@@ -7,6 +7,7 @@ import {
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { CreateInvoiceDto } from './dto/create-invoice.dto';
 import { GenerateInvoicePdfDto } from './dto/generate-invoice-pdf.dto';
+import { EditableInvoiceStatusDto } from './dto/invoice-status.dto';
 import {
   InvoiceSortByDto,
   ListInvoicesQueryDto,
@@ -38,7 +39,7 @@ export class InvoiceService {
       projectId: dto.projectId,
       customerId: dto.customerId,
       invoiceNumber:
-        dto.status === InvoiceStatus.ISSUED
+        dto.status === EditableInvoiceStatusDto.ISSUED
           ? await this.generateInvoiceNumber(new Date(dto.invoiceDate))
           : undefined,
       invoiceDate: new Date(dto.invoiceDate),
@@ -167,11 +168,7 @@ export class InvoiceService {
     return this.toResponse(cancelled);
   }
 
-  async generatePdf(
-    id: string,
-    dto: GenerateInvoicePdfDto,
-    actorId?: string,
-  ) {
+  async generatePdf(id: string, dto: GenerateInvoicePdfDto, actorId?: string) {
     const invoice = await this.requireInvoice(id);
 
     if (invoice.status === InvoiceStatus.CANCELLED) {

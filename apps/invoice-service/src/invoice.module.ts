@@ -20,11 +20,6 @@ import { InvoiceRepository } from './repositories/invoice.repository';
       envFilePath: join(process.cwd(), '.env'),
     }),
   ],
-  controllers: [InvoiceController, ProjectInvoiceController],
-  providers: [
-    InvoiceService,
-    InvoiceRepository,
-    InvoicePdfService,
   controllers: [
     InvoiceController,
     ProjectInvoiceController,
@@ -32,6 +27,7 @@ import { InvoiceRepository } from './repositories/invoice.repository';
   ],
   providers: [
     InvoiceService,
+    InvoicePdfService,
     FinanceSummaryService,
     InvoiceRepository,
     FinanceSummaryRepository,

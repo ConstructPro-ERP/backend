@@ -5,7 +5,6 @@ import {
 } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InvoiceService } from './invoice.service';
-import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { InvoiceRepository } from './repositories/invoice.repository';
 import { InvoiceSortByDto, SortOrderDto } from './dto/list-invoices-query.dto';
 
@@ -67,7 +66,7 @@ describe('InvoiceService', () => {
     jest.clearAllMocks();
     service = new InvoiceService(
       repository as unknown as InvoiceRepository,
-      pdfService as unknown as InvoicePdfService,
+      pdfService,
     );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
@@ -282,7 +281,8 @@ describe('InvoiceService', () => {
       status: InvoiceStatus.ISSUED,
     });
     pdfService.generate.mockResolvedValue({
-      filePath: 'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
+      filePath:
+        'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
       publicUrl: 'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
       generatedAt: new Date('2026-06-22T01:00:00.000Z'),
     });
@@ -290,7 +290,8 @@ describe('InvoiceService', () => {
       ...baseInvoice,
       invoiceNumber: 'INV-202606-0001',
       status: InvoiceStatus.ISSUED,
-      pdfPath: 'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
+      pdfPath:
+        'D:\\Projects\\ConstructPro\\backend\\storage\\invoices\\INV-202606-0001.pdf',
       pdfUrl: 'http://localhost:4010/files/invoices/INV-202606-0001.pdf',
       pdfGeneratedAt: new Date('2026-06-22T01:00:00.000Z'),
     });

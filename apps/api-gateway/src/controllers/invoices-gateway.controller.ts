@@ -143,6 +143,10 @@ export class InvoicesGatewayController {
     return this.forward(() =>
       this.httpService.post(this.url(`/invoices/${id}/pdf`), body, {
         headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
   @Get('reports/finance/clients/:customerId/summary')
   @ApiOperation({ summary: 'Get a client finance summary' })
   clientSummary(

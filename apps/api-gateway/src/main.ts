@@ -22,7 +22,7 @@ async function bootstrap() {
     credentials: true,
   });
   const envPort = process.env.PORT;
-  const port = envPort ? Number.parseInt(envPort, 10) : 3000;
+  const port = envPort ? Number.parseInt(envPort, 10) : 4000;
   if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);
   await app.listen(port);
   console.log(`API gateway listening on http://localhost:${port}`);

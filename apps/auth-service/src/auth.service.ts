@@ -80,6 +80,9 @@ export class AuthService {
   }
 
   findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { roleName: true } } },
+    });
   }
 }

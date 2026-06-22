@@ -9,6 +9,6 @@ export default defineConfig({
     seed: 'ts-node --compiler-options {"module":"CommonJS"} prisma/seed.ts',
   },
   datasource: {
-    url: process.env.DIRECT_URL_TEST,
+    url: process.env.DIRECT_URL_TEST ?? process.env.DIRECT_URL,
   },
 });

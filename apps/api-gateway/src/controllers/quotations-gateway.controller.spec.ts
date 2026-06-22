@@ -41,6 +41,7 @@ describe('RolesGuard — quotations endpoint access', () => {
     'Project Manager',
     'Accountant',
   );
+  const approveHandler = handlerWithRoles('Admin', 'Management');
 
   it('allows Sales Manager to POST /quotations', () => {
     expect(
@@ -74,5 +75,36 @@ describe('RolesGuard — quotations endpoint access', () => {
     expect(
       guard.canActivate(makeContext(['Project Manager'], readHandler)),
     ).toBe(true);
+  });
+
+  // PATCH /quotations/:id/approve — Admin and Management only
+  it('allows Admin to PATCH /quotations/:id/approve', () => {
+    expect(guard.canActivate(makeContext(['Admin'], approveHandler))).toBe(
+      true,
+    );
+  });
+
+  it('allows Management to PATCH /quotations/:id/approve', () => {
+    expect(guard.canActivate(makeContext(['Management'], approveHandler))).toBe(
+      true,
+    );
+  });
+
+  it('throws 403 when Sales role tries to PATCH /quotations/:id/approve', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['Sales Manager'], approveHandler)),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('throws 403 when Accountant tries to PATCH /quotations/:id/approve', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['Accountant'], approveHandler)),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('throws 403 when Project Manager tries to PATCH /quotations/:id/approve', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['Project Manager'], approveHandler)),
+    ).toThrow(ForbiddenException);
   });
 });

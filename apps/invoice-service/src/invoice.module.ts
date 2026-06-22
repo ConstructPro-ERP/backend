@@ -2,12 +2,15 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { join } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { FinanceSummaryService } from './finance-summary.service';
 import {
+  FinanceReportsController,
   InvoiceController,
   ProjectInvoiceController,
 } from './invoice.controller';
 import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { InvoiceService } from './invoice.service';
+import { FinanceSummaryRepository } from './repositories/finance-summary.repository';
 import { InvoiceRepository } from './repositories/invoice.repository';
 
 @Module({
@@ -22,6 +25,16 @@ import { InvoiceRepository } from './repositories/invoice.repository';
     InvoiceService,
     InvoiceRepository,
     InvoicePdfService,
+  controllers: [
+    InvoiceController,
+    ProjectInvoiceController,
+    FinanceReportsController,
+  ],
+  providers: [
+    InvoiceService,
+    FinanceSummaryService,
+    InvoiceRepository,
+    FinanceSummaryRepository,
     PrismaService,
   ],
 })

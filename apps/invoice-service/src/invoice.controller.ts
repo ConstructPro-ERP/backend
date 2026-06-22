@@ -22,9 +22,19 @@ import {
   CreateInvoiceDto,
   CreateProjectInvoiceDto,
 } from './dto/create-invoice.dto';
+import {
+  FinanceDateRangeQueryDto,
+  OutstandingInvoiceReportQueryDto,
+} from './dto/finance-report-query.dto';
+import {
+  ClientFinanceSummaryDto,
+  OutstandingInvoiceReportDto,
+  ProjectFinanceSummaryDto,
+} from './dto/finance-summary.dto';
 import { ListInvoicesQueryDto } from './dto/list-invoices-query.dto';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { InvoiceEntity } from './entities/invoice.entity';
+import { FinanceSummaryService } from './finance-summary.service';
 import { InvoiceService } from './invoice.service';
 
 @ApiTags('Invoices')
@@ -94,5 +104,39 @@ export class ProjectInvoiceController {
     @Headers('x-user-id') actorId?: string,
   ) {
     return this.invoiceService.createForProject(projectId, dto, actorId);
+  }
+}
+
+@ApiTags('Finance reports')
+@ApiBearerAuth()
+@Controller('reports/finance')
+export class FinanceReportsController {
+  constructor(private readonly financeSummaryService: FinanceSummaryService) {}
+
+  @Get('clients/:customerId/summary')
+  @ApiOperation({ summary: 'Get a client finance summary' })
+  @ApiOkResponse({ type: ClientFinanceSummaryDto })
+  clientSummary(
+    @Param('customerId', new ParseUUIDPipe()) customerId: string,
+    @Query() query: FinanceDateRangeQueryDto,
+  ) {
+    return this.financeSummaryService.clientSummary(customerId, query);
+  }
+
+  @Get('projects/:projectId/summary')
+  @ApiOperation({ summary: 'Get a project finance summary' })
+  @ApiOkResponse({ type: ProjectFinanceSummaryDto })
+  projectSummary(
+    @Param('projectId', new ParseUUIDPipe()) projectId: string,
+    @Query() query: FinanceDateRangeQueryDto,
+  ) {
+    return this.financeSummaryService.projectSummary(projectId, query);
+  }
+
+  @Get('invoices/outstanding')
+  @ApiOperation({ summary: 'List outstanding invoices with balances' })
+  @ApiOkResponse({ type: OutstandingInvoiceReportDto })
+  outstandingInvoices(@Query() query: OutstandingInvoiceReportQueryDto) {
+    return this.financeSummaryService.outstandingInvoices(query);
   }
 }

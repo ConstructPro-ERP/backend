@@ -18,7 +18,9 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('ConstructPro Invoice Service')
-    .setDescription('DDP-23 invoice CRUD and project invoice generation')
+    .setDescription(
+      'DDP-23 invoice CRUD, DDP-24 payment-aware balances, and DDP-25 finance reporting',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

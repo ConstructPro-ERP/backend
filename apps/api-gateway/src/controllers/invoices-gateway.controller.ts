@@ -25,6 +25,10 @@ import {
   CreateInvoiceDto,
   CreateProjectInvoiceDto,
 } from '../../../invoice-service/src/dto/create-invoice.dto';
+import {
+  FinanceDateRangeQueryDto,
+  OutstandingInvoiceReportQueryDto,
+} from '../../../invoice-service/src/dto/finance-report-query.dto';
 import { ListInvoicesQueryDto } from '../../../invoice-service/src/dto/list-invoices-query.dto';
 import { UpdateInvoiceDto } from '../../../invoice-service/src/dto/update-invoice.dto';
 import { Roles } from '../decorators/roles.decorator';
@@ -125,6 +129,56 @@ export class InvoicesGatewayController {
         {},
         { headers: this.forwardHeaders(req) },
       ),
+    );
+  }
+
+  @Get('reports/finance/clients/:customerId/summary')
+  @ApiOperation({ summary: 'Get a client finance summary' })
+  clientSummary(
+    @Param('customerId') customerId: string,
+    @Query() query: FinanceDateRangeQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(
+        this.url(`/reports/finance/clients/${customerId}/summary`),
+        {
+          headers: this.forwardHeaders(req),
+          params: query,
+        },
+      ),
+    );
+  }
+
+  @Get('reports/finance/projects/:projectId/summary')
+  @ApiOperation({ summary: 'Get a project finance summary' })
+  projectSummary(
+    @Param('projectId') projectId: string,
+    @Query() query: FinanceDateRangeQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(
+        this.url(`/reports/finance/projects/${projectId}/summary`),
+        {
+          headers: this.forwardHeaders(req),
+          params: query,
+        },
+      ),
+    );
+  }
+
+  @Get('reports/finance/invoices/outstanding')
+  @ApiOperation({ summary: 'List outstanding invoices with balances' })
+  outstandingInvoices(
+    @Query() query: OutstandingInvoiceReportQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/reports/finance/invoices/outstanding'), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
     );
   }
 

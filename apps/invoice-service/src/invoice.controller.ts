@@ -22,6 +22,7 @@ import {
   CreateInvoiceDto,
   CreateProjectInvoiceDto,
 } from './dto/create-invoice.dto';
+import { GenerateInvoicePdfDto } from './dto/generate-invoice-pdf.dto';
 import {
   FinanceDateRangeQueryDto,
   OutstandingInvoiceReportQueryDto,
@@ -86,6 +87,17 @@ export class InvoiceController {
     @Headers('x-user-id') actorId?: string,
   ) {
     return this.invoiceService.cancel(id, actorId);
+  }
+
+  @Post(':id/pdf')
+  @ApiOperation({ summary: 'Generate and store an invoice PDF document' })
+  @ApiOkResponse({ type: InvoiceEntity })
+  generatePdf(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: GenerateInvoicePdfDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.invoiceService.generatePdf(id, dto, actorId);
   }
 }
 

@@ -8,6 +8,7 @@ import {
   InvoiceController,
   ProjectInvoiceController,
 } from './invoice.controller';
+import { InvoicePdfService } from './pdf/invoice-pdf.service';
 import { InvoiceService } from './invoice.service';
 import { FinanceSummaryRepository } from './repositories/finance-summary.repository';
 import { InvoiceRepository } from './repositories/invoice.repository';
@@ -26,6 +27,7 @@ import { InvoiceRepository } from './repositories/invoice.repository';
   ],
   providers: [
     InvoiceService,
+    InvoicePdfService,
     FinanceSummaryService,
     InvoiceRepository,
     FinanceSummaryRepository,

@@ -20,6 +20,9 @@ export class InvoiceEntity {
   @ApiPropertyOptional()
   dueDate!: Date | null;
 
+  @ApiPropertyOptional()
+  invoiceNumber!: string | null;
+
   @ApiProperty()
   totalAmount!: number;
 
@@ -28,4 +31,13 @@ export class InvoiceEntity {
 
   @ApiProperty()
   outstandingAmount!: number;
+
+  @ApiPropertyOptional()
+  pdfPath!: string | null;
+
+  @ApiPropertyOptional()
+  pdfUrl!: string | null;
+
+  @ApiPropertyOptional()
+  pdfGeneratedAt!: Date | null;
 }

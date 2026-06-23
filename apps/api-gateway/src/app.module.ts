@@ -8,6 +8,7 @@ import { AuthGatewayController } from './controllers/auth-gateway.controller';
 import { InvoicesGatewayController } from './controllers/invoices-gateway.controller';
 import { PaymentsGatewayController } from './controllers/payments-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
+import { RagGatewayController } from './controllers/rag-gateway.controller';
 import { RoutesController } from './controllers/routes.controller';
 
 @Module({
@@ -25,6 +26,7 @@ import { RoutesController } from './controllers/routes.controller';
     QuotationsGatewayController,
     InvoicesGatewayController,
     PaymentsGatewayController,
+    RagGatewayController,
     RoutesController,
   ],
 })

@@ -18,7 +18,6 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-    console.log('DATABASE_URL:', process.env.DATABASE_URL);
     const status =
       exception instanceof HttpException
         ? exception.getStatus()
@@ -55,7 +54,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
         : exception.message;
       this.logger.error(exception.message, exception.stack);
     }
-
+    console.log('DATABASE_URL:', process.env.DATABASE_URL);
     const traceId = crypto.randomUUID();
 
     this.logger.error(

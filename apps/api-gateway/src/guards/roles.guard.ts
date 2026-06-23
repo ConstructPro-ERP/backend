@@ -11,7 +11,7 @@ import type { Request } from 'express';
 import { prisma } from '../../../../libs/database/src';
 export { DatabaseModule } from '../../../../libs/database/src/database.module';
 
-type AuthenticatedUser = { roles?: unknown; role?: unknown };
+type AuthenticatedUser = { roleId?: unknown; role?: unknown };
 type AuthRequest = Request & { user?: AuthenticatedUser };
 
 @Injectable()

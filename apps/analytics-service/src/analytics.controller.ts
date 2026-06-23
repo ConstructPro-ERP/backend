@@ -14,6 +14,18 @@ import {
   RevenueKpiDto,
   SalesKpiDto,
 } from './dto/kpi-response.dto';
+import {
+  ExpenseReportQueryDto,
+  OverdueInvoiceReportQueryDto,
+  ProjectCompletionReportQueryDto,
+  RecentActivityQueryDto,
+} from './dto/reporting-query.dto';
+import {
+  ExpenseReportResponseDto,
+  OverdueInvoiceReportResponseDto,
+  ProjectCompletionReportResponseDto,
+  RecentActivityResponseDto,
+} from './dto/reporting-response.dto';
 
 @ApiTags('Analytics')
 @ApiBearerAuth()
@@ -54,5 +66,35 @@ export class AnalyticsController {
   @ApiOkResponse({ type: DashboardSummaryDto })
   summary(@Query() query: KpiQueryDto) {
     return this.analyticsService.dashboardSummary(query);
+  }
+
+  @Get('reports/recent-activity')
+  @ApiOperation({ summary: 'Get a paginated recent activity feed' })
+  @ApiOkResponse({ type: RecentActivityResponseDto })
+  recentActivity(@Query() query: RecentActivityQueryDto) {
+    return this.analyticsService.recentActivity(query);
+  }
+
+  @Get('reports/project-completion')
+  @ApiOperation({
+    summary: 'Get project completion progress with milestone breakdowns',
+  })
+  @ApiOkResponse({ type: ProjectCompletionReportResponseDto })
+  projectCompletion(@Query() query: ProjectCompletionReportQueryDto) {
+    return this.analyticsService.projectCompletionReport(query);
+  }
+
+  @Get('reports/expenses')
+  @ApiOperation({ summary: 'Get project expense totals by project and date' })
+  @ApiOkResponse({ type: ExpenseReportResponseDto })
+  expenses(@Query() query: ExpenseReportQueryDto) {
+    return this.analyticsService.expenseReport(query);
+  }
+
+  @Get('reports/overdue-invoices')
+  @ApiOperation({ summary: 'Get overdue invoices with client and project info' })
+  @ApiOkResponse({ type: OverdueInvoiceReportResponseDto })
+  overdueInvoices(@Query() query: OverdueInvoiceReportQueryDto) {
+    return this.analyticsService.overdueInvoiceReport(query);
   }
 }

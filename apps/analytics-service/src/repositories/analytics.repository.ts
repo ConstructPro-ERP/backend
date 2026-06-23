@@ -49,4 +49,140 @@ export class AnalyticsRepository {
       _count: { _all: true },
     });
   }
+
+  findRecentInvoices(where: Prisma.InvoiceWhereInput, take: number) {
+    return this.prisma.invoice.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: { select: { id: true, projectName: true } },
+      },
+    });
+  }
+
+  findRecentPayments(where: Prisma.PaymentWhereInput, take: number) {
+    return this.prisma.payment.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        invoice: {
+          select: {
+            id: true,
+            project: { select: { id: true, projectName: true } },
+          },
+        },
+      },
+    });
+  }
+
+  findRecentProjects(where: Prisma.ProjectWhereInput, take: number) {
+    return this.prisma.project.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findRecentLeads(where: Prisma.LeadWhereInput, take: number) {
+    return this.prisma.lead.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  findRecentQuotations(where: Prisma.QuotationWhereInput, take: number) {
+    return this.prisma.quotation.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: { select: { id: true, projectName: true } },
+      },
+    });
+  }
+
+  findRecentDocuments(where: Prisma.DocumentWhereInput, take: number) {
+    return this.prisma.document.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: { select: { id: true, projectName: true } },
+        category: { select: { categoryName: true } },
+      },
+    });
+  }
+
+  findRecentMilestones(where: Prisma.MilestoneWhereInput, take: number) {
+    return this.prisma.milestone.findMany({
+      where,
+      take,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        project: { select: { id: true, projectName: true } },
+      },
+    });
+  }
+
+  findProjectsForCompletionReport(args: Prisma.ProjectFindManyArgs) {
+    return this.prisma.project.findMany({
+      ...args,
+      include: {
+        milestones: {
+          include: {
+            tasks: {
+              select: { id: true, status: true },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  countProjectsForReport(where: Prisma.ProjectWhereInput) {
+    return this.prisma.project.count({ where });
+  }
+
+  aggregateExpenses(where: Prisma.ExpenseWhereInput) {
+    return this.prisma.expense.aggregate({
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+    });
+  }
+
+  groupExpensesByProject(where: Prisma.ExpenseWhereInput) {
+    return this.prisma.expense.groupBy({
+      by: ['projectId'],
+      where,
+      _sum: { amount: true },
+      _count: { _all: true },
+      _min: { createdAt: true },
+      _max: { createdAt: true },
+    });
+  }
+
+  findProjectsByIds(projectIds: string[]) {
+    return this.prisma.project.findMany({
+      where: { id: { in: projectIds } },
+      select: { id: true, projectName: true },
+    });
+  }
+
+  findOverdueInvoices(args: Prisma.InvoiceFindManyArgs) {
+    return this.prisma.invoice.findMany({
+      ...args,
+      include: {
+        customer: { select: { id: true, fullName: true } },
+        project: { select: { id: true, projectName: true } },
+      },
+    });
+  }
+
+  countOverdueInvoices(where: Prisma.InvoiceWhereInput) {
+    return this.prisma.invoice.count({ where });
+  }
 }

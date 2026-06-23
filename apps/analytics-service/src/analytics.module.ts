@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsService } from './analytics.service';
+import { RagController } from './rag.controller';
+import { RagService } from './rag.service';
 import { AnalyticsRepository } from './repositories/analytics.repository';
 
 @Module({
@@ -13,7 +15,7 @@ import { AnalyticsRepository } from './repositories/analytics.repository';
       envFilePath: join(process.cwd(), '.env'),
     }),
   ],
-  controllers: [AnalyticsController],
-  providers: [AnalyticsService, AnalyticsRepository, PrismaService],
+  controllers: [AnalyticsController, RagController],
+  providers: [AnalyticsService, RagService, AnalyticsRepository, PrismaService],
 })
 export class AnalyticsModule {}

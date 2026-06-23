@@ -16,7 +16,7 @@ async function bootstrap() {
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('ConstructPro Analytics Service')
-    .setDescription('DDP-27 KPI dashboard aggregation APIs')
+    .setDescription('DDP-27 KPI dashboard APIs and DDP-28 reporting APIs')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

@@ -2,6 +2,29 @@ import { Injectable } from '@nestjs/common';
 import { AiKnowledgeSourceType, LeadStatus, Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 
+type VectorKnowledgeChunkRow = {
+  id: string;
+  projectId: string | null;
+  sourceType: string;
+  sourceId: string | null;
+  content: string;
+  similarityScore: number | null;
+};
+
+type RelevantKnowledgeChunkRow = {
+  id: string;
+  projectId: string;
+  sourceType: AiKnowledgeSourceType;
+  sourceId: string;
+  chunkText: string;
+  metadata: Prisma.JsonValue | null;
+  embeddingModel: string | null;
+  embeddingDim: number | null;
+  createdAt: Date;
+  updatedAt: Date;
+  similarityScore: number | null;
+};
+
 @Injectable()
 export class AnalyticsRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -65,16 +88,7 @@ export class AnalyticsRepository {
     const table = process.env.RAG_VECTOR_TABLE ?? 'ai_knowledge_chunks';
 
     try {
-      const rows = await this.prisma.$queryRawUnsafe<
-        Array<{
-          id: string;
-          projectId: string | null;
-          sourceType: string;
-          sourceId: string | null;
-          content: string;
-          similarityScore: number | null;
-        }>
-      >(
+      const rows = await this.prisma.$queryRawUnsafe<VectorKnowledgeChunkRow[]>(
         `SELECT id, "projectId", "sourceType", "sourceId", "chunkText" AS content, NULL::double precision AS "similarityScore"
          FROM "${table}"
          WHERE "projectId" = $1
@@ -85,7 +99,7 @@ export class AnalyticsRepository {
       );
       return rows;
     } catch {
-      return [];
+      return [] as VectorKnowledgeChunkRow[];
     }
   }
 
@@ -136,14 +150,16 @@ export class AnalyticsRepository {
     embeddingModel?: string | null;
     embeddingDim?: number | null;
   }) {
+    const where = Prisma.validator<Prisma.AiKnowledgeChunkWhereUniqueInput>()({
+      projectId_sourceType_sourceId: {
+        projectId: args.projectId,
+        sourceType: args.sourceType,
+        sourceId: args.sourceId,
+      },
+    });
+
     return this.prisma.aiKnowledgeChunk.upsert({
-      where: {
-        projectId_sourceType_sourceId: {
-          projectId: args.projectId,
-          sourceType: args.sourceType,
-          sourceId: args.sourceId,
-        },
-      } as Prisma.AiKnowledgeChunkWhereUniqueInput,
+      where,
       create: {
         projectId: args.projectId,
         sourceType: args.sourceType,
@@ -166,7 +182,9 @@ export class AnalyticsRepository {
   }
 
   async setKnowledgeChunkEmbedding(chunkId: string, values: number[]) {
-    const vectorLiteral = `[${values.map((value) => Number(value).toFixed(8)).join(',')}]`;
+    const vectorLiteral = `[${values
+      .map((value) => Number(value).toFixed(8))
+      .join(',')}]`;
     await this.prisma.$executeRawUnsafe(
       `UPDATE "ai_knowledge_chunks"
        SET "embedding" = $2::vector,
@@ -200,21 +218,8 @@ export class AnalyticsRepository {
       .join(',')}]`;
 
     try {
-      const rows = await this.prisma.$queryRawUnsafe<
-        Array<{
-          id: string;
-          projectId: string;
-          sourceType: AiKnowledgeSourceType;
-          sourceId: string;
-          chunkText: string;
-          metadata: Prisma.JsonValue | null;
-          embeddingModel: string | null;
-          embeddingDim: number | null;
-          createdAt: Date;
-          updatedAt: Date;
-          similarityScore: number | null;
-        }>
-      >(
+      const rows =
+        await this.prisma.$queryRawUnsafe<RelevantKnowledgeChunkRow[]>(
         `SELECT id,
                 "projectId",
                 "sourceType",

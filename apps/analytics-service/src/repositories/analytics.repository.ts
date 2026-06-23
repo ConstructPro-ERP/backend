@@ -6,6 +6,90 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 export class AnalyticsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findProjectForRiskForecast(projectId: string) {
+    return this.prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        milestones: {
+          orderBy: [{ dueDate: 'asc' }, { createdAt: 'desc' }],
+          select: {
+            id: true,
+            milestoneName: true,
+            dueDate: true,
+            status: true,
+            createdAt: true,
+          },
+        },
+        invoices: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            invoiceNumber: true,
+            dueDate: true,
+            status: true,
+            totalAmount: true,
+            outstandingAmount: true,
+            createdAt: true,
+          },
+        },
+        expenses: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            amount: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+  }
+
+  async findVectorKnowledgeChunks(projectId: string, limit: number) {
+    const table = process.env.RAG_VECTOR_TABLE;
+    if (!table) return [];
+
+    try {
+      const rows = await this.prisma.$queryRawUnsafe<
+        Array<{
+          id: string;
+          projectId: string | null;
+          sourceType: string;
+          sourceId: string | null;
+          content: string;
+          similarityScore: number | null;
+        }>
+      >(
+        `SELECT id, "projectId", "sourceType", "sourceId", content, NULL::double precision AS "similarityScore"
+         FROM "${table}"
+         WHERE "projectId" = $1
+         ORDER BY "createdAt" DESC
+         LIMIT $2`,
+        projectId,
+        limit,
+      );
+      return rows;
+    } catch {
+      return [];
+    }
+  }
+
+  findPaymentsForRiskForecast(projectId: string) {
+    return this.prisma.payment.findMany({
+      where: {
+        invoice: {
+          projectId,
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        amount: true,
+        paymentDate: true,
+        referenceNumber: true,
+      },
+    });
+  }
+
   aggregateInvoices(where: Prisma.InvoiceWhereInput) {
     return this.prisma.invoice.aggregate({
       where,

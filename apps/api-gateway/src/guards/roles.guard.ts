@@ -10,7 +10,9 @@ import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { Request } from 'express';
 import { prisma } from '../../../../libs/database/src';
 export { DatabaseModule } from '../../../../libs/database/src/database.module';
-type AuthRequest = Request & { user?: any };
+
+type AuthenticatedUser = { roles?: unknown; role?: unknown };
+type AuthRequest = Request & { user?: AuthenticatedUser };
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -50,4 +52,11 @@ export class RolesGuard implements CanActivate {
 
     return true;
   }
+}
+
+function normalizeRole(role: string): string {
+  return role
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
 }

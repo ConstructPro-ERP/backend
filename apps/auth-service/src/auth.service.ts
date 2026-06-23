@@ -89,7 +89,10 @@ export class AuthService {
   }
 
   findById(id: string) {
-    return this.prisma.user.findUnique({ where: { id } });
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { roleName: true } } },
+    });
   }
   // async findOrCreateGoogleUser(payload: GoogleUserPayload) {
   //   const existing = await this.prisma.user.findFirst({

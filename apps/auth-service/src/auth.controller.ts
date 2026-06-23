@@ -57,8 +57,12 @@ export class AuthController {
       });
     }
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { password, ...safe } = user;
-    return safe;
+    const { password, role, ...safe } = user;
+    return {
+      ...safe,
+      role: role.roleName,
+      roles: [role.roleName],
+    };
   }
   // @Get('google')
   // @UseGuards(AuthGuard('google'))

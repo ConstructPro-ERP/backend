@@ -36,6 +36,10 @@ export class ResponseInterceptor implements NestInterceptor {
             total: data.total,
             // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
             page: data.page,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+            limit: data.limit,
+            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+            totalPages: data.totalPages,
           };
         } else {
           // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment

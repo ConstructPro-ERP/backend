@@ -1,71 +1,65 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
-import { UpdateProfileDto } from './dto/update-profile.dto';
 import * as bcrypt from 'bcrypt';
+import { UserStatus } from '@prisma/client';
+import { UserRepository } from './repositories/user.repository';
+import { toSafeUser, toSafeUsers, type SafeUser } from './entities/user.entity';
+import type { CreateUserDto } from './dto/create-user.dto';
+import type { UpdateUserDto } from './dto/update-user.dto';
+import type { UpdateProfileDto } from './dto/update-profile.dto';
+
+const BCRYPT_SALT_ROUNDS = 12;
 
 @Injectable()
 export class UserService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly userRepository: UserRepository) {}
 
-  // Strip password from every outbound user object
-  private safe<T extends { password?: string | null }>(user: T) {
-    const { password: _, ...rest } = user;
-    return rest;
+  async findAll(): Promise<SafeUser[]> {
+    const users = await this.userRepository.findAll();
+    return toSafeUsers(users);
   }
 
-  findAll() {
-    return this.prisma.user
-      .findMany({ orderBy: { createdAt: 'desc' } })
-      .then((users) => users.map(this.safe));
+  async findById(id: string): Promise<SafeUser | null> {
+    const user = await this.userRepository.findById(id);
+    return user ? toSafeUser(user) : null;
   }
 
-  findById(id: string) {
-    return this.prisma.user
-      .findUnique({ where: { id } })
-      .then((u) => (u ? this.safe(u) : null));
-  }
+  async create(dto: CreateUserDto): Promise<SafeUser> {
+    const hashedPassword = dto.password
+      ? await bcrypt.hash(dto.password, BCRYPT_SALT_ROUNDS)
+      : null;
 
-  async create(dto: CreateUserDto) {
-    const hashed = dto.password ? await bcrypt.hash(dto.password, 10) : null;
-    const user = await this.prisma.user.create({
-      data: {
-        fullName: dto.fullName,
-        email: dto.email,
-        password: hashed,
-        roleId: dto.roleId,
-        avatar: dto.avatar,
-        status: 'ACTIVE',
-      },
+    const user = await this.userRepository.create({
+      fullName: dto.fullName,
+      email: dto.email,
+      password: hashedPassword,
+      role: { connect: { id: dto.roleId } },
+      status: UserStatus.ACTIVE,
     });
-    return this.safe(user);
+
+    return toSafeUser(user);
   }
 
-  async update(id: string, dto: UpdateUserDto) {
+  async update(id: string, dto: UpdateUserDto): Promise<SafeUser> {
     await this.assertExists(id);
-    const user = await this.prisma.user.update({ where: { id }, data: dto });
-    return this.safe(user);
+    const user = await this.userRepository.update(id, dto);
+    return toSafeUser(user);
   }
 
-  async updateProfile(id: string, dto: UpdateProfileDto) {
+  async updateProfile(id: string, dto: UpdateProfileDto): Promise<SafeUser> {
     await this.assertExists(id);
-    const user = await this.prisma.user.update({ where: { id }, data: dto });
-    return this.safe(user);
+    const user = await this.userRepository.update(id, dto);
+    return toSafeUser(user);
   }
 
-  async remove(id: string) {
+  async remove(id: string): Promise<void> {
     await this.assertExists(id);
-    // Soft-delete: mark INACTIVE rather than destroying data
-    await this.prisma.user.update({
-      where: { id },
-      data: { status: 'INACTIVE' },
-    });
+    await this.userRepository.deactivate(id);
   }
 
-  // Throws 404 early so callers don't get cryptic Prisma errors
-  private async assertExists(id: string) {
-    const count = await this.prisma.user.count({ where: { id } });
-    if (!count) throw new NotFoundException(`User ${id} not found`);
+  private async assertExists(id: string): Promise<void> {
+    const exists = await this.userRepository.existsById(id);
+    if (!exists) {
+      throw new NotFoundException(`User ${id} not found`);
+    }
   }
 }

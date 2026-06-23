@@ -4,6 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+
 }
 
 // ─── Migration 1: Auth Models ─────────────────────────────────────────────────
@@ -43,13 +44,13 @@ model Role {
 }
 
 model User {
-  googleId  String?  @unique   // make optional — not all users login via Google
+     // make optional — not all users login via Google
   id        String     @id @default(uuid())
   fullName  String
   email     String     @unique
   password  String?            // make optional — Google users have no password
   roleId    String?            // make optional — Google users may not have role yet
-  avatar    String?            // add avatar field
+             // add avatar field
   status    UserStatus @default(ACTIVE)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt

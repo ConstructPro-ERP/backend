@@ -7,6 +7,7 @@ import { ConfigModule } from '@nestjs/config'; // ← add this import
 import { AuthGatewayController } from './controllers/auth-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
 import { RoutesController } from './controllers/routes.controller';
+import { UsersGatewayController } from './controllers/users-gateway.controller';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { RoutesController } from './controllers/routes.controller';
     AuthGatewayController,
     QuotationsGatewayController,
     RoutesController,
+    UsersGatewayController,
   ],
 })
 export class AppModule {}

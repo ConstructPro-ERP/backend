@@ -18,7 +18,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
-
+    console.log('DATABASE_URL:', process.env.DATABASE_URL);
     const status =
       exception instanceof HttpException
         ? exception.getStatus()

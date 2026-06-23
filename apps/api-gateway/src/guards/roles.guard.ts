@@ -8,14 +8,15 @@ import {
 import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { Request } from 'express';
-
+import { prisma } from '../../../../libs/database/src';
+export { DatabaseModule } from '../../../../libs/database/src/database.module';
 type AuthRequest = Request & { user?: any };
 
 @Injectable()
 export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
-  canActivate(context: ExecutionContext): boolean {
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     // getAllAndOverride expects the metadata key and an array of targets
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
       ROLES_KEY,
@@ -31,15 +32,22 @@ export class RolesGuard implements CanActivate {
       throw new ForbiddenException('User not available for role check');
     }
 
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles
-      : user.role
-        ? [String(user.role)]
-        : [];
-    const hasRole = requiredRoles.some((r) => userRoles.includes(r));
+    const role = await prisma.role.findUnique({
+      where: {
+        id: String(user.roleId),
+      },
+    });
+
+    if (!role) {
+      throw new ForbiddenException('Role not found');
+    }
+
+    const hasRole = requiredRoles.includes(role.roleName);
+
     if (!hasRole) {
       throw new ForbiddenException('Insufficient role');
     }
+
     return true;
   }
 }

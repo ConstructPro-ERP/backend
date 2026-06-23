@@ -8,7 +8,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { join } from 'path';
-import { GoogleStrategy } from './strategies/google.strategy';
+// import { GoogleStrategy } from './strategies/google.strategy';
 
 @Module({
   imports: [
@@ -30,7 +30,7 @@ import { GoogleStrategy } from './strategies/google.strategy';
     HttpModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleStrategy, PrismaService],
+  providers: [AuthService, JwtStrategy, PrismaService],
   exports: [AuthService],
 })
 export class AuthModule {}

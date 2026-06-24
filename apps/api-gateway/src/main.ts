@@ -5,6 +5,7 @@ import { AppModule } from './app.module';
 import { ResponseInterceptor } from './interceptors/response.interceptor';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { authRoutes } from './routes/auth.routes';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +22,19 @@ async function bootstrap() {
     origin: true,
     credentials: true,
   });
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('ConstructPro API')
+    .setDescription(
+      'ConstructPro gateway API, including DDP-23 invoice APIs and DDP-29 AI forecasting APIs',
+    )
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+  SwaggerModule.setup(
+    'api/docs',
+    app,
+    SwaggerModule.createDocument(app, swaggerConfig),
+  );
   const envPort = process.env.PORT;
   const port = envPort ? Number.parseInt(envPort, 10) : 4000;
   if (!Number.isFinite(port)) throw new Error(`Invalid PORT: ${envPort}`);

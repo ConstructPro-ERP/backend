@@ -9,7 +9,8 @@ import { Reflector } from '@nestjs/core';
 import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { Request } from 'express';
 
-type AuthRequest = Request & { user?: any };
+type AuthenticatedUser = { roles?: unknown; role?: unknown };
+type AuthRequest = Request & { user?: AuthenticatedUser };
 
 @Injectable()
 export class RolesGuard implements CanActivate {
@@ -32,14 +33,24 @@ export class RolesGuard implements CanActivate {
     }
 
     const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles
-      : user.role
-        ? [String(user.role)]
+      ? user.roles.filter((role): role is string => typeof role === 'string')
+      : typeof user.role === 'string'
+        ? [user.role]
         : [];
-    const hasRole = requiredRoles.some((r) => userRoles.includes(r));
+    const normalizedUserRoles = userRoles.map(normalizeRole);
+    const hasRole = requiredRoles
+      .map(normalizeRole)
+      .some((role) => normalizedUserRoles.includes(role));
     if (!hasRole) {
       throw new ForbiddenException('Insufficient role');
     }
     return true;
   }
+}
+
+function normalizeRole(role: string): string {
+  return role
+    .trim()
+    .toUpperCase()
+    .replace(/[\s-]+/g, '_');
 }

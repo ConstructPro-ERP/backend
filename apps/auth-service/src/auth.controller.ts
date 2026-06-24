@@ -49,6 +49,7 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   async me(@Req() req: AuthenticatedRequest) {
     const user = await this.authService.findById(req.user.sub);
+
     if (!user) {
       // Token valid but user row was deleted — return 404, not 200
       throw new NotFoundException({
@@ -56,12 +57,22 @@ export class AuthController {
         message: 'Authenticated user no longer exists.',
       });
     }
+
+    if (!user.role) {
+      throw new NotFoundException({
+        code: ErrorCode.ROLE_NOT_FOUND,
+        message: 'Authenticated user role no longer exists.',
+      });
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, role, ...safe } = user;
+    const roleName = role.roleName;
+
     return {
       ...safe,
-      role: role.roleName,
-      roles: [role.roleName],
+      role: roleName,
+      roles: [roleName],
     };
   }
   // @Get('google')

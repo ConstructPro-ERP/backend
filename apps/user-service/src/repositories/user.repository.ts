@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, UserStatus } from '@prisma/client';
+import { Prisma, UserStatus, type Role } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import {
   USER_WITH_ROLE_INCLUDE,
@@ -28,6 +28,18 @@ export class UserRepository {
     return this.prisma.user.findUnique({
       where: { email },
       include: USER_WITH_ROLE_INCLUDE,
+    });
+  }
+
+  findRoleById(id: string): Promise<Role | null> {
+    return this.prisma.role.findUnique({
+      where: { id },
+    });
+  }
+
+  findRoleByName(roleName: string): Promise<Role | null> {
+    return this.prisma.role.findUnique({
+      where: { roleName },
     });
   }
 

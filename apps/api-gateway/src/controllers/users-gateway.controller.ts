@@ -47,7 +47,7 @@ export class UsersGatewayController {
    */
   @Get()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async findAll(@Req() req: Request): Promise<unknown> {
     return this.forward(() =>
       this.httpService.get(`${USER_SERVICE_URL}/users`, {
@@ -62,7 +62,7 @@ export class UsersGatewayController {
    */
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async create(@Body() body: unknown, @Req() req: Request): Promise<unknown> {
     return this.forward(() =>
       this.httpService.post(`${USER_SERVICE_URL}/users`, body, {
@@ -77,7 +77,7 @@ export class UsersGatewayController {
    */
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin', 'Sales Manager', 'Project Manager', 'Accountant')
+  @Roles('ADMIN', 'SALES_MANAGER', 'PROJECT_MANAGER', 'ACCOUNTANT')
   async findOne(
     @Param('id') id: string,
     @Req() req: Request,
@@ -95,7 +95,7 @@ export class UsersGatewayController {
    */
   @Patch(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
+  @Roles('ADMIN')
   async update(
     @Param('id') id: string,
     @Body() body: unknown,
@@ -133,11 +133,8 @@ export class UsersGatewayController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin')
-  async remove(
-    @Param('id') id: string,
-    @Req() req: Request,
-  ): Promise<void> {
+  @Roles('ADMIN')
+  async remove(@Param('id') id: string, @Req() req: Request): Promise<void> {
     await this.forward(() =>
       this.httpService.delete(`${USER_SERVICE_URL}/users/${id}`, {
         headers: { authorization: req.headers.authorization },

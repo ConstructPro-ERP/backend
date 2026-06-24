@@ -45,14 +45,20 @@ export class UserController {
   }
 
   @Patch(':id')
-  @UsePipes(new ZodValidationPipe(UpdateUserSchema))
-  update(@Param('id') id: string, @Body() dto: UpdateUserDto) {
+  update(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateUserSchema))
+    dto: UpdateUserDto,
+  ) {
     return this.userService.update(id, dto);
   }
 
   @Patch(':id/profile')
-  @UsePipes(new ZodValidationPipe(UpdateProfileSchema))
-  updateProfile(@Param('id') id: string, @Body() dto: UpdateProfileDto) {
+  updateProfile(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(UpdateProfileSchema))
+    dto: UpdateProfileDto,
+  ) {
     return this.userService.updateProfile(id, dto);
   }
 

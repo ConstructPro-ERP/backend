@@ -7,8 +7,9 @@ export const CreateUserSchema = z.object({
     .string()
     .min(6, 'Password must be at least 6 characters')
     .optional(),
-  roleId: z.string().min(1, 'Role ID is required'),
-  avatar: z.string().url('Avatar must be a valid URL').optional(),
+
+  // Optional because user creation should not depend on role assignment.
+  roleId: z.string().min(1, 'Role ID is required').optional(),
 });
 
 export type CreateUserDto = z.infer<typeof CreateUserSchema>;

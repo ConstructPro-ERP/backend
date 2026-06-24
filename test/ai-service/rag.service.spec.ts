@@ -1,7 +1,13 @@
+import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { AiKnowledgeSourceType, InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
-import { RagService } from './rag.service';
-import { AiRepository } from './repositories/ai.repository';
+import {
+  AiKnowledgeSourceType,
+  InvoiceStatus,
+  MilestoneStatus,
+  ProjectStatus,
+} from '@prisma/client';
+import { RagService } from '../../apps/ai-service/src/rag.service';
+import { AiRepository } from '../../apps/ai-service/src/repositories/ai.repository';
 
 const repository = {
   findProjectForRagIndexing: jest.fn(),
@@ -128,5 +134,14 @@ describe('RagService', () => {
     expect(result.usedVectorSearch).toBe(false);
     expect(result.items).toHaveLength(1);
     expect(result.warnings[0]).toContain('Embedding provider is not configured');
+  });
+
+  it('rejects reindexing when the project does not exist', async () => {
+    repository.findProjectForRagIndexing.mockResolvedValue(null);
+    repository.findPaymentsForRagIndexing.mockResolvedValue([]);
+
+    await expect(service.reindexProject('missing-project')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

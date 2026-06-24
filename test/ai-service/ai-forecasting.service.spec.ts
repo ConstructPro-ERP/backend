@@ -1,15 +1,19 @@
 import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
-import { AiPromptService } from './ai-prompt.service';
-import { AiProviderService } from './ai-provider.service';
-import { AiForecastingService } from './ai-forecasting.service';
+import {
+  InvoiceStatus,
+  MilestoneStatus,
+  ProjectStatus,
+} from '@prisma/client';
+import { AiPromptService } from '../../apps/ai-service/src/ai-prompt.service';
+import { AiProviderService } from '../../apps/ai-service/src/ai-provider.service';
+import { AiForecastingService } from '../../apps/ai-service/src/ai-forecasting.service';
 import {
   PredictionSourceDto,
   RevenueTrendDto,
   RiskLevelDto,
-} from './dto/ai-forecasting.dto';
-import { AiRepository } from './repositories/ai.repository';
+} from '../../apps/ai-service/src/dto/ai-forecasting.dto';
+import { AiRepository } from '../../apps/ai-service/src/repositories/ai.repository';
 
 const repository = {
   findProjectForRiskForecast: jest.fn(),
@@ -218,6 +222,92 @@ describe('AiForecastingService', () => {
         'Prompt context was limited to 1 chunks by AI_MAX_CONTEXT_CHUNKS.',
         'Provider warning',
       ]),
+    );
+  });
+
+  it('falls back safely when the provider request fails', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'RAG_TOP_K') return '5';
+      if (key === 'AI_VECTOR_SEARCH_ENABLED') return 'true';
+      return undefined;
+    });
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+      projectName: 'Tower A',
+      status: ProjectStatus.ACTIVE,
+      budget: 100000,
+      milestones: [
+        {
+          id: 'ms-1',
+          milestoneName: 'Foundation',
+          dueDate: new Date('2026-07-10T00:00:00Z'),
+          status: MilestoneStatus.IN_PROGRESS,
+          createdAt: new Date('2026-06-01T00:00:00Z'),
+        },
+      ],
+      invoices: [
+        {
+          id: 'inv-1',
+          invoiceNumber: 'INV-001',
+          dueDate: new Date('2026-06-10T00:00:00Z'),
+          status: InvoiceStatus.OVERDUE,
+          totalAmount: { toNumber: () => 10000 },
+          outstandingAmount: { toNumber: () => 4000 },
+          createdAt: new Date('2026-06-05T00:00:00Z'),
+        },
+      ],
+      expenses: [
+        {
+          id: 'exp-1',
+          amount: 2500,
+          createdAt: new Date('2026-06-03T00:00:00Z'),
+        },
+      ],
+    });
+    repository.findPaymentsForRiskForecast.mockResolvedValue([
+      {
+        id: 'pay-1',
+        amount: { toNumber: () => 6000 },
+        paymentDate: new Date('2026-06-08T00:00:00Z'),
+        referenceNumber: 'PAY-001',
+      },
+    ]);
+    repository.findVectorKnowledgeChunks.mockResolvedValue([
+      {
+        id: 'chunk-1',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'project',
+        sourceId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        content: 'Project Tower A is active.',
+        similarityScore: 0.9,
+      },
+      {
+        id: 'chunk-2',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'invoice',
+        sourceId: 'inv-1',
+        content: 'Invoice INV-001 is overdue.',
+        similarityScore: 0.87,
+      },
+      {
+        id: 'chunk-3',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'payment',
+        sourceId: 'pay-1',
+        content: 'Payment PAY-001 was recorded.',
+        similarityScore: 0.85,
+      },
+    ]);
+    aiProviderService.predictViaProvider.mockRejectedValue(new Error('provider-down'));
+
+    const result = await service.predictProjectRisk(
+      '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+    );
+
+    expect(result.predictionSource).toBe(PredictionSourceDto.SAFE_FALLBACK);
+    expect(result.sufficientData).toBe(true);
+    expect(result.warnings).toContain(
+      'AI provider request failed; safe rule-based fallback was returned.',
     );
   });
 });

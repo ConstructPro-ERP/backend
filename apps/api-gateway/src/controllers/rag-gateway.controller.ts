@@ -24,7 +24,7 @@ import {
   RagReindexPathDto,
   RagRetrievalResponseDto,
   RagRetrieveQueryDto,
-} from '../../../analytics-service/src/dto/rag.dto';
+} from '../../../ai-service/src/dto/rag.dto';
 import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -55,7 +55,7 @@ export class RagGatewayController {
   reindex(@Param() params: RagReindexPathDto, @Req() req: Request) {
     return this.forward(() =>
       this.httpService.post(
-        this.url(`/analytics/ai-forecasting/rag/projects/${params.projectId}/reindex`),
+        this.url(`/ai-forecasting/rag/projects/${params.projectId}/reindex`),
         undefined,
         {
           headers: this.forwardHeaders(req),
@@ -74,7 +74,7 @@ export class RagGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.get(
-        this.url(`/analytics/ai-forecasting/rag/projects/${params.projectId}/chunks`),
+        this.url(`/ai-forecasting/rag/projects/${params.projectId}/chunks`),
         {
           headers: this.forwardHeaders(req),
           params: query,
@@ -84,7 +84,7 @@ export class RagGatewayController {
   }
 
   private url(path: string): string {
-    const base = process.env.ANALYTICS_SERVICE_URL ?? 'http://localhost:4011';
+    const base = process.env.AI_SERVICE_URL ?? 'http://localhost:4012';
     return `${base}${path}`;
   }
 

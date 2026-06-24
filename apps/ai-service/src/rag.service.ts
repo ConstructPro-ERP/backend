@@ -5,7 +5,7 @@ import {
   RagIndexingSummaryDto,
   RagRetrievalResponseDto,
 } from './dto/rag.dto';
-import { AnalyticsRepository } from './repositories/analytics.repository';
+import { AiRepository } from './repositories/ai.repository';
 
 type IndexedChunk = {
   sourceType: AiKnowledgeSourceType;
@@ -17,14 +17,14 @@ type IndexedChunk = {
 @Injectable()
 export class RagService {
   constructor(
-    private readonly analyticsRepository: AnalyticsRepository,
+    private readonly aiRepository: AiRepository,
     private readonly configService: ConfigService,
   ) {}
 
   async reindexProject(projectId: string): Promise<RagIndexingSummaryDto> {
     const [project, payments] = await Promise.all([
-      this.analyticsRepository.findProjectForRagIndexing(projectId),
-      this.analyticsRepository.findPaymentsForRagIndexing(projectId),
+      this.aiRepository.findProjectForRagIndexing(projectId),
+      this.aiRepository.findPaymentsForRagIndexing(projectId),
     ]);
 
     if (!project) {
@@ -47,7 +47,7 @@ export class RagService {
 
     for (const chunk of chunks) {
       const embedding = await this.generateEmbedding(chunk.chunkText);
-      const row = await this.analyticsRepository.upsertKnowledgeChunk({
+      const row = await this.aiRepository.upsertKnowledgeChunk({
         projectId: project.id,
         sourceType: chunk.sourceType,
         sourceId: chunk.sourceId,
@@ -58,7 +58,7 @@ export class RagService {
           (providerEmbeddings ? 'provider-default' : 'deterministic-fallback'),
         embeddingDim: embedding.length,
       });
-      await this.analyticsRepository.setKnowledgeChunkEmbedding(row.id, embedding);
+      await this.aiRepository.setKnowledgeChunkEmbedding(row.id, embedding);
       embeddingsGenerated += 1;
     }
 
@@ -111,7 +111,7 @@ export class RagService {
       this.configService.get<string>('RAG_SIMILARITY_THRESHOLD') ?? '0.75',
     );
 
-    const items = (await this.analyticsRepository.findRelevantKnowledgeChunks({
+    const items = (await this.aiRepository.findRelevantKnowledgeChunks({
       projectId,
       topK: effectiveTopK,
       embedding: queryEmbedding,
@@ -198,10 +198,10 @@ export class RagService {
 }
 
 function buildChunks(
-  project: Awaited<ReturnType<AnalyticsRepository['findProjectForRagIndexing']>> extends infer T
+  project: Awaited<ReturnType<AiRepository['findProjectForRagIndexing']>> extends infer T
     ? NonNullable<T>
     : never,
-  payments: Awaited<ReturnType<AnalyticsRepository['findPaymentsForRagIndexing']>>,
+  payments: Awaited<ReturnType<AiRepository['findPaymentsForRagIndexing']>>,
 ): IndexedChunk[] {
   const chunks: IndexedChunk[] = [];
 

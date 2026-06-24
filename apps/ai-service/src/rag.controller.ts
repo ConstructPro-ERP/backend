@@ -5,12 +5,17 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { RagReindexPathDto, RagRetrievalResponseDto, RagRetrieveQueryDto, RagIndexingSummaryDto } from './dto/rag.dto';
+import {
+  RagIndexingSummaryDto,
+  RagReindexPathDto,
+  RagRetrievalResponseDto,
+  RagRetrieveQueryDto,
+} from './dto/rag.dto';
 import { RagService } from './rag.service';
 
 @ApiTags('RAG')
 @ApiBearerAuth()
-@Controller('analytics/ai-forecasting/rag')
+@Controller('ai-forecasting/rag')
 export class RagController {
   constructor(private readonly ragService: RagService) {}
 

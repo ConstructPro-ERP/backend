@@ -2,16 +2,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AiKnowledgeSourceType } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
-  IsArray,
-  IsEnum,
   IsInt,
-  IsObject,
   IsOptional,
   IsString,
   IsUUID,
   Max,
   Min,
-  ValidateNested,
 } from 'class-validator';
 
 export class RagReindexPathDto {

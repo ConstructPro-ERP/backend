@@ -1,11 +1,11 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
-import { FinanceSummaryService } from './finance-summary.service';
-import { FinanceSummaryRepository } from './repositories/finance-summary.repository';
+import { FinanceSummaryService } from '../../apps/invoice-service/src/finance-summary.service';
+import { FinanceSummaryRepository } from '../../apps/invoice-service/src/repositories/finance-summary.repository';
 import {
   OutstandingInvoiceSortByDto,
   SortOrderDto,
-} from './dto/finance-report-query.dto';
+} from '../../apps/invoice-service/src/dto/finance-report-query.dto';
 
 const repository = {
   findCustomer: jest.fn(),

@@ -1,35 +1,34 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus } from '@prisma/client';
+import { AiPromptService } from './ai-prompt.service';
+import { AiProviderService } from './ai-provider.service';
 import {
-  AiProviderPredictionResponseDto,
   AiRiskPredictionResponseDto,
   PredictionSourceDto,
   RetrievedChunkDto,
   RevenueTrendDto,
   RiskLevelDto,
 } from './dto/ai-forecasting.dto';
-import { AnalyticsRepository } from './repositories/analytics.repository';
+import { AiRepository } from './repositories/ai.repository';
 
 type ProjectForecastRecord = Awaited<
-  ReturnType<AnalyticsRepository['findProjectForRiskForecast']>
+  ReturnType<AiRepository['findProjectForRiskForecast']>
 >;
 
 @Injectable()
 export class AiForecastingService {
   constructor(
-    private readonly analyticsRepository: AnalyticsRepository,
+    private readonly aiRepository: AiRepository,
     private readonly configService: ConfigService,
+    private readonly aiPromptService: AiPromptService,
+    private readonly aiProviderService: AiProviderService,
   ) {}
 
   async predictProjectRisk(projectId: string): Promise<AiRiskPredictionResponseDto> {
     const [project, payments] = await Promise.all([
-      this.analyticsRepository.findProjectForRiskForecast(projectId),
-      this.analyticsRepository.findPaymentsForRiskForecast(projectId),
+      this.aiRepository.findProjectForRiskForecast(projectId),
+      this.aiRepository.findPaymentsForRiskForecast(projectId),
     ]);
 
     if (!project) {
@@ -75,10 +74,22 @@ export class AiForecastingService {
     }
 
     try {
-      const providerPrediction = await this.requestProviderPrediction(
-        projectWithPayments,
+      const prompt = this.aiPromptService.buildRiskPredictionPrompt({
+        projectId: projectWithPayments.id,
+        projectName: projectWithPayments.projectName,
+        projectStatus: projectWithPayments.status,
         retrievedChunks,
-      );
+        paymentCount: projectWithPayments.payments.length,
+        milestoneCount: projectWithPayments.milestones.length,
+        invoiceCount: projectWithPayments.invoices.length,
+        expenseCount: projectWithPayments.expenses.length,
+      });
+      warnings.push(...prompt.warnings);
+
+      const providerPrediction = await this.aiProviderService.predictViaProvider({
+        systemPrompt: prompt.systemPrompt,
+        userPrompt: prompt.userPrompt,
+      });
 
       if (!providerPrediction) {
         return fallbackPrediction;
@@ -90,11 +101,7 @@ export class AiForecastingService {
         predictionSource: PredictionSourceDto.AI_PROVIDER,
         warnings: [...warnings, ...(providerPrediction.warnings ?? [])],
       };
-    } catch (error) {
-      if (error instanceof InternalServerErrorException) {
-        throw error;
-      }
-
+    } catch {
       return {
         ...fallbackPrediction,
         predictionSource: PredictionSourceDto.SAFE_FALLBACK,
@@ -108,9 +115,7 @@ export class AiForecastingService {
 
   private async retrieveRelevantChunks(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<
-        ReturnType<AnalyticsRepository['findPaymentsForRiskForecast']>
-      >;
+      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
     },
   ): Promise<RetrievedChunkDto[]> {
     const topK = Number.parseInt(
@@ -123,7 +128,7 @@ export class AiForecastingService {
       return relationalChunks.slice(0, topK);
     }
 
-    const vectorChunks = await this.analyticsRepository.findVectorKnowledgeChunks(
+    const vectorChunks = await this.aiRepository.findVectorKnowledgeChunks(
       project.id,
       Number.isFinite(topK) ? topK : 5,
     );
@@ -144,9 +149,7 @@ export class AiForecastingService {
 
   private buildRelationalChunks(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<
-        ReturnType<AnalyticsRepository['findPaymentsForRiskForecast']>
-      >;
+      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
     },
   ): RetrievedChunkDto[] {
     const chunks: RetrievedChunkDto[] = [];
@@ -209,9 +212,7 @@ export class AiForecastingService {
 
   private buildRuleBasedPrediction(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<
-        ReturnType<AnalyticsRepository['findPaymentsForRiskForecast']>
-      >;
+      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
     },
     retrievedChunks: RetrievedChunkDto[],
     warnings: string[],
@@ -303,9 +304,7 @@ export class AiForecastingService {
 
   private hasEnoughData(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<
-        ReturnType<AnalyticsRepository['findPaymentsForRiskForecast']>
-      >;
+      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
     },
     retrievedChunks: RetrievedChunkDto[],
   ) {
@@ -327,89 +326,8 @@ export class AiForecastingService {
       'Create a Neon pgvector knowledge-chunk table and embed project history into it.',
       'Replace relational fallback retrieval with vector similarity search over project, milestone, invoice, payment, and expense chunks.',
       'Add an ingestion job so embeddings stay current after finance and project events.',
-      'Tune prompts and response schema once an approved AI provider is connected.',
+      'Tune prompts and response schema once the target OpenRouter model is validated in production.',
     ];
-  }
-
-  private async requestProviderPrediction(
-    project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<
-        ReturnType<AnalyticsRepository['findPaymentsForRiskForecast']>
-      >;
-    },
-    retrievedChunks: RetrievedChunkDto[],
-  ): Promise<AiProviderPredictionResponseDto | null> {
-    const provider = this.configService.get<string>('AI_PROVIDER');
-    const apiKey = this.configService.get<string>('AI_API_KEY');
-    const model = this.configService.get<string>('AI_MODEL') ?? 'gpt-4o-mini';
-
-    if (!provider || !apiKey || provider.toLowerCase() !== 'openai') {
-      return null;
-    }
-
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        response_format: { type: 'json_object' },
-        messages: [
-          {
-            role: 'system',
-            content:
-              'You are a construction project risk predictor. Return compact JSON only.',
-          },
-          {
-            role: 'user',
-            content: JSON.stringify({
-              projectId: project.id,
-              projectName: project.projectName,
-              status: project.status,
-              milestones: project.milestones.length,
-              invoices: project.invoices.length,
-              payments: project.payments.length,
-              expenses: project.expenses.length,
-              retrievedChunks: retrievedChunks.map((chunk) => ({
-                sourceType: chunk.sourceType,
-                sourceId: chunk.sourceId,
-                summary: chunk.summary,
-              })),
-              requiredFields: [
-                'projectRiskLevel',
-                'paymentDelayRisk',
-                'milestoneDelayRisk',
-                'revenueTrend',
-                'explanation',
-                'recommendedAction',
-                'confidenceScore',
-              ],
-              allowedRiskLevels: Object.values(RiskLevelDto),
-              allowedRevenueTrends: Object.values(RevenueTrendDto),
-            }),
-          },
-        ],
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`OpenAI provider returned ${response.status}`);
-    }
-
-    const payload = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string } }>;
-    };
-    const content = payload.choices?.[0]?.message?.content;
-    if (!content) {
-      throw new InternalServerErrorException({
-        code: 'AI_PROVIDER_EMPTY_RESPONSE',
-        message: 'AI provider returned an empty completion.',
-      });
-    }
-
-    return JSON.parse(content) as AiProviderPredictionResponseDto;
   }
 }
 

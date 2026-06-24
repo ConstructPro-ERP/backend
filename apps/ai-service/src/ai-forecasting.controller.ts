@@ -14,7 +14,7 @@ import {
 
 @ApiTags('AI Forecasting')
 @ApiBearerAuth()
-@Controller('analytics/ai-forecasting')
+@Controller('ai-forecasting')
 export class AiForecastingController {
   constructor(private readonly aiForecastingService: AiForecastingService) {}
 

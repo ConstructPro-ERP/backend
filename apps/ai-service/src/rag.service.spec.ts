@@ -1,7 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { AiKnowledgeSourceType, InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
 import { RagService } from './rag.service';
-import { AnalyticsRepository } from './repositories/analytics.repository';
+import { AiRepository } from './repositories/ai.repository';
 
 const repository = {
   findProjectForRagIndexing: jest.fn(),
@@ -30,7 +30,7 @@ describe('RagService', () => {
     );
     repository.setKnowledgeChunkEmbedding.mockResolvedValue(undefined);
     service = new RagService(
-      repository as unknown as AnalyticsRepository,
+      repository as unknown as AiRepository,
       configService as unknown as ConfigService,
     );
   });

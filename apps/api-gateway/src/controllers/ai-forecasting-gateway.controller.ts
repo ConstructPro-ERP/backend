@@ -20,7 +20,7 @@ import { firstValueFrom, Observable } from 'rxjs';
 import {
   AiRiskPredictionPathDto,
   AiRiskPredictionResponseDto,
-} from '../../../analytics-service/src/dto/ai-forecasting.dto';
+} from '../../../ai-service/src/dto/ai-forecasting.dto';
 import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -53,7 +53,7 @@ export class AiForecastingGatewayController {
   projectRisk(@Param() params: AiRiskPredictionPathDto, @Req() req: Request) {
     return this.forward(() =>
       this.httpService.get(
-        this.url(`/analytics/ai-forecasting/projects/${params.projectId}/risk`),
+        this.url(`/ai-forecasting/projects/${params.projectId}/risk`),
         {
           headers: this.forwardHeaders(req),
         },
@@ -62,7 +62,7 @@ export class AiForecastingGatewayController {
   }
 
   private url(path: string): string {
-    const base = process.env.ANALYTICS_SERVICE_URL ?? 'http://localhost:4011';
+    const base = process.env.AI_SERVICE_URL ?? 'http://localhost:4012';
     return `${base}${path}`;
   }
 

@@ -4,9 +4,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
-import { InvoiceService } from './invoice.service';
-import { InvoiceRepository } from './repositories/invoice.repository';
-import { InvoiceSortByDto, SortOrderDto } from './dto/list-invoices-query.dto';
+import { InvoiceService } from '../../apps/invoice-service/src/invoice.service';
+import { InvoiceRepository } from '../../apps/invoice-service/src/repositories/invoice.repository';
+import {
+  InvoiceSortByDto,
+  SortOrderDto,
+} from '../../apps/invoice-service/src/dto/list-invoices-query.dto';
 
 const repository = {
   findProjectWithCustomer: jest.fn(),
@@ -66,7 +69,7 @@ describe('InvoiceService', () => {
     jest.clearAllMocks();
     service = new InvoiceService(
       repository as unknown as InvoiceRepository,
-      pdfService,
+      pdfService as never,
     );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
@@ -186,7 +189,6 @@ describe('InvoiceService', () => {
       expect.objectContaining({
         skip: 10,
         take: 10,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         where: expect.objectContaining({ projectId: project.id }),
         orderBy: { createdAt: 'desc' },
       }),

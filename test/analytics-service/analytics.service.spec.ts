@@ -5,13 +5,13 @@ import {
   ProjectStatus,
   QuotationStatus,
 } from '@prisma/client';
-import { AnalyticsService } from './analytics.service';
+import { AnalyticsService } from '../../apps/analytics-service/src/analytics.service';
 import {
   ActivityTypeDto,
   ExpenseReportSortByDto,
   SortOrderDto,
-} from './dto/reporting-query.dto';
-import { AnalyticsRepository } from './repositories/analytics.repository';
+} from '../../apps/analytics-service/src/dto/reporting-query.dto';
+import { AnalyticsRepository } from '../../apps/analytics-service/src/repositories/analytics.repository';
 
 const repository = {
   aggregateInvoices: jest.fn(),

@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { AiPromptService } from './ai-prompt.service';
+import { AiPromptService } from '../../apps/ai-service/src/ai-prompt.service';
 
 describe('AiPromptService', () => {
   const configService = {

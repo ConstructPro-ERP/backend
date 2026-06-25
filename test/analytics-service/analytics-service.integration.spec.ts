@@ -1,14 +1,45 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 import {
   BadRequestException,
   INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
 import { ProjectStatus } from '@prisma/client';
+import request, {
+  type Response as SupertestResponse,
+  type Test as SupertestTest,
+} from 'supertest';
 import { AnalyticsController } from '../../apps/analytics-service/src/analytics.controller';
 import { AnalyticsService } from '../../apps/analytics-service/src/analytics.service';
+
+type RequestTarget = Parameters<typeof request>[0];
+type RevenueBody = { totalRevenue: number };
+type ProjectKpiBody = { totalProjects: number };
+type InvoiceKpiBody = { totalInvoices: number };
+type SalesKpiBody = { leadConversionRate: number };
+type SummaryBody = {
+  revenue: { totalRevenue: number };
+  projects: { totalProjects: number };
+};
+type RecentActivityBody = { page: number };
+type ProjectCompletionBody = { items: Array<{ projectId: string }> };
+type ExpenseBody = { summary: { totalExpense: number } };
+type OverdueBody = { items: Array<{ invoiceId: string }>; code?: string };
+
+function serverOf(app: INestApplication): RequestTarget {
+  return app.getHttpServer() as RequestTarget;
+}
+
+async function expectResponse(
+  test: SupertestTest,
+  status: number,
+): Promise<SupertestResponse> {
+  return test.expect(status);
+}
+
+function responseBody<T>(response: SupertestResponse): T {
+  return response.body as T;
+}
 
 describe('Analytics Service routes - integration', () => {
   let app: INestApplication;
@@ -64,12 +95,15 @@ describe('Analytics Service routes - integration', () => {
       toDate: '2026-06-30',
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/kpis/revenue')
-      .query({ fromDate: '2026-06-01', toDate: '2026-06-30' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/kpis/revenue')
+        .query({ fromDate: '2026-06-01', toDate: '2026-06-30' }),
+      200,
+    );
+    const body = responseBody<RevenueBody>(response);
 
-    expect(response.body.totalRevenue).toBe(12000);
+    expect(body.totalRevenue).toBe(12000);
     expect(analyticsService.revenueKpis).toHaveBeenCalledWith({
       fromDate: '2026-06-01',
       toDate: '2026-06-30',
@@ -87,11 +121,13 @@ describe('Analytics Service routes - integration', () => {
       toDate: null,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/kpis/projects')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get('/analytics/kpis/projects'),
+      200,
+    );
+    const body = responseBody<ProjectKpiBody>(response);
 
-    expect(response.body.totalProjects).toBe(5);
+    expect(body.totalProjects).toBe(5);
   });
 
   it('GET /analytics/kpis/invoices returns invoice KPIs', async () => {
@@ -107,11 +143,13 @@ describe('Analytics Service routes - integration', () => {
       toDate: null,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/kpis/invoices')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get('/analytics/kpis/invoices'),
+      200,
+    );
+    const body = responseBody<InvoiceKpiBody>(response);
 
-    expect(response.body.totalInvoices).toBe(6);
+    expect(body.totalInvoices).toBe(6);
   });
 
   it('GET /analytics/kpis/sales returns sales KPIs', async () => {
@@ -127,11 +165,13 @@ describe('Analytics Service routes - integration', () => {
       toDate: null,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/kpis/sales')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get('/analytics/kpis/sales'),
+      200,
+    );
+    const body = responseBody<SalesKpiBody>(response);
 
-    expect(response.body.leadConversionRate).toBe(40);
+    expect(body.leadConversionRate).toBe(40);
   });
 
   it('GET /analytics/dashboard/summary returns the combined dashboard payload', async () => {
@@ -142,12 +182,14 @@ describe('Analytics Service routes - integration', () => {
       sales: { totalLeads: 10 },
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/dashboard/summary')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get('/analytics/dashboard/summary'),
+      200,
+    );
+    const body = responseBody<SummaryBody>(response);
 
-    expect(response.body.revenue.totalRevenue).toBe(12000);
-    expect(response.body.projects.totalProjects).toBe(5);
+    expect(body.revenue.totalRevenue).toBe(12000);
+    expect(body.projects.totalProjects).toBe(5);
   });
 
   it('GET /analytics/reports/recent-activity returns paginated activity data', async () => {
@@ -169,12 +211,19 @@ describe('Analytics Service routes - integration', () => {
       totalPages: 1,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/reports/recent-activity')
-      .query({ page: '2', limit: '5', activityTypes: ['invoice', 'payment'] })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/reports/recent-activity')
+        .query({
+          page: '2',
+          limit: '5',
+          activityTypes: ['invoice', 'payment'],
+        }),
+      200,
+    );
+    const body = responseBody<RecentActivityBody>(response);
 
-    expect(response.body.page).toBe(2);
+    expect(body.page).toBe(2);
     expect(analyticsService.recentActivity).toHaveBeenCalledWith({
       page: 2,
       limit: 5,
@@ -204,12 +253,15 @@ describe('Analytics Service routes - integration', () => {
       totalPages: 1,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/reports/project-completion')
-      .query({ page: '1', limit: '10', status: ProjectStatus.ACTIVE })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/reports/project-completion')
+        .query({ page: '1', limit: '10', status: ProjectStatus.ACTIVE }),
+      200,
+    );
+    const body = responseBody<ProjectCompletionBody>(response);
 
-    expect(response.body.items[0].projectId).toBe('proj-1');
+    expect(body.items[0]?.projectId).toBe('proj-1');
   });
 
   it('GET /analytics/reports/expenses returns grouped expense data', async () => {
@@ -236,17 +288,18 @@ describe('Analytics Service routes - integration', () => {
       },
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/reports/expenses')
-      .query({
+    const response = await expectResponse(
+      request(serverOf(app)).get('/analytics/reports/expenses').query({
         page: '1',
         limit: '10',
         fromDate: '2026-06-01',
         toDate: '2026-06-30',
-      })
-      .expect(200);
+      }),
+      200,
+    );
+    const body = responseBody<ExpenseBody>(response);
 
-    expect(response.body.summary.totalExpense).toBe(600.25);
+    expect(body.summary.totalExpense).toBe(600.25);
   });
 
   it('GET /analytics/reports/overdue-invoices returns overdue invoice data', async () => {
@@ -274,28 +327,35 @@ describe('Analytics Service routes - integration', () => {
       totalPages: 1,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/reports/overdue-invoices')
-      .query({ page: '1', limit: '10' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/reports/overdue-invoices')
+        .query({ page: '1', limit: '10' }),
+      200,
+    );
+    const body = responseBody<OverdueBody>(response);
 
-    expect(response.body.items[0].invoiceId).toBe('inv-1');
+    expect(body.items[0]?.invoiceId).toBe('inv-1');
   });
 
   it('rejects invalid KPI date query params before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .get('/analytics/kpis/revenue')
-      .query({ fromDate: 'not-a-date' })
-      .expect(400);
+    await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/kpis/revenue')
+        .query({ fromDate: 'not-a-date' }),
+      400,
+    );
 
     expect(analyticsService.revenueKpis).not.toHaveBeenCalled();
   });
 
   it('rejects invalid report pagination and enum query params before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .get('/analytics/reports/project-completion')
-      .query({ page: '0', sortOrder: 'sideways' })
-      .expect(400);
+    await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/reports/project-completion')
+        .query({ page: '0', sortOrder: 'sideways' }),
+      400,
+    );
 
     expect(analyticsService.projectCompletionReport).not.toHaveBeenCalled();
   });
@@ -308,11 +368,14 @@ describe('Analytics Service routes - integration', () => {
       }),
     );
 
-    const response = await request(app.getHttpServer())
-      .get('/analytics/dashboard/summary')
-      .query({ fromDate: '2026-07-01', toDate: '2026-06-01' })
-      .expect(400);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/analytics/dashboard/summary')
+        .query({ fromDate: '2026-07-01', toDate: '2026-06-01' }),
+      400,
+    );
+    const body = responseBody<OverdueBody>(response);
 
-    expect(response.body.code).toBe('INVALID_DATE_RANGE');
+    expect(body.code).toBe('INVALID_DATE_RANGE');
   });
 });

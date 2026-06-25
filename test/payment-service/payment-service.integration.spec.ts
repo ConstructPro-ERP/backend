@@ -1,16 +1,45 @@
-/* eslint-disable @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access */
 import {
   ConflictException,
   INestApplication,
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
+import request, {
+  type Response as SupertestResponse,
+  type Test as SupertestTest,
+} from 'supertest';
 import {
   InvoicePaymentController,
   PaymentController,
 } from '../../apps/payment-service/src/payment.controller';
 import { PaymentService } from '../../apps/payment-service/src/payment.service';
+
+type RequestTarget = Parameters<typeof request>[0];
+type CreatePaymentBody = {
+  payment: { id: string };
+  invoice: { id?: string; outstandingAmount?: number };
+  code?: string;
+};
+type PaymentBody = { id: string };
+type HistoryBody = {
+  invoice: { id: string };
+  payments: Array<{ id: string }>;
+};
+
+function serverOf(app: INestApplication): RequestTarget {
+  return app.getHttpServer() as RequestTarget;
+}
+
+async function expectResponse(
+  test: SupertestTest,
+  status: number,
+): Promise<SupertestResponse> {
+  return test.expect(status);
+}
+
+function responseBody<T>(response: SupertestResponse): T {
+  return response.body as T;
+}
 
 describe('Payment Service routes - integration', () => {
   let app: INestApplication;
@@ -52,19 +81,22 @@ describe('Payment Service routes - integration', () => {
       invoice: { id: 'inv-1', outstandingAmount: 750 },
     });
 
-    const response = await request(app.getHttpServer())
-      .post('/payments')
-      .set('x-user-id', 'actor-1')
-      .send({
-        invoiceId: '00000000-0000-4000-8000-000000000001',
-        referenceNumber: 'PAY-2026-0001',
-        paymentDate: '2026-06-22T00:00:00.000Z',
-        amount: 250,
-        paymentMethod: 'BANK_TRANSFER',
-      })
-      .expect(201);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .post('/payments')
+        .set('x-user-id', 'actor-1')
+        .send({
+          invoiceId: '00000000-0000-4000-8000-000000000001',
+          referenceNumber: 'PAY-2026-0001',
+          paymentDate: '2026-06-22T00:00:00.000Z',
+          amount: 250,
+          paymentMethod: 'BANK_TRANSFER',
+        }),
+      201,
+    );
+    const body = responseBody<CreatePaymentBody>(response);
 
-    expect(response.body.payment.id).toBe('pay-1');
+    expect(body.payment.id).toBe('pay-1');
     expect(paymentService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         invoiceId: '00000000-0000-4000-8000-000000000001',
@@ -77,11 +109,15 @@ describe('Payment Service routes - integration', () => {
   it('GET /payments/:id returns payment details', async () => {
     paymentService.findOne.mockResolvedValue({ id: 'pay-1' });
 
-    const response = await request(app.getHttpServer())
-      .get('/payments/00000000-0000-4000-8000-000000000003')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get(
+        '/payments/00000000-0000-4000-8000-000000000003',
+      ),
+      200,
+    );
+    const body = responseBody<PaymentBody>(response);
 
-    expect(response.body.id).toBe('pay-1');
+    expect(body.id).toBe('pay-1');
   });
 
   it('GET /invoices/:invoiceId/payments returns payment history', async () => {
@@ -90,31 +126,38 @@ describe('Payment Service routes - integration', () => {
       payments: [{ id: 'pay-1', amount: 250 }],
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/invoices/00000000-0000-4000-8000-000000000001/payments')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get(
+        '/invoices/00000000-0000-4000-8000-000000000001/payments',
+      ),
+      200,
+    );
+    const body = responseBody<HistoryBody>(response);
 
-    expect(response.body.invoice.id).toBe('inv-1');
-    expect(response.body.payments).toHaveLength(1);
+    expect(body.invoice.id).toBe('inv-1');
+    expect(body.payments).toHaveLength(1);
   });
 
   it('rejects invalid payment payloads before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .post('/payments')
-      .send({
+    await expectResponse(
+      request(serverOf(app)).post('/payments').send({
         invoiceId: 'not-a-uuid',
         referenceNumber: '',
         paymentDate: '2026-06-22T00:00:00.000Z',
         amount: 250,
         paymentMethod: 'BANK_TRANSFER',
-      })
-      .expect(400);
+      }),
+      400,
+    );
 
     expect(paymentService.create).not.toHaveBeenCalled();
   });
 
   it('rejects invalid UUID params before hitting the service', async () => {
-    await request(app.getHttpServer()).get('/payments/not-a-uuid').expect(400);
+    await expectResponse(
+      request(serverOf(app)).get('/payments/not-a-uuid'),
+      400,
+    );
 
     expect(paymentService.findOne).not.toHaveBeenCalled();
   });
@@ -127,17 +170,18 @@ describe('Payment Service routes - integration', () => {
       }),
     );
 
-    const response = await request(app.getHttpServer())
-      .post('/payments')
-      .send({
+    const response = await expectResponse(
+      request(serverOf(app)).post('/payments').send({
         invoiceId: '00000000-0000-4000-8000-000000000001',
         referenceNumber: 'PAY-2026-0001',
         paymentDate: '2026-06-22T00:00:00.000Z',
         amount: 250,
         paymentMethod: 'BANK_TRANSFER',
-      })
-      .expect(409);
+      }),
+      409,
+    );
+    const body = responseBody<CreatePaymentBody>(response);
 
-    expect(response.body.code).toBe('PAYMENT_REFERENCE_EXISTS');
+    expect(body.code).toBe('PAYMENT_REFERENCE_EXISTS');
   });
 });

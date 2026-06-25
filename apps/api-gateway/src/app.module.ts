@@ -9,7 +9,6 @@ import { InvoicesGatewayController } from './controllers/invoices-gateway.contro
 import { PaymentsGatewayController } from './controllers/payments-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
 import { RagGatewayController } from './controllers/rag-gateway.controller';
-import { RoutesController } from './controllers/routes.controller';
 import { UsersGatewayController } from './controllers/users-gateway.controller';
 
 @Module({
@@ -28,7 +27,6 @@ import { UsersGatewayController } from './controllers/users-gateway.controller';
     InvoicesGatewayController,
     PaymentsGatewayController,
     RagGatewayController,
-    RoutesController,
     UsersGatewayController,
   ],
 })

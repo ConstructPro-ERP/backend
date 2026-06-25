@@ -128,6 +128,7 @@ export class UserService {
     const deletedUser = await this.userRepository.findById(id);
 
     await this.userRepository.deactivate(id);
+    console.log('User Deleted Successfully!');
     return deletedUser;
   }
 

@@ -131,11 +131,10 @@ export class UsersGatewayController {
    * Admin-only: deactivate (soft-delete) a user.
    */
   @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')
-  async remove(@Param('id') id: string, @Req() req: Request): Promise<void> {
-    await this.forward(() =>
+  async remove(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
       this.httpService.delete(`${USER_SERVICE_URL}/users/${id}`, {
         headers: { authorization: req.headers.authorization },
       }),

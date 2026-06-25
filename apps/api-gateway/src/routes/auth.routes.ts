@@ -38,7 +38,8 @@ export const authRoutes = [
   {
     method: 'GET',
     path: '/auth/google/callback',
-    description: 'Google OAuth2 callback — issues JWT and redirects to frontend',
+    description:
+      'Google OAuth2 callback — issues JWT and redirects to frontend',
     target: `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/google/callback`,
   },
 ];

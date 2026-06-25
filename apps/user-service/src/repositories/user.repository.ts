@@ -63,8 +63,6 @@ export class UserRepository {
   }
 
   existsById(id: string): Promise<boolean> {
-    return this.prisma.user
-      .count({ where: { id } })
-      .then((count) => count > 0);
+    return this.prisma.user.count({ where: { id } }).then((count) => count > 0);
   }
 }

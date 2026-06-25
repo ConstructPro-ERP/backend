@@ -99,7 +99,9 @@ describe('AnalyticsController', () => {
     analyticsService.projectCompletionReport.mockResolvedValue(response);
 
     await expect(controller.projectCompletion(query)).resolves.toBe(response);
-    expect(analyticsService.projectCompletionReport).toHaveBeenCalledWith(query);
+    expect(analyticsService.projectCompletionReport).toHaveBeenCalledWith(
+      query,
+    );
   });
 
   it('delegates expense report queries', async () => {
@@ -115,7 +117,12 @@ describe('AnalyticsController', () => {
       page: 1,
       limit: 10,
       totalPages: 0,
-      summary: { totalExpense: 0, totalExpenseCount: 0, fromDate: null, toDate: null },
+      summary: {
+        totalExpense: 0,
+        totalExpenseCount: 0,
+        fromDate: null,
+        toDate: null,
+      },
     };
     analyticsService.expenseReport.mockResolvedValue(response);
 

@@ -36,7 +36,9 @@ export class RetrievedChunkDto {
   @ApiProperty() sourceType!: string;
   @ApiPropertyOptional({ nullable: true }) sourceId!: string | null;
   @ApiProperty() summary!: string;
-  @ApiProperty({ required: false, nullable: true }) similarityScore!: number | null;
+  @ApiProperty({ required: false, nullable: true }) similarityScore!:
+    | number
+    | null;
   @ApiPropertyOptional({ nullable: true }) relatedProjectId!: string | null;
 }
 
@@ -50,7 +52,8 @@ export class AiForecastingContextDto {
   @ApiProperty() overdueInvoiceCount!: number;
   @ApiProperty() paymentCount!: number;
   @ApiProperty() expenseCount!: number;
-  @ApiProperty({ type: [RetrievedChunkDto] }) retrievedChunks!: RetrievedChunkDto[];
+  @ApiProperty({ type: [RetrievedChunkDto] })
+  retrievedChunks!: RetrievedChunkDto[];
 }
 
 export class AiRiskPredictionResponseDto {
@@ -62,10 +65,12 @@ export class AiRiskPredictionResponseDto {
   @ApiProperty({ enum: RevenueTrendDto }) revenueTrend!: RevenueTrendDto;
   @ApiProperty() explanation!: string;
   @ApiProperty() recommendedAction!: string;
-  @ApiProperty({ enum: PredictionSourceDto }) predictionSource!: PredictionSourceDto;
+  @ApiProperty({ enum: PredictionSourceDto })
+  predictionSource!: PredictionSourceDto;
   @ApiProperty() sufficientData!: boolean;
   @ApiProperty({ minimum: 0, maximum: 1 }) confidenceScore!: number;
-  @ApiProperty({ type: AiForecastingContextDto }) context!: AiForecastingContextDto;
+  @ApiProperty({ type: AiForecastingContextDto })
+  context!: AiForecastingContextDto;
   @ApiProperty({ type: [String] }) warnings!: string[];
   @ApiProperty({ type: [String] }) futureAdaptations!: string[];
   @ApiProperty() generatedAt!: string;

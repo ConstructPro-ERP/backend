@@ -50,7 +50,9 @@ describe('Invoice controllers', () => {
     const response = { id: 'inv-1' };
     invoiceService.create.mockResolvedValue(response);
 
-    await expect(invoiceController.create(dto, 'actor-1')).resolves.toBe(response);
+    await expect(invoiceController.create(dto, 'actor-1')).resolves.toBe(
+      response,
+    );
     expect(invoiceService.create).toHaveBeenCalledWith(dto, 'actor-1');
   });
 
@@ -191,9 +193,11 @@ describe('Invoice controllers', () => {
     const response = { items: [], total: 0, page: 1, limit: 20, totalPages: 0 };
     financeSummaryService.outstandingInvoices.mockResolvedValue(response);
 
-    await expect(financeReportsController.outstandingInvoices(query)).resolves.toBe(
-      response,
+    await expect(
+      financeReportsController.outstandingInvoices(query),
+    ).resolves.toBe(response);
+    expect(financeSummaryService.outstandingInvoices).toHaveBeenCalledWith(
+      query,
     );
-    expect(financeSummaryService.outstandingInvoices).toHaveBeenCalledWith(query);
   });
 });

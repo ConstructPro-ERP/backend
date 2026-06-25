@@ -1,10 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiKnowledgeSourceType, type Prisma } from '@prisma/client';
-import {
-  RagIndexingSummaryDto,
-  RagRetrievalResponseDto,
-} from './dto/rag.dto';
+import { RagIndexingSummaryDto, RagRetrievalResponseDto } from './dto/rag.dto';
 import { AiRepository } from './repositories/ai.repository';
 
 type IndexedChunk = {
@@ -66,11 +63,21 @@ export class RagService {
       projectId: project.id,
       projectName: project.projectName,
       totalChunks: chunks.length,
-      projectChunks: chunks.filter((chunk) => chunk.sourceType === AiKnowledgeSourceType.PROJECT).length,
-      milestoneChunks: chunks.filter((chunk) => chunk.sourceType === AiKnowledgeSourceType.MILESTONE).length,
-      invoiceChunks: chunks.filter((chunk) => chunk.sourceType === AiKnowledgeSourceType.INVOICE).length,
-      paymentChunks: chunks.filter((chunk) => chunk.sourceType === AiKnowledgeSourceType.PAYMENT).length,
-      expenseChunks: chunks.filter((chunk) => chunk.sourceType === AiKnowledgeSourceType.EXPENSE).length,
+      projectChunks: chunks.filter(
+        (chunk) => chunk.sourceType === AiKnowledgeSourceType.PROJECT,
+      ).length,
+      milestoneChunks: chunks.filter(
+        (chunk) => chunk.sourceType === AiKnowledgeSourceType.MILESTONE,
+      ).length,
+      invoiceChunks: chunks.filter(
+        (chunk) => chunk.sourceType === AiKnowledgeSourceType.INVOICE,
+      ).length,
+      paymentChunks: chunks.filter(
+        (chunk) => chunk.sourceType === AiKnowledgeSourceType.PAYMENT,
+      ).length,
+      expenseChunks: chunks.filter(
+        (chunk) => chunk.sourceType === AiKnowledgeSourceType.EXPENSE,
+      ).length,
       embeddingsGenerated,
       usedProviderEmbeddings: providerEmbeddings,
       warnings,
@@ -143,7 +150,9 @@ export class RagService {
         projectId: item.projectId,
         chunkText: item.chunkText,
         similarityScore:
-          typeof item.similarityScore === 'number' ? item.similarityScore : null,
+          typeof item.similarityScore === 'number'
+            ? item.similarityScore
+            : null,
         embeddingModel: item.embeddingModel ?? null,
         embeddingDim: item.embeddingDim ?? null,
         metadata: isObject(item.metadata) ? item.metadata : null,
@@ -157,7 +166,7 @@ export class RagService {
   private hasProviderEmbeddings() {
     return Boolean(
       this.configService.get<string>('EMBEDDING_PROVIDER') &&
-        this.configService.get<string>('EMBEDDING_API_KEY'),
+      this.configService.get<string>('EMBEDDING_API_KEY'),
     );
   }
 
@@ -198,7 +207,9 @@ export class RagService {
 }
 
 function buildChunks(
-  project: Awaited<ReturnType<AiRepository['findProjectForRagIndexing']>> extends infer T
+  project: Awaited<
+    ReturnType<AiRepository['findProjectForRagIndexing']>
+  > extends infer T
     ? NonNullable<T>
     : never,
   payments: Awaited<ReturnType<AiRepository['findPaymentsForRagIndexing']>>,
@@ -283,7 +294,8 @@ function deterministicEmbedding(input: string, dimensions = 1536) {
     const slot = index % dimensions;
     vector[slot] += (input.charCodeAt(index) % 31) / 31;
   }
-  const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1;
+  const magnitude =
+    Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0)) || 1;
   return vector.map((value) => Number((value / magnitude).toFixed(8)));
 }
 
@@ -297,7 +309,8 @@ function dateLabel(value: Date | null | undefined) {
 
 function money(value: { toNumber(): number } | number | null | undefined) {
   if (typeof value === 'number') return Math.round(value * 100) / 100;
-  if (value && 'toNumber' in value) return Math.round(value.toNumber() * 100) / 100;
+  if (value && 'toNumber' in value)
+    return Math.round(value.toNumber() * 100) / 100;
   return 0;
 }
 

@@ -19,7 +19,7 @@ export class AiProviderService {
   isConfigured() {
     return Boolean(
       this.configService.get<string>('AI_PROVIDER') &&
-        this.configService.get<string>('AI_API_KEY'),
+      this.configService.get<string>('AI_API_KEY'),
     );
   }
 
@@ -35,31 +35,37 @@ export class AiProviderService {
     const apiKey = this.configService.get<string>('AI_API_KEY');
     if (!apiKey) return null;
 
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        authorization: `Bearer ${apiKey}`,
-        'HTTP-Referer':
-          this.configService.get<string>('OPENROUTER_HTTP_REFERER') ??
-          'https://constructpro.local',
-        'X-OpenRouter-Title':
-          this.configService.get<string>('OPENROUTER_APP_TITLE') ??
-          'ConstructPro Analytics',
+    const response = await fetch(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${apiKey}`,
+          'HTTP-Referer':
+            this.configService.get<string>('OPENROUTER_HTTP_REFERER') ??
+            'https://constructpro.local',
+          'X-OpenRouter-Title':
+            this.configService.get<string>('OPENROUTER_APP_TITLE') ??
+            'ConstructPro Analytics',
+        },
+        body: JSON.stringify({
+          model:
+            this.configService.get<string>('AI_MODEL') ?? 'openrouter/free',
+          temperature: 0.2,
+          response_format: { type: 'json_object' },
+          messages: [
+            { role: 'system', content: args.systemPrompt },
+            { role: 'user', content: args.userPrompt },
+          ],
+        }),
       },
-      body: JSON.stringify({
-        model: this.configService.get<string>('AI_MODEL') ?? 'openrouter/free',
-        temperature: 0.2,
-        response_format: { type: 'json_object' },
-        messages: [
-          { role: 'system', content: args.systemPrompt },
-          { role: 'user', content: args.userPrompt },
-        ],
-      }),
-    });
+    );
 
     if (!response.ok) {
-      this.logger.warn(`OpenRouter returned ${response.status} for AI prediction.`);
+      this.logger.warn(
+        `OpenRouter returned ${response.status} for AI prediction.`,
+      );
       throw new Error(`OpenRouter provider returned ${response.status}`);
     }
 
@@ -79,7 +85,9 @@ export class AiProviderService {
   }
 }
 
-function parseProviderPrediction(content: string): AiProviderPredictionResponseDto {
+function parseProviderPrediction(
+  content: string,
+): AiProviderPredictionResponseDto {
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
@@ -117,7 +125,10 @@ function parseProviderPrediction(content: string): AiProviderPredictionResponseD
 }
 
 function isRiskLevel(value: unknown): value is RiskLevelDto {
-  return typeof value === 'string' && Object.values(RiskLevelDto).includes(value as RiskLevelDto);
+  return (
+    typeof value === 'string' &&
+    Object.values(RiskLevelDto).includes(value as RiskLevelDto)
+  );
 }
 
 function isRevenueTrend(value: unknown): value is RevenueTrendDto {

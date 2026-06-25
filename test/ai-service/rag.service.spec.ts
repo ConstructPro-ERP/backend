@@ -31,8 +31,9 @@ describe('RagService', () => {
       if (key === 'RAG_SIMILARITY_THRESHOLD') return '0.75';
       return undefined;
     });
-    repository.upsertKnowledgeChunk.mockImplementation(({ sourceId }: { sourceId: string }) =>
-      Promise.resolve({ id: `chunk-${sourceId}` }),
+    repository.upsertKnowledgeChunk.mockImplementation(
+      ({ sourceId }: { sourceId: string }) =>
+        Promise.resolve({ id: `chunk-${sourceId}` }),
     );
     repository.setKnowledgeChunkEmbedding.mockResolvedValue(undefined);
     service = new RagService(
@@ -127,21 +128,27 @@ describe('RagService', () => {
       },
     ]);
 
-    const result = await service.retrieveProjectContext('proj-1', 'delay risk', 3);
+    const result = await service.retrieveProjectContext(
+      'proj-1',
+      'delay risk',
+      3,
+    );
 
     expect(result.projectId).toBe('proj-1');
     expect(result.topK).toBe(3);
     expect(result.usedVectorSearch).toBe(false);
     expect(result.items).toHaveLength(1);
-    expect(result.warnings[0]).toContain('Embedding provider is not configured');
+    expect(result.warnings[0]).toContain(
+      'Embedding provider is not configured',
+    );
   });
 
   it('rejects reindexing when the project does not exist', async () => {
     repository.findProjectForRagIndexing.mockResolvedValue(null);
     repository.findPaymentsForRagIndexing.mockResolvedValue([]);
 
-    await expect(service.reindexProject('missing-project')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.reindexProject('missing-project'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

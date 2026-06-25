@@ -1,10 +1,6 @@
 import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  InvoiceStatus,
-  MilestoneStatus,
-  ProjectStatus,
-} from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
 import { AiPromptService } from '../../apps/ai-service/src/ai-prompt.service';
 import { AiProviderService } from '../../apps/ai-service/src/ai-provider.service';
 import { AiForecastingService } from '../../apps/ai-service/src/ai-forecasting.service';
@@ -62,9 +58,9 @@ describe('AiForecastingService', () => {
   it('rejects invalid project ids when the project does not exist', async () => {
     repository.findProjectForRiskForecast.mockResolvedValue(null);
 
-    await expect(service.predictProjectRisk('missing-project')).rejects.toBeInstanceOf(
-      NotFoundException,
-    );
+    await expect(
+      service.predictProjectRisk('missing-project'),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('returns an insufficient-data safe fallback when history is too sparse', async () => {
@@ -197,7 +193,9 @@ describe('AiForecastingService', () => {
     aiPromptService.buildRiskPredictionPrompt.mockReturnValue({
       systemPrompt: 'system',
       userPrompt: 'user',
-      warnings: ['Prompt context was limited to 1 chunks by AI_MAX_CONTEXT_CHUNKS.'],
+      warnings: [
+        'Prompt context was limited to 1 chunks by AI_MAX_CONTEXT_CHUNKS.',
+      ],
       chunks: [],
     });
     aiProviderService.predictViaProvider.mockResolvedValue({
@@ -298,7 +296,9 @@ describe('AiForecastingService', () => {
         similarityScore: 0.85,
       },
     ]);
-    aiProviderService.predictViaProvider.mockRejectedValue(new Error('provider-down'));
+    aiProviderService.predictViaProvider.mockRejectedValue(
+      new Error('provider-down'),
+    );
 
     const result = await service.predictProjectRisk(
       '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',

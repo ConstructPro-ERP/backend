@@ -322,7 +322,9 @@ export class AnalyticsService {
             (task) => task.status === TaskStatus.COMPLETED,
           ).length;
           const completionPercentage =
-            taskCount === 0 ? 0 : round2((completedTaskCount / taskCount) * 100);
+            taskCount === 0
+              ? 0
+              : round2((completedTaskCount / taskCount) * 100);
 
           return {
             id: milestone.id,
@@ -529,7 +531,9 @@ function buildQuotationWhere(query: KpiQueryDto): Prisma.QuotationWhereInput {
   };
 }
 
-function buildPaymentWhere(query: RecentActivityQueryDto): Prisma.PaymentWhereInput {
+function buildPaymentWhere(
+  query: RecentActivityQueryDto,
+): Prisma.PaymentWhereInput {
   return {
     createdAt:
       query.fromDate || query.toDate
@@ -609,7 +613,8 @@ function compareExpenseRows(
     default:
       return (
         ((left.lastExpenseAt?.getTime() ?? 0) -
-          (right.lastExpenseAt?.getTime() ?? 0)) * direction
+          (right.lastExpenseAt?.getTime() ?? 0)) *
+        direction
       );
   }
 }

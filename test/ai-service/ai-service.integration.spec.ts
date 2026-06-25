@@ -1,4 +1,8 @@
-import { INestApplication, NotFoundException, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { AiKnowledgeSourceType } from '@prisma/client';
@@ -87,7 +91,9 @@ describe('AI Service routes - integration', () => {
       .get('/ai-forecasting/projects/f7745756-a906-4a6b-aaf5-b9c6b85146f8/risk')
       .expect(200);
 
-    expect(response.body.projectId).toBe('f7745756-a906-4a6b-aaf5-b9c6b85146f8');
+    expect(response.body.projectId).toBe(
+      'f7745756-a906-4a6b-aaf5-b9c6b85146f8',
+    );
     expect(aiForecastingService.predictProjectRisk).toHaveBeenCalledWith(
       'f7745756-a906-4a6b-aaf5-b9c6b85146f8',
     );
@@ -118,7 +124,9 @@ describe('AI Service routes - integration', () => {
     });
 
     const response = await request(app.getHttpServer())
-      .post('/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/reindex')
+      .post(
+        '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/reindex',
+      )
       .expect(201);
 
     expect(response.body.totalChunks).toBe(5);
@@ -153,7 +161,9 @@ describe('AI Service routes - integration', () => {
     });
 
     const response = await request(app.getHttpServer())
-      .get('/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks')
+      .get(
+        '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
+      )
       .query({ query: 'payment delay risk', topK: '4' })
       .expect(200);
 
@@ -167,7 +177,9 @@ describe('AI Service routes - integration', () => {
 
   it('GET /ai-forecasting/rag/projects/:projectId/chunks rejects invalid topK values', async () => {
     await request(app.getHttpServer())
-      .get('/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks')
+      .get(
+        '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
+      )
       .query({ topK: '50' })
       .expect(400);
 

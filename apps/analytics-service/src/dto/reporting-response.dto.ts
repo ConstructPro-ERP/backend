@@ -1,9 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  InvoiceStatus,
-  MilestoneStatus,
-  ProjectStatus,
-} from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
 import { ActivityTypeDto } from './reporting-query.dto';
 
 export class PaginationMetaDto {

@@ -11,11 +11,7 @@ import {
   Max,
   Min,
 } from 'class-validator';
-import {
-  InvoiceStatus,
-  MilestoneStatus,
-  ProjectStatus,
-} from '@prisma/client';
+import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
 
 export enum SortOrderDto {
   ASC = 'asc',

@@ -47,6 +47,7 @@ export class AuthController {
       });
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, role, ...safe } = user;
     return {
       ...safe,

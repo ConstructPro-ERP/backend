@@ -46,12 +46,13 @@ export class AuthController {
         message: 'Authenticated user no longer exists.',
       });
     }
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, role, ...safe } = user;
     return {
       ...safe,
-      role: role.roleName,
-      roles: [role.roleName],
+      role: role?.roleName || null,
+      roles: role?.roleName ? [role.roleName] : [],
     };
   }
 }

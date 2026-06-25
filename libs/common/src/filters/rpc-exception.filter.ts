@@ -9,7 +9,8 @@ import { Observable, throwError } from 'rxjs';
 
 @Catch(RpcException)
 export class AllRpcExceptionFilter implements RpcExceptionFilter<RpcException> {
-  catch(exception: RpcException, _host: ArgumentsHost): Observable<never> {
+  catch(exception: RpcException, host: ArgumentsHost): Observable<never> {
+    void host;
     const error = exception.getError();
     const message =
       typeof error === 'string'

@@ -1,20 +1,29 @@
 import {
-  Injectable,
   CanActivate,
   ExecutionContext,
-  UnauthorizedException,
+  Injectable,
   Logger,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { firstValueFrom } from 'rxjs';
+import { AxiosError } from 'axios';
 import type { Request } from 'express';
+import { firstValueFrom } from 'rxjs';
 import { ErrorCode } from '../../../../shared/error-codes';
 
-type AuthRequest = Request & { user?: any };
+type AuthenticatedUser = { [key: string]: unknown };
+type AuthRequest = Request & { user?: AuthenticatedUser };
+type AuthServicePayload = AuthenticatedUser | { data?: AuthenticatedUser };
+type AuthServiceError = { code?: ErrorCode | string };
+
+function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
+  return typeof value === 'object' && value !== null;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);
+
   constructor(private readonly httpService: HttpService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -30,18 +39,33 @@ export class JwtAuthGuard implements CanActivate {
 
     const token = auth.slice(7);
     try {
-      const resp = await firstValueFrom(
+      const response = await firstValueFrom(
         this.httpService.get(
           `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/me`,
           { headers: { authorization: `Bearer ${token}` } },
         ),
       );
-      req.user = resp.data?.data ?? resp.data;
+      const payload = response.data as AuthServicePayload;
+      const user =
+        'data' in payload && isAuthenticatedUser(payload.data)
+          ? payload.data
+          : payload;
+
+      if (!isAuthenticatedUser(user)) {
+        throw new UnauthorizedException({
+          code: ErrorCode.TOKEN_INVALID,
+          message: 'Token is invalid or has been revoked.',
+        });
+      }
+
+      req.user = user;
       return true;
-    } catch (err: any) {
+    } catch (error: unknown) {
+      const axiosError = error as AxiosError<AuthServiceError>;
       const downstreamCode =
-        err?.response?.data?.code ?? ErrorCode.TOKEN_INVALID;
-      const isExpired = downstreamCode === ErrorCode.TOKEN_EXPIRED;
+        axiosError.response?.data?.code ?? ErrorCode.TOKEN_INVALID;
+      const isExpired =
+        String(downstreamCode) === String(ErrorCode.TOKEN_EXPIRED);
 
       this.logger.warn(`Token validation failed [${downstreamCode}]`);
 

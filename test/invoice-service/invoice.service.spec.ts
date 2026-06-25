@@ -69,7 +69,7 @@ describe('InvoiceService', () => {
     jest.clearAllMocks();
     service = new InvoiceService(
       repository as unknown as InvoiceRepository,
-      pdfService as never,
+      pdfService,
     );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
@@ -185,14 +185,20 @@ describe('InvoiceService', () => {
       sortOrder: SortOrderDto.DESC,
     });
 
-    expect(repository.findManyAndCount).toHaveBeenCalledWith(
-      expect.objectContaining({
-        skip: 10,
-        take: 10,
-        where: expect.objectContaining({ projectId: project.id }),
-        orderBy: { createdAt: 'desc' },
-      }),
-    );
+    expect(repository.findManyAndCount).toHaveBeenCalled();
+    const [args] = repository.findManyAndCount.mock.calls[0] as [
+      {
+        skip: number;
+        take: number;
+        where: { projectId?: string };
+        orderBy: { createdAt: 'desc' };
+      },
+    ];
+
+    expect(args.skip).toBe(10);
+    expect(args.take).toBe(10);
+    expect(args.where.projectId).toBe(project.id);
+    expect(args.orderBy).toEqual({ createdAt: 'desc' });
     expect(result).toMatchObject({
       total: 11,
       page: 2,

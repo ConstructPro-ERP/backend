@@ -4,7 +4,10 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
+import request, {
+  type Response as SupertestResponse,
+  type Test as SupertestTest,
+} from 'supertest';
 import {
   FinanceReportsController,
   InvoiceController,
@@ -12,6 +15,33 @@ import {
 } from '../../apps/invoice-service/src/invoice.controller';
 import { FinanceSummaryService } from '../../apps/invoice-service/src/finance-summary.service';
 import { InvoiceService } from '../../apps/invoice-service/src/invoice.service';
+
+type RequestTarget = Parameters<typeof request>[0];
+type InvoiceBody = {
+  id: string;
+  totalAmount?: number;
+  status?: string;
+  pdfUrl?: string;
+};
+type InvoiceListBody = { page: number };
+type FinanceClientBody = { customerId: string; code?: string };
+type FinanceProjectBody = { projectId: string };
+type OutstandingBody = { totalOutstandingAmount: number };
+
+function serverOf(app: INestApplication): RequestTarget {
+  return app.getHttpServer() as RequestTarget;
+}
+
+async function expectResponse(
+  test: SupertestTest,
+  status: number,
+): Promise<SupertestResponse> {
+  return test.expect(status);
+}
+
+function responseBody<T>(response: SupertestResponse): T {
+  return response.body as T;
+}
 
 describe('Invoice Service routes - integration', () => {
   let app: INestApplication;
@@ -67,18 +97,21 @@ describe('Invoice Service routes - integration', () => {
   it('POST /invoices creates an invoice', async () => {
     invoiceService.create.mockResolvedValue({ id: 'inv-1', totalAmount: 1000 });
 
-    const response = await request(app.getHttpServer())
-      .post('/invoices')
-      .set('x-user-id', 'actor-1')
-      .send({
-        projectId: '00000000-0000-4000-8000-000000000001',
-        customerId: '00000000-0000-4000-8000-000000000002',
-        invoiceDate: '2026-06-22T00:00:00.000Z',
-        totalAmount: 1000,
-      })
-      .expect(201);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .post('/invoices')
+        .set('x-user-id', 'actor-1')
+        .send({
+          projectId: '00000000-0000-4000-8000-000000000001',
+          customerId: '00000000-0000-4000-8000-000000000002',
+          invoiceDate: '2026-06-22T00:00:00.000Z',
+          totalAmount: 1000,
+        }),
+      201,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.id).toBe('inv-1');
+    expect(body.id).toBe('inv-1');
     expect(invoiceService.create).toHaveBeenCalledWith(
       expect.objectContaining({
         projectId: '00000000-0000-4000-8000-000000000001',
@@ -98,12 +131,15 @@ describe('Invoice Service routes - integration', () => {
       totalPages: 1,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/invoices')
-      .query({ page: '2', limit: '5', sortOrder: 'desc' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/invoices')
+        .query({ page: '2', limit: '5', sortOrder: 'desc' }),
+      200,
+    );
+    const body = responseBody<InvoiceListBody>(response);
 
-    expect(response.body.page).toBe(2);
+    expect(body.page).toBe(2);
     expect(invoiceService.findAll).toHaveBeenCalledWith(
       expect.objectContaining({ page: 2, limit: 5, sortOrder: 'desc' }),
     );
@@ -112,23 +148,30 @@ describe('Invoice Service routes - integration', () => {
   it('GET /invoices/:id returns invoice details', async () => {
     invoiceService.findOne.mockResolvedValue({ id: 'inv-1' });
 
-    const response = await request(app.getHttpServer())
-      .get('/invoices/00000000-0000-4000-8000-000000000003')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app)).get(
+        '/invoices/00000000-0000-4000-8000-000000000003',
+      ),
+      200,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.id).toBe('inv-1');
+    expect(body.id).toBe('inv-1');
   });
 
   it('PATCH /invoices/:id updates an invoice', async () => {
     invoiceService.update.mockResolvedValue({ id: 'inv-1', totalAmount: 1200 });
 
-    const response = await request(app.getHttpServer())
-      .patch('/invoices/00000000-0000-4000-8000-000000000003')
-      .set('x-user-id', 'actor-2')
-      .send({ totalAmount: 1200 })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .patch('/invoices/00000000-0000-4000-8000-000000000003')
+        .set('x-user-id', 'actor-2')
+        .send({ totalAmount: 1200 }),
+      200,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.totalAmount).toBe(1200);
+    expect(body.totalAmount).toBe(1200);
   });
 
   it('PATCH /invoices/:id/cancel cancels an invoice', async () => {
@@ -137,12 +180,15 @@ describe('Invoice Service routes - integration', () => {
       status: 'CANCELLED',
     });
 
-    const response = await request(app.getHttpServer())
-      .patch('/invoices/00000000-0000-4000-8000-000000000003/cancel')
-      .set('x-user-id', 'actor-3')
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .patch('/invoices/00000000-0000-4000-8000-000000000003/cancel')
+        .set('x-user-id', 'actor-3'),
+      200,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.status).toBe('CANCELLED');
+    expect(body.status).toBe('CANCELLED');
   });
 
   it('POST /invoices/:id/pdf triggers PDF generation', async () => {
@@ -151,29 +197,35 @@ describe('Invoice Service routes - integration', () => {
       pdfUrl: 'http://localhost:4010/files/invoices/INV-1.pdf',
     });
 
-    const response = await request(app.getHttpServer())
-      .post('/invoices/00000000-0000-4000-8000-000000000003/pdf')
-      .set('x-user-id', 'actor-4')
-      .send({ forceRegenerate: true })
-      .expect(201);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .post('/invoices/00000000-0000-4000-8000-000000000003/pdf')
+        .set('x-user-id', 'actor-4')
+        .send({ forceRegenerate: true }),
+      201,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.pdfUrl).toContain('/files/invoices/');
+    expect(body.pdfUrl).toContain('/files/invoices/');
   });
 
   it('POST /projects/:projectId/invoices creates a project invoice', async () => {
     invoiceService.createForProject.mockResolvedValue({ id: 'inv-2' });
 
-    const response = await request(app.getHttpServer())
-      .post('/projects/00000000-0000-4000-8000-000000000001/invoices')
-      .set('x-user-id', 'actor-5')
-      .send({
-        customerId: '00000000-0000-4000-8000-000000000002',
-        invoiceDate: '2026-06-22T00:00:00.000Z',
-        totalAmount: 900,
-      })
-      .expect(201);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .post('/projects/00000000-0000-4000-8000-000000000001/invoices')
+        .set('x-user-id', 'actor-5')
+        .send({
+          customerId: '00000000-0000-4000-8000-000000000002',
+          invoiceDate: '2026-06-22T00:00:00.000Z',
+          totalAmount: 900,
+        }),
+      201,
+    );
+    const body = responseBody<InvoiceBody>(response);
 
-    expect(response.body.id).toBe('inv-2');
+    expect(body.id).toBe('inv-2');
   });
 
   it('GET /reports/finance/clients/:customerId/summary returns a client summary', async () => {
@@ -182,14 +234,17 @@ describe('Invoice Service routes - integration', () => {
       totalInvoicedAmount: 1500,
     });
 
-    const response = await request(app.getHttpServer())
-      .get(
-        '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
-      )
-      .query({ fromDate: '2026-06-01', toDate: '2026-06-30' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get(
+          '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
+        )
+        .query({ fromDate: '2026-06-01', toDate: '2026-06-30' }),
+      200,
+    );
+    const body = responseBody<FinanceClientBody>(response);
 
-    expect(response.body.customerId).toBe('cust-1');
+    expect(body.customerId).toBe('cust-1');
   });
 
   it('GET /reports/finance/projects/:projectId/summary returns a project summary', async () => {
@@ -198,13 +253,15 @@ describe('Invoice Service routes - integration', () => {
       revenue: 5000,
     });
 
-    const response = await request(app.getHttpServer())
-      .get(
+    const response = await expectResponse(
+      request(serverOf(app)).get(
         '/reports/finance/projects/00000000-0000-4000-8000-000000000001/summary',
-      )
-      .expect(200);
+      ),
+      200,
+    );
+    const body = responseBody<FinanceProjectBody>(response);
 
-    expect(response.body.projectId).toBe('proj-1');
+    expect(body.projectId).toBe('proj-1');
   });
 
   it('GET /reports/finance/invoices/outstanding returns the outstanding report', async () => {
@@ -219,39 +276,47 @@ describe('Invoice Service routes - integration', () => {
       toDate: null,
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/reports/finance/invoices/outstanding')
-      .query({ page: '1', limit: '20', sortOrder: 'asc' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get('/reports/finance/invoices/outstanding')
+        .query({ page: '1', limit: '20', sortOrder: 'asc' }),
+      200,
+    );
+    const body = responseBody<OutstandingBody>(response);
 
-    expect(response.body.totalOutstandingAmount).toBe(1250);
+    expect(body.totalOutstandingAmount).toBe(1250);
   });
 
   it('rejects invalid invoice body payloads before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .post('/invoices')
-      .send({
+    await expectResponse(
+      request(serverOf(app)).post('/invoices').send({
         projectId: 'not-a-uuid',
         customerId: '00000000-0000-4000-8000-000000000002',
         invoiceDate: '2026-06-22T00:00:00.000Z',
         totalAmount: 1000,
-      })
-      .expect(400);
+      }),
+      400,
+    );
 
     expect(invoiceService.create).not.toHaveBeenCalled();
   });
 
   it('rejects invalid UUID params before hitting the service', async () => {
-    await request(app.getHttpServer()).get('/invoices/not-a-uuid').expect(400);
+    await expectResponse(
+      request(serverOf(app)).get('/invoices/not-a-uuid'),
+      400,
+    );
 
     expect(invoiceService.findOne).not.toHaveBeenCalled();
   });
 
   it('rejects invalid pagination query params before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .get('/reports/finance/invoices/outstanding')
-      .query({ page: '0', sortOrder: 'sideways' })
-      .expect(400);
+    await expectResponse(
+      request(serverOf(app))
+        .get('/reports/finance/invoices/outstanding')
+        .query({ page: '0', sortOrder: 'sideways' }),
+      400,
+    );
 
     expect(financeSummaryService.outstandingInvoices).not.toHaveBeenCalled();
   });
@@ -264,13 +329,16 @@ describe('Invoice Service routes - integration', () => {
       }),
     );
 
-    const response = await request(app.getHttpServer())
-      .get(
-        '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
-      )
-      .query({ fromDate: '2026-07-01', toDate: '2026-06-01' })
-      .expect(400);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get(
+          '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
+        )
+        .query({ fromDate: '2026-07-01', toDate: '2026-06-01' }),
+      400,
+    );
+    const body = responseBody<FinanceClientBody>(response);
 
-    expect(response.body.code).toBe('INVALID_DATE_RANGE');
+    expect(body.code).toBe('INVALID_DATE_RANGE');
   });
 });

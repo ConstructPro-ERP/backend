@@ -1,10 +1,10 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
-import { AnalyticsModule } from './analytics.module';
+import { AiModule } from './ai.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AnalyticsModule);
+  const app = await NestFactory.create(AiModule);
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -15,8 +15,10 @@ async function bootstrap() {
   app.enableCors();
 
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('ConstructPro Analytics Service')
-    .setDescription('DDP-27 KPI dashboard APIs and DDP-28 reporting APIs')
+    .setTitle('ConstructPro AI Service')
+    .setDescription(
+      'ConstructPro AI forecasting, RAG indexing, retrieval, and provider orchestration APIs',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();
@@ -26,14 +28,14 @@ async function bootstrap() {
     SwaggerModule.createDocument(app, swaggerConfig),
   );
 
-  const rawPort = process.env.ANALYTICS_SERVICE_PORT;
-  const port = rawPort ? Number.parseInt(rawPort, 10) : 4011;
+  const rawPort = process.env.AI_SERVICE_PORT;
+  const port = rawPort ? Number.parseInt(rawPort, 10) : 4012;
   if (!Number.isFinite(port)) {
-    throw new Error(`Invalid ANALYTICS_SERVICE_PORT: ${rawPort}`);
+    throw new Error(`Invalid AI_SERVICE_PORT: ${rawPort}`);
   }
 
   await app.listen(port);
-  console.log(`Analytics service listening on http://localhost:${port}`);
+  console.log(`AI service listening on http://localhost:${port}`);
 }
 
 void bootstrap();

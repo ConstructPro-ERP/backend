@@ -207,6 +207,14 @@ enum PaymentMethod {
   ONLINE
 }
 
+enum AiKnowledgeSourceType {
+  PROJECT
+  MILESTONE
+  INVOICE
+  PAYMENT
+  EXPENSE
+}
+
 model Project {
   id               String        @id @default(uuid())
   projectName      String
@@ -228,6 +236,7 @@ model Project {
   invoices       Invoice[]
   documents      Document[]
   reports        AnalyticsReport[]
+  aiKnowledgeChunks AiKnowledgeChunk[]
 }
 
 model Milestone {
@@ -337,4 +346,25 @@ model AnalyticsReport {
   updatedAt            DateTime @updatedAt
 
   project Project @relation(fields: [projectId], references: [id])
+}
+
+model AiKnowledgeChunk {
+  id             String                @id @default(uuid())
+  projectId      String
+  sourceType     AiKnowledgeSourceType
+  sourceId       String?
+  chunkText      String
+  metadata       Json?
+  embeddingModel String?               @db.VarChar(100)
+  embeddingDim   Int?
+  embedding      Unsupported("vector(1536)")?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([sourceType, sourceId])
+  @@unique([projectId, sourceType, sourceId])
+  @@map("ai_knowledge_chunks")
 }

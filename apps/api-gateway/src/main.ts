@@ -41,4 +41,4 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`API gateway listening on http://localhost:${port}`);
 }
-bootstrap();
+void bootstrap();

@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { neonConfig } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import ws from 'ws';
@@ -9,13 +9,14 @@ function createPrismaClient() {
   const adapter = new PrismaNeon({
     connectionString: process.env.DATABASE_URL!,
   });
-  return new PrismaClient({
+  const options: Prisma.PrismaClientOptions = {
     adapter,
     log:
       process.env.NODE_ENV === 'development'
         ? ['query', 'error', 'warn']
         : ['error'],
-  } as any);
+  };
+  return new PrismaClient(options);
 }
 
 const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };

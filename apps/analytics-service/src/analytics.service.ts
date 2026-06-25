@@ -12,13 +12,31 @@ import {
   ExpenseReportQueryDto,
   ExpenseReportSortByDto,
   OverdueInvoiceReportQueryDto,
-  OverdueInvoiceSortByDto,
   ProjectCompletionReportQueryDto,
-  ProjectCompletionSortByDto,
   RecentActivityQueryDto,
   SortOrderDto,
 } from './dto/reporting-query.dto';
 import { AnalyticsRepository } from './repositories/analytics.repository';
+
+type RecentInvoices = Awaited<
+  ReturnType<AnalyticsRepository['findRecentInvoices']>
+>;
+type RecentPayments = Awaited<
+  ReturnType<AnalyticsRepository['findRecentPayments']>
+>;
+type RecentProjects = Awaited<
+  ReturnType<AnalyticsRepository['findRecentProjects']>
+>;
+type RecentLeads = Awaited<ReturnType<AnalyticsRepository['findRecentLeads']>>;
+type RecentQuotations = Awaited<
+  ReturnType<AnalyticsRepository['findRecentQuotations']>
+>;
+type RecentDocuments = Awaited<
+  ReturnType<AnalyticsRepository['findRecentDocuments']>
+>;
+type RecentMilestones = Awaited<
+  ReturnType<AnalyticsRepository['findRecentMilestones']>
+>;
 
 @Injectable()
 export class AnalyticsService {
@@ -168,46 +186,54 @@ export class AnalyticsService {
       quotations,
       documents,
       milestones,
+    ]: [
+      RecentInvoices,
+      RecentPayments,
+      RecentProjects,
+      RecentLeads,
+      RecentQuotations,
+      RecentDocuments,
+      RecentMilestones,
     ] = await Promise.all([
       types.includes(ActivityTypeDto.INVOICE)
         ? this.analyticsRepository.findRecentInvoices(
             buildInvoiceWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentInvoices),
       types.includes(ActivityTypeDto.PAYMENT)
         ? this.analyticsRepository.findRecentPayments(
             buildPaymentWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentPayments),
       types.includes(ActivityTypeDto.PROJECT)
         ? this.analyticsRepository.findRecentProjects(
             buildProjectWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentProjects),
       types.includes(ActivityTypeDto.LEAD)
         ? this.analyticsRepository.findRecentLeads(buildLeadWhere(query), take)
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentLeads),
       types.includes(ActivityTypeDto.QUOTATION)
         ? this.analyticsRepository.findRecentQuotations(
             buildQuotationWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentQuotations),
       types.includes(ActivityTypeDto.DOCUMENT)
         ? this.analyticsRepository.findRecentDocuments(
             buildDocumentWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentDocuments),
       types.includes(ActivityTypeDto.MILESTONE)
         ? this.analyticsRepository.findRecentMilestones(
             buildMilestoneWhere(query),
             take,
           )
-        : Promise.resolve([]),
+        : Promise.resolve([] as RecentMilestones),
     ]);
 
     const items = [

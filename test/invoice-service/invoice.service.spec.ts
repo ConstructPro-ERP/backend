@@ -69,7 +69,7 @@ describe('InvoiceService', () => {
     jest.clearAllMocks();
     service = new InvoiceService(
       repository as unknown as InvoiceRepository,
-      pdfService as never,
+      pdfService,
     );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
@@ -189,6 +189,7 @@ describe('InvoiceService', () => {
       expect.objectContaining({
         skip: 10,
         take: 10,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         where: expect.objectContaining({ projectId: project.id }),
         orderBy: { createdAt: 'desc' },
       }),

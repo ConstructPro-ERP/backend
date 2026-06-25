@@ -123,13 +123,17 @@ export class UserService {
     return toSafeUser(user);
   }
 
-  async remove(id: string): Promise<UserWithRole | null> {
+  async remove(id: string): Promise<SafeUser | null> {
     await this.assertExists(id);
-    const deletedUser = await this.userRepository.findById(id);
+    const user = await this.userRepository.findById(id);
+
+    if (!user) throw new NotFoundException('User not found');
+    if (user.status === 'INACTIVE')
+      throw new BadRequestException('User already deleted');
 
     await this.userRepository.deactivate(id);
-    console.log('User Deleted Successfully!');
-    return deletedUser;
+
+    return toSafeUser(user);
   }
 
   private async resolveOptionalRoleConnect(

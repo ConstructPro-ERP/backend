@@ -35,7 +35,9 @@ describe('Payment controllers', () => {
     const response = { payment: { id: 'pay-1' }, invoice: { id: 'inv-1' } };
     paymentService.create.mockResolvedValue(response);
 
-    await expect(paymentController.create(dto, 'actor-1')).resolves.toBe(response);
+    await expect(paymentController.create(dto, 'actor-1')).resolves.toBe(
+      response,
+    );
     expect(paymentService.create).toHaveBeenCalledWith(dto, 'actor-1');
   });
 
@@ -56,9 +58,7 @@ describe('Payment controllers', () => {
     paymentService.history.mockResolvedValue(response);
 
     await expect(
-      invoicePaymentController.history(
-        '00000000-0000-4000-8000-000000000001',
-      ),
+      invoicePaymentController.history('00000000-0000-4000-8000-000000000001'),
     ).resolves.toBe(response);
     expect(paymentService.history).toHaveBeenCalledWith(
       '00000000-0000-4000-8000-000000000001',

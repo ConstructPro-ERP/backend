@@ -24,9 +24,7 @@ export const envValidationSchema = Joi.object({
   NOTIFICATION_SERVICE_PORT: Joi.number().integer().default(3008),
   QUOTATION_SERVICE_PORT: Joi.number().integer().default(3009),
 
-  AI_PROVIDER: Joi.string()
-    .valid('openrouter', 'openai')
-    .optional(),
+  AI_PROVIDER: Joi.string().valid('openrouter', 'openai').optional(),
   AI_MODEL: Joi.string().optional(),
   AI_API_KEY: Joi.string().optional(),
   AI_MAX_CONTEXT_CHUNKS: Joi.number().integer().min(1).max(20).optional(),

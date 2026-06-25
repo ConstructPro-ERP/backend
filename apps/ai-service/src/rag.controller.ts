@@ -27,7 +27,9 @@ export class RagController {
   }
 
   @Get('projects/:projectId/chunks')
-  @ApiOperation({ summary: 'Retrieve the most relevant RAG chunks for a project' })
+  @ApiOperation({
+    summary: 'Retrieve the most relevant RAG chunks for a project',
+  })
   @ApiOkResponse({ type: RagRetrievalResponseDto })
   retrieve(
     @Param() params: RagReindexPathDto,

@@ -30,7 +30,10 @@ describe('RagController', () => {
   });
 
   it('delegates retrieval requests including the optional query arguments', async () => {
-    const response = { projectId: 'b994b0bf-b09f-42fd-989f-25152a677cff', items: [] };
+    const response = {
+      projectId: 'b994b0bf-b09f-42fd-989f-25152a677cff',
+      items: [],
+    };
     ragService.retrieveProjectContext.mockResolvedValue(response);
 
     await expect(

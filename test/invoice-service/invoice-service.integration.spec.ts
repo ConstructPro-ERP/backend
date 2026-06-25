@@ -1,4 +1,8 @@
-import { BadRequestException, INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  BadRequestException,
+  INestApplication,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import {
@@ -128,7 +132,10 @@ describe('Invoice Service routes - integration', () => {
   });
 
   it('PATCH /invoices/:id/cancel cancels an invoice', async () => {
-    invoiceService.cancel.mockResolvedValue({ id: 'inv-1', status: 'CANCELLED' });
+    invoiceService.cancel.mockResolvedValue({
+      id: 'inv-1',
+      status: 'CANCELLED',
+    });
 
     const response = await request(app.getHttpServer())
       .patch('/invoices/00000000-0000-4000-8000-000000000003/cancel')
@@ -176,7 +183,9 @@ describe('Invoice Service routes - integration', () => {
     });
 
     const response = await request(app.getHttpServer())
-      .get('/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary')
+      .get(
+        '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
+      )
       .query({ fromDate: '2026-06-01', toDate: '2026-06-30' })
       .expect(200);
 
@@ -190,7 +199,9 @@ describe('Invoice Service routes - integration', () => {
     });
 
     const response = await request(app.getHttpServer())
-      .get('/reports/finance/projects/00000000-0000-4000-8000-000000000001/summary')
+      .get(
+        '/reports/finance/projects/00000000-0000-4000-8000-000000000001/summary',
+      )
       .expect(200);
 
     expect(response.body.projectId).toBe('proj-1');
@@ -231,9 +242,7 @@ describe('Invoice Service routes - integration', () => {
   });
 
   it('rejects invalid UUID params before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .get('/invoices/not-a-uuid')
-      .expect(400);
+    await request(app.getHttpServer()).get('/invoices/not-a-uuid').expect(400);
 
     expect(invoiceService.findOne).not.toHaveBeenCalled();
   });
@@ -256,7 +265,9 @@ describe('Invoice Service routes - integration', () => {
     );
 
     const response = await request(app.getHttpServer())
-      .get('/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary')
+      .get(
+        '/reports/finance/clients/00000000-0000-4000-8000-000000000002/summary',
+      )
       .query({ fromDate: '2026-07-01', toDate: '2026-06-01' })
       .expect(400);
 

@@ -25,7 +25,9 @@ export class AiForecastingService {
     private readonly aiProviderService: AiProviderService,
   ) {}
 
-  async predictProjectRisk(projectId: string): Promise<AiRiskPredictionResponseDto> {
+  async predictProjectRisk(
+    projectId: string,
+  ): Promise<AiRiskPredictionResponseDto> {
     const [project, payments] = await Promise.all([
       this.aiRepository.findProjectForRiskForecast(projectId),
       this.aiRepository.findPaymentsForRiskForecast(projectId),
@@ -43,7 +45,8 @@ export class AiForecastingService {
       payments,
     };
 
-    const retrievedChunks = await this.retrieveRelevantChunks(projectWithPayments);
+    const retrievedChunks =
+      await this.retrieveRelevantChunks(projectWithPayments);
     const warnings: string[] = [];
     const futureAdaptations = this.futureAdaptations();
 
@@ -86,10 +89,11 @@ export class AiForecastingService {
       });
       warnings.push(...prompt.warnings);
 
-      const providerPrediction = await this.aiProviderService.predictViaProvider({
-        systemPrompt: prompt.systemPrompt,
-        userPrompt: prompt.userPrompt,
-      });
+      const providerPrediction =
+        await this.aiProviderService.predictViaProvider({
+          systemPrompt: prompt.systemPrompt,
+          userPrompt: prompt.userPrompt,
+        });
 
       if (!providerPrediction) {
         return fallbackPrediction;
@@ -115,7 +119,9 @@ export class AiForecastingService {
 
   private async retrieveRelevantChunks(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
+      payments: Awaited<
+        ReturnType<AiRepository['findPaymentsForRiskForecast']>
+      >;
     },
   ): Promise<RetrievedChunkDto[]> {
     const topK = Number.parseInt(
@@ -149,7 +155,9 @@ export class AiForecastingService {
 
   private buildRelationalChunks(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
+      payments: Awaited<
+        ReturnType<AiRepository['findPaymentsForRiskForecast']>
+      >;
     },
   ): RetrievedChunkDto[] {
     const chunks: RetrievedChunkDto[] = [];
@@ -207,12 +215,16 @@ export class AiForecastingService {
       });
     }
 
-    return chunks.sort((left, right) => left.sourceType.localeCompare(right.sourceType));
+    return chunks.sort((left, right) =>
+      left.sourceType.localeCompare(right.sourceType),
+    );
   }
 
   private buildRuleBasedPrediction(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
+      payments: Awaited<
+        ReturnType<AiRepository['findPaymentsForRiskForecast']>
+      >;
     },
     retrievedChunks: RetrievedChunkDto[],
     warnings: string[],
@@ -230,7 +242,9 @@ export class AiForecastingService {
         milestone.dueDate &&
         milestone.dueDate.getTime() < Date.now(),
     ).length;
-    const totalInvoiced = sumMoney(project.invoices.map((invoice) => invoice.totalAmount));
+    const totalInvoiced = sumMoney(
+      project.invoices.map((invoice) => invoice.totalAmount),
+    );
     const totalOutstanding = sumMoney(
       project.invoices.map((invoice) => invoice.outstandingAmount),
     );
@@ -242,9 +256,11 @@ export class AiForecastingService {
       ? overdueInvoices / project.invoices.length
       : 0;
     const milestoneDelayRatio = project.milestones.length
-      ? (lateMilestones + incompleteMilestones * 0.5) / project.milestones.length
+      ? (lateMilestones + incompleteMilestones * 0.5) /
+        project.milestones.length
       : 0;
-    const paymentOutstandingRatio = totalInvoiced > 0 ? totalOutstanding / totalInvoiced : 0;
+    const paymentOutstandingRatio =
+      totalInvoiced > 0 ? totalOutstanding / totalInvoiced : 0;
     const expensePressureRatio =
       project.budget && project.budget > 0 ? totalExpenses / project.budget : 0;
 
@@ -264,7 +280,11 @@ export class AiForecastingService {
       projectRiskLevel: toRiskLevel(projectRiskScore),
       paymentDelayRisk: toRiskLevel(paymentRiskScore),
       milestoneDelayRisk: toRiskLevel(milestoneRiskScore),
-      revenueTrend: toRevenueTrend(totalInvoiced, totalOutstanding, totalExpenses),
+      revenueTrend: toRevenueTrend(
+        totalInvoiced,
+        totalOutstanding,
+        totalExpenses,
+      ),
       explanation: [
         `${overdueInvoices} overdue invoices and ${lateMilestones} late milestones were found for this project.`,
         `Outstanding receivables are ${money(totalOutstanding)} out of ${money(totalInvoiced)} invoiced.`,
@@ -304,13 +324,18 @@ export class AiForecastingService {
 
   private hasEnoughData(
     project: NonNullable<ProjectForecastRecord> & {
-      payments: Awaited<ReturnType<AiRepository['findPaymentsForRiskForecast']>>;
+      payments: Awaited<
+        ReturnType<AiRepository['findPaymentsForRiskForecast']>
+      >;
     },
     retrievedChunks: RetrievedChunkDto[],
   ) {
     return (
       retrievedChunks.length >= 3 &&
-      project.milestones.length + project.invoices.length + project.expenses.length >= 3
+      project.milestones.length +
+        project.invoices.length +
+        project.expenses.length >=
+        3
     );
   }
 
@@ -378,6 +403,7 @@ function sumMoney(
 
 function money(value: { toNumber(): number } | number | null | undefined) {
   if (typeof value === 'number') return Math.round(value * 100) / 100;
-  if (value && 'toNumber' in value) return Math.round(value.toNumber() * 100) / 100;
+  if (value && 'toNumber' in value)
+    return Math.round(value.toNumber() * 100) / 100;
   return 0;
 }

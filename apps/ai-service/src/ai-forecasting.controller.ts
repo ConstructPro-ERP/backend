@@ -20,7 +20,8 @@ export class AiForecastingController {
 
   @Get('projects/:projectId/risk')
   @ApiOperation({
-    summary: 'Get a RAG-backed project risk prediction with safe fallback handling',
+    summary:
+      'Get a RAG-backed project risk prediction with safe fallback handling',
   })
   @ApiOkResponse({ type: AiRiskPredictionResponseDto })
   @ApiNotFoundResponse({ description: 'Project not found' })

@@ -92,7 +92,9 @@ export class AnalyticsController {
   }
 
   @Get('reports/overdue-invoices')
-  @ApiOperation({ summary: 'Get overdue invoices with client and project info' })
+  @ApiOperation({
+    summary: 'Get overdue invoices with client and project info',
+  })
   @ApiOkResponse({ type: OverdueInvoiceReportResponseDto })
   overdueInvoices(@Query() query: OverdueInvoiceReportQueryDto) {
     return this.analyticsService.overdueInvoiceReport(query);

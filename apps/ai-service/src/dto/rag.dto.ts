@@ -1,14 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { AiKnowledgeSourceType } from '@prisma/client';
 import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Max,
-  Min,
-} from 'class-validator';
+import { IsInt, IsOptional, IsString, IsUUID, Max, Min } from 'class-validator';
 
 export class RagReindexPathDto {
   @ApiProperty({ format: 'uuid' })
@@ -18,7 +11,8 @@ export class RagReindexPathDto {
 
 export class RagRetrieveQueryDto {
   @ApiPropertyOptional({
-    description: 'Optional retrieval query; if omitted a project-risk default query is used.',
+    description:
+      'Optional retrieval query; if omitted a project-risk default query is used.',
   })
   @IsOptional()
   @IsString()
@@ -35,14 +29,18 @@ export class RagRetrieveQueryDto {
 
 export class RagChunkDto {
   @ApiProperty() id!: string;
-  @ApiProperty({ enum: AiKnowledgeSourceType }) sourceType!: AiKnowledgeSourceType;
+  @ApiProperty({ enum: AiKnowledgeSourceType })
+  sourceType!: AiKnowledgeSourceType;
   @ApiProperty() sourceId!: string;
   @ApiProperty() projectId!: string;
   @ApiProperty() chunkText!: string;
   @ApiPropertyOptional({ nullable: true }) similarityScore!: number | null;
   @ApiPropertyOptional({ nullable: true }) embeddingModel!: string | null;
   @ApiPropertyOptional({ nullable: true }) embeddingDim!: number | null;
-  @ApiPropertyOptional({ type: Object, nullable: true }) metadata!: Record<string, unknown> | null;
+  @ApiPropertyOptional({ type: Object, nullable: true }) metadata!: Record<
+    string,
+    unknown
+  > | null;
   @ApiProperty() createdAt!: string;
   @ApiProperty() updatedAt!: string;
 }

@@ -13,9 +13,7 @@ describe('AiProviderService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    service = new AiProviderService(
-      configService as unknown as ConfigService,
-    );
+    service = new AiProviderService(configService as unknown as ConfigService);
   });
 
   it('returns null when provider is not configured for OpenRouter', async () => {
@@ -98,7 +96,10 @@ describe('AiProviderService', () => {
     } as Response);
 
     await expect(
-      service.predictViaProvider({ systemPrompt: 'system', userPrompt: 'user' }),
+      service.predictViaProvider({
+        systemPrompt: 'system',
+        userPrompt: 'user',
+      }),
     ).rejects.toThrow('AI provider returned invalid JSON.');
 
     fetchSpy.mockRestore();

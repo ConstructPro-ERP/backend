@@ -58,23 +58,19 @@ export class AuthController {
       });
     }
 
-    if (!user.role) {
-      throw new NotFoundException({
-        code: ErrorCode.ROLE_NOT_FOUND,
-        message: 'Authenticated user role no longer exists.',
-      });
-    }
-
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, role, ...safe } = user;
-    const roleName = role.roleName;
+
+    // Safely extract the roleName, falling back to null to prevent runtime crashes.
+    const roleName = role?.roleName || null;
 
     return {
       ...safe,
       role: roleName,
-      roles: [roleName],
+      roles: roleName ? [roleName] : [],
     };
   }
+
   // @Get('google')
   // @UseGuards(AuthGuard('google'))
   // googleLogin() {

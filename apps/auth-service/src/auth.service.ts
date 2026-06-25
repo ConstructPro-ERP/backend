@@ -63,7 +63,6 @@ export class AuthService {
 
   async validateUser(email: string, password: string) {
     const user = await this.prisma.user.findUnique({ where: { email } });
-    // Guard: Google-only users have no password — reject local login attempt
     if (!user || !user.password) return null;
     const isMatch = await bcrypt.compare(password, user.password);
     return isMatch ? user : null;

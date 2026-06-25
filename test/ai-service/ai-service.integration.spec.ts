@@ -4,12 +4,35 @@ import {
   ValidationPipe,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import request from 'supertest';
 import { AiKnowledgeSourceType } from '@prisma/client';
+import request, {
+  type Response as SupertestResponse,
+  type Test as SupertestTest,
+} from 'supertest';
 import { AiForecastingController } from '../../apps/ai-service/src/ai-forecasting.controller';
 import { AiForecastingService } from '../../apps/ai-service/src/ai-forecasting.service';
 import { RagController } from '../../apps/ai-service/src/rag.controller';
 import { RagService } from '../../apps/ai-service/src/rag.service';
+
+type RequestTarget = Parameters<typeof request>[0];
+type RiskResponseBody = { projectId: string; code?: string };
+type ReindexResponseBody = { totalChunks: number };
+type RetrieveResponseBody = { topK: number };
+
+function serverOf(app: INestApplication): RequestTarget {
+  return app.getHttpServer() as RequestTarget;
+}
+
+async function expectResponse(
+  test: SupertestTest,
+  status: number,
+): Promise<SupertestResponse> {
+  return test.expect(status);
+}
+
+function responseBody<T>(response: SupertestResponse): T {
+  return response.body as T;
+}
 
 describe('AI Service routes - integration', () => {
   let app: INestApplication;
@@ -87,22 +110,25 @@ describe('AI Service routes - integration', () => {
       generatedAt: '2026-06-25T00:00:00.000Z',
     });
 
-    const response = await request(app.getHttpServer())
-      .get('/ai-forecasting/projects/f7745756-a906-4a6b-aaf5-b9c6b85146f8/risk')
-      .expect(200);
-
-    expect(response.body.projectId).toBe(
-      'f7745756-a906-4a6b-aaf5-b9c6b85146f8',
+    const response = await expectResponse(
+      request(serverOf(app)).get(
+        '/ai-forecasting/projects/f7745756-a906-4a6b-aaf5-b9c6b85146f8/risk',
+      ),
+      200,
     );
+    const body = responseBody<RiskResponseBody>(response);
+
+    expect(body.projectId).toBe('f7745756-a906-4a6b-aaf5-b9c6b85146f8');
     expect(aiForecastingService.predictProjectRisk).toHaveBeenCalledWith(
       'f7745756-a906-4a6b-aaf5-b9c6b85146f8',
     );
   });
 
   it('GET /ai-forecasting/projects/:projectId/risk rejects invalid UUIDs before hitting the service', async () => {
-    await request(app.getHttpServer())
-      .get('/ai-forecasting/projects/not-a-uuid/risk')
-      .expect(400);
+    await expectResponse(
+      request(serverOf(app)).get('/ai-forecasting/projects/not-a-uuid/risk'),
+      400,
+    );
 
     expect(aiForecastingService.predictProjectRisk).not.toHaveBeenCalled();
   });
@@ -123,13 +149,15 @@ describe('AI Service routes - integration', () => {
       futureAdaptations: ['Automate reindexing from domain events.'],
     });
 
-    const response = await request(app.getHttpServer())
-      .post(
+    const response = await expectResponse(
+      request(serverOf(app)).post(
         '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/reindex',
-      )
-      .expect(201);
+      ),
+      201,
+    );
+    const body = responseBody<ReindexResponseBody>(response);
 
-    expect(response.body.totalChunks).toBe(5);
+    expect(body.totalChunks).toBe(5);
     expect(ragService.reindexProject).toHaveBeenCalledWith(
       '79f55f44-d848-4c3d-ac99-80eb731bda38',
     );
@@ -160,14 +188,17 @@ describe('AI Service routes - integration', () => {
       warnings: [],
     });
 
-    const response = await request(app.getHttpServer())
-      .get(
-        '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
-      )
-      .query({ query: 'payment delay risk', topK: '4' })
-      .expect(200);
+    const response = await expectResponse(
+      request(serverOf(app))
+        .get(
+          '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
+        )
+        .query({ query: 'payment delay risk', topK: '4' }),
+      200,
+    );
+    const body = responseBody<RetrieveResponseBody>(response);
 
-    expect(response.body.topK).toBe(4);
+    expect(body.topK).toBe(4);
     expect(ragService.retrieveProjectContext).toHaveBeenCalledWith(
       '79f55f44-d848-4c3d-ac99-80eb731bda38',
       'payment delay risk',
@@ -176,12 +207,14 @@ describe('AI Service routes - integration', () => {
   });
 
   it('GET /ai-forecasting/rag/projects/:projectId/chunks rejects invalid topK values', async () => {
-    await request(app.getHttpServer())
-      .get(
-        '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
-      )
-      .query({ topK: '50' })
-      .expect(400);
+    await expectResponse(
+      request(serverOf(app))
+        .get(
+          '/ai-forecasting/rag/projects/79f55f44-d848-4c3d-ac99-80eb731bda38/chunks',
+        )
+        .query({ topK: '50' }),
+      400,
+    );
 
     expect(ragService.retrieveProjectContext).not.toHaveBeenCalled();
   });
@@ -194,10 +227,14 @@ describe('AI Service routes - integration', () => {
       }),
     );
 
-    const response = await request(app.getHttpServer())
-      .get('/ai-forecasting/projects/f7745756-a906-4a6b-aaf5-b9c6b85146f8/risk')
-      .expect(404);
+    const response = await expectResponse(
+      request(serverOf(app)).get(
+        '/ai-forecasting/projects/f7745756-a906-4a6b-aaf5-b9c6b85146f8/risk',
+      ),
+      404,
+    );
+    const body = responseBody<RiskResponseBody>(response);
 
-    expect(response.body.code).toBe('PROJECT_NOT_FOUND');
+    expect(body.code).toBe('PROJECT_NOT_FOUND');
   });
 });

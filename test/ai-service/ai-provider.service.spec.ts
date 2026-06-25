@@ -49,23 +49,24 @@ describe('AiProviderService', () => {
 
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({
-        choices: [
-          {
-            message: {
-              content: JSON.stringify({
-                projectRiskLevel: RiskLevelDto.HIGH,
-                paymentDelayRisk: RiskLevelDto.MEDIUM,
-                milestoneDelayRisk: RiskLevelDto.HIGH,
-                revenueTrend: RevenueTrendDto.STABLE,
-                explanation: 'High schedule pressure',
-                recommendedAction: 'Replan the next milestone',
-                confidenceScore: 0.84,
-              }),
+      json: () =>
+        Promise.resolve({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  projectRiskLevel: RiskLevelDto.HIGH,
+                  paymentDelayRisk: RiskLevelDto.MEDIUM,
+                  milestoneDelayRisk: RiskLevelDto.HIGH,
+                  revenueTrend: RevenueTrendDto.STABLE,
+                  explanation: 'High schedule pressure',
+                  recommendedAction: 'Replan the next milestone',
+                  confidenceScore: 0.84,
+                }),
+              },
             },
-          },
-        ],
-      }),
+          ],
+        }),
     } as Response);
 
     const result = await service.predictViaProvider({
@@ -90,9 +91,10 @@ describe('AiProviderService', () => {
 
     const fetchSpy = jest.spyOn(global, 'fetch').mockResolvedValue({
       ok: true,
-      json: async () => ({
-        choices: [{ message: { content: 'not-json' } }],
-      }),
+      json: () =>
+        Promise.resolve({
+          choices: [{ message: { content: 'not-json' } }],
+        }),
     } as Response);
 
     await expect(

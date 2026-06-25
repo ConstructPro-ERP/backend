@@ -1,5 +1,5 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, type Prisma } from '@prisma/client';
 import { neonConfig } from '@neondatabase/serverless';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import ws from 'ws';
@@ -15,13 +15,14 @@ export class PrismaService
     const adapter = new PrismaNeon({
       connectionString: process.env.DATABASE_URL,
     });
-    super({
+    const options: Prisma.PrismaClientOptions = {
       adapter,
       log:
         process.env.NODE_ENV === 'development'
           ? ['query', 'error', 'warn']
           : ['error'],
-    } as any);
+    };
+    super(options);
   }
 
   async onModuleInit() {

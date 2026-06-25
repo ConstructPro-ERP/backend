@@ -11,10 +11,14 @@ import type { Request } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { ErrorCode } from '../../../../shared/error-codes';
 
-type AuthenticatedUser = Record<string, unknown>;
+type AuthenticatedUser = { [key: string]: unknown };
 type AuthRequest = Request & { user?: AuthenticatedUser };
 type AuthServicePayload = AuthenticatedUser | { data?: AuthenticatedUser };
 type AuthServiceError = { code?: ErrorCode | string };
+
+function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
+  return typeof value === 'object' && value !== null;
+}
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -42,7 +46,19 @@ export class JwtAuthGuard implements CanActivate {
         ),
       );
       const payload = response.data as AuthServicePayload;
-      req.user = 'data' in payload && payload.data ? payload.data : payload;
+      const user =
+        'data' in payload && isAuthenticatedUser(payload.data)
+          ? payload.data
+          : payload;
+
+      if (!isAuthenticatedUser(user)) {
+        throw new UnauthorizedException({
+          code: ErrorCode.TOKEN_INVALID,
+          message: 'Token is invalid or has been revoked.',
+        });
+      }
+
+      req.user = user;
       return true;
     } catch (error: unknown) {
       const axiosError = error as AxiosError<AuthServiceError>;

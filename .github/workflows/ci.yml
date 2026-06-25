@@ -40,6 +40,9 @@ jobs:
       - name: Normalize formatting
         run: npm run format
 
+      - name: Run lint checks
+        run: npm run lint
+
       - name: Build NestJS backend
         run: npm run build
 

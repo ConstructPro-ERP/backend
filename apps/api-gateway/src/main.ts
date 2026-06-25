@@ -24,7 +24,9 @@ async function bootstrap() {
   });
   const swaggerConfig = new DocumentBuilder()
     .setTitle('ConstructPro API')
-    .setDescription('ConstructPro gateway API, including DDP-23 invoice APIs')
+    .setDescription(
+      'ConstructPro gateway API, including DDP-23 invoice APIs and DDP-29 AI forecasting APIs',
+    )
     .setVersion('1.0')
     .addBearerAuth()
     .build();

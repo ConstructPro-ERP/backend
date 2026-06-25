@@ -4,12 +4,15 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InvoiceStatus, PaymentMethod, Prisma } from '@prisma/client';
-import { CreatePaymentDto, PaymentMethodDto } from './dto/create-payment.dto';
-import { PaymentService } from './payment.service';
+import {
+  CreatePaymentDto,
+  PaymentMethodDto,
+} from '../../apps/payment-service/src/dto/create-payment.dto';
+import { PaymentService } from '../../apps/payment-service/src/payment.service';
 import {
   PaymentRepository,
   PaymentTransaction,
-} from './repositories/payment.repository';
+} from '../../apps/payment-service/src/repositories/payment.repository';
 
 const tx = {} as PaymentTransaction;
 const repository = {

@@ -20,6 +20,7 @@
     "start:dev:payment-service": "ts-node -r tsconfig-paths/register apps/payment-service/src/main.ts",
     "start:dev:analytics-service": "ts-node -r tsconfig-paths/register apps/analytics-service/src/main.ts",
     "start:dev:user-service": "ts-node -r tsconfig-paths/register apps/user-service/src/main.ts",
+    "start:dev:ai-service": "ts-node -r tsconfig-paths/register apps/ai-service/src/main.ts",
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",

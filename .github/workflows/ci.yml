@@ -31,6 +31,9 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Check formatting
+        run: npm run format:check
+
       - name: Generate Prisma client
         run: npx prisma generate
 
@@ -40,8 +43,11 @@ jobs:
       - name: Build NestJS backend
         run: npm run build
 
-      - name: Run unit-safe test suite
+      - name: Run unit test suite
         run: npm run test:unit
+
+      - name: Run integration test suite
+        run: npm run test:e2e
 
       - name: Run dependency security scan
         continue-on-error: true

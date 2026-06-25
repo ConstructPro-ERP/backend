@@ -18,6 +18,12 @@ import type { AxiosResponse } from 'axios';
 import type { Request } from 'express';
 import { firstValueFrom, Observable } from 'rxjs';
 import { KpiQueryDto } from '../../../analytics-service/src/dto/kpi-query.dto';
+import {
+  ExpenseReportQueryDto,
+  OverdueInvoiceReportQueryDto,
+  ProjectCompletionReportQueryDto,
+  RecentActivityQueryDto,
+} from '../../../analytics-service/src/dto/reporting-query.dto';
 import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -92,6 +98,56 @@ export class AnalyticsGatewayController {
   summary(@Query() query: KpiQueryDto, @Req() req: Request) {
     return this.forward(() =>
       this.httpService.get(this.url('/analytics/dashboard/summary'), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
+    );
+  }
+
+  @Get('reports/recent-activity')
+  @ApiOperation({ summary: 'Get recent operational activity across modules' })
+  recentActivity(@Query() query: RecentActivityQueryDto, @Req() req: Request) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/analytics/reports/recent-activity'), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
+    );
+  }
+
+  @Get('reports/project-completion')
+  @ApiOperation({ summary: 'Get project completion and milestone progress' })
+  projectCompletion(
+    @Query() query: ProjectCompletionReportQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/analytics/reports/project-completion'), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
+    );
+  }
+
+  @Get('reports/expenses')
+  @ApiOperation({ summary: 'Get project-wise expense totals' })
+  expenses(@Query() query: ExpenseReportQueryDto, @Req() req: Request) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/analytics/reports/expenses'), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
+    );
+  }
+
+  @Get('reports/overdue-invoices')
+  @ApiOperation({ summary: 'Get overdue invoice report entries' })
+  overdueInvoices(
+    @Query() query: OverdueInvoiceReportQueryDto,
+    @Req() req: Request,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/analytics/reports/overdue-invoices'), {
         headers: this.forwardHeaders(req),
         params: query,
       }),

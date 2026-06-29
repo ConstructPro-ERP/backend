@@ -62,6 +62,7 @@ model User {
   assignedTasks     Task[]         @relation("AssignedTasks")
   recordedExpenses  Expense[]      @relation("RecordedBy")
   uploadedDocuments Document[]     @relation("UploadedDocuments")
+  authoredLeadNotes LeadNote[]     @relation("LeadNoteAuthor")
 }
 
 model RefreshToken {
@@ -118,9 +119,41 @@ model Lead {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  assignedTo User?       @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  assignedTo User?         @relation("AssignedLeads", fields: [assignedToId], references: [id])
   customer   Customer?
   quotations Quotation[]
+  notes      LeadNote[]
+  contacts   LeadContact[]
+}
+
+model LeadNote {
+  id        String   @id @default(uuid())
+  leadId    String
+  content   String
+  authorId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead   Lead  @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author User? @relation("LeadNoteAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([authorId])
+  @@map("lead_notes")
+}
+
+model LeadContact {
+  id        String   @id @default(uuid())
+  leadId    String
+  label     String
+  value     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lead Lead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_contacts")
 }
 
 model Customer {
@@ -232,14 +265,14 @@ model Project {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  quotation      Quotation?
-  projectManager User              @relation("ProjectManager", fields: [projectManagerId], references: [id])
-  milestones     Milestone[]
-  tasks          Task[]
-  expenses       Expense[]
-  invoices       Invoice[]
-  documents      Document[]
-  reports        AnalyticsReport[]
+  quotation         Quotation?
+  projectManager    User               @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  milestones        Milestone[]
+  tasks             Task[]
+  expenses          Expense[]
+  invoices          Invoice[]
+  documents         Document[]
+  reports           AnalyticsReport[]
   aiKnowledgeChunks AiKnowledgeChunk[]
 }
 
@@ -373,22 +406,22 @@ model AnalyticsReport {
 }
 
 model AiKnowledgeChunk {
-  id             String                @id @default(uuid())
+  id             String                       @id @default(uuid())
   projectId      String
   sourceType     AiKnowledgeSourceType
   sourceId       String?
   chunkText      String
   metadata       Json?
-  embeddingModel String?               @db.VarChar(100)
+  embeddingModel String?                      @db.VarChar(100)
   embeddingDim   Int?
   embedding      Unsupported("vector(1536)")?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
+  @@unique([projectId, sourceType, sourceId])
   @@index([projectId])
   @@index([sourceType, sourceId])
-  @@unique([projectId, sourceType, sourceId])
   @@map("ai_knowledge_chunks")
 }

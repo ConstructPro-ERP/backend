@@ -8,7 +8,6 @@ import {
   Param,
   Req,
   UseGuards,
-  HttpCode,
   HttpStatus,
   HttpException,
 } from '@nestjs/common';

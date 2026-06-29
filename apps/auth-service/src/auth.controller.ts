@@ -15,9 +15,8 @@ import * as registerDto from './dto/register.dto';
 import * as loginDto from './dto/login.dto';
 import { JwtAuthGuard } from './strategies/jwt.strategy';
 import { ErrorCode } from '../../../shared/error-codes';
-import { Res, UseGuards } from '@nestjs/common';
+import { UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import { AuthGuard } from '@nestjs/passport';
 import { ZodValidationPipe } from './dto/zod-validation.pipe';
 
 interface AuthenticatedRequest extends Request {

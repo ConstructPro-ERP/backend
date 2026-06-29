@@ -3,12 +3,14 @@ import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
-interface GoogleUserPayload {
+
+/*interface GoogleUserPayload {
   googleId: string;
   email: string;
   displayName: string;
   avatar?: string;
-}
+}*/
+
 @Injectable()
 export class AuthService {
   constructor(

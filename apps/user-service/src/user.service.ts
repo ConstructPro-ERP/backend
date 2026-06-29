@@ -7,16 +7,10 @@ import * as bcrypt from 'bcrypt';
 import { Prisma, UserStatus } from '@prisma/client';
 import { ErrorCode } from '../../../shared/error-codes';
 import { UserRepository } from './repositories/user.repository';
-import {
-  toSafeUser,
-  toSafeUsers,
-  type SafeUser,
-  UserWithRole,
-} from './entities/user.entity';
+import { toSafeUser, toSafeUsers, type SafeUser } from './entities/user.entity';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
 import type { UpdateProfileDto } from './dto/update-profile.dto';
-import { prisma } from '../../../libs/database/src';
 
 const BCRYPT_SALT_ROUNDS = 12;
 

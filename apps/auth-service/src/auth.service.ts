@@ -4,6 +4,13 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
 
+/*interface GoogleUserPayload {
+  googleId: string;
+  email: string;
+  displayName: string;
+  avatar?: string;
+}*/
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -11,7 +18,12 @@ export class AuthService {
     private readonly prisma: PrismaService,
   ) {}
 
-  async register(username: string, password: string, email: string) {
+  async register(
+    username: string,
+    password: string,
+    email: string,
+    roleId: string,
+  ) {
     const existingUser = await this.prisma.user.findUnique({
       where: { email },
     });
@@ -24,18 +36,16 @@ export class AuthService {
         HttpStatus.CONFLICT, // 409
       );
     }
-
-    const defaultRole = await this.prisma.role.findFirst({
-      where: { roleName: 'PROJECT_MANAGER' },
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
     });
-    if (!defaultRole) {
+    if (!role) {
       throw new HttpException(
         {
           code: ErrorCode.ROLE_NOT_FOUND,
-          message:
-            'Default role PROJECT_MANAGER is missing. Run the seed script.',
+          message: 'Role you assigned is incorrect.',
         },
-        HttpStatus.INTERNAL_SERVER_ERROR, // 500
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -45,7 +55,7 @@ export class AuthService {
         fullName: username,
         password: hashedPassword,
         email,
-        roleId: defaultRole.id,
+        roleId: roleId,
         status: 'ACTIVE',
       },
     });
@@ -85,4 +95,49 @@ export class AuthService {
       include: { role: { select: { roleName: true } } },
     });
   }
+  // async findOrCreateGoogleUser(payload: GoogleUserPayload) {
+  //   const existing = await this.prisma.user.findFirst({
+  //     where: {
+  //       OR: [{ googleId: payload.googleId }, { email: payload.email }],
+  //     },
+  //   });
+  //
+  //   if (existing) {
+  //     // Attach googleId if the user previously registered with email/password
+  //     if (!existing.googleId) {
+  //       return this.prisma.user.update({
+  //         where: { id: existing.id },
+  //         data: { googleId: payload.googleId, avatar: payload.avatar },
+  //       });
+  //     }
+  //     return existing;
+  //   }
+  //
+  //   // New user — fetch the default "user" role to avoid requiring roleId
+  //   const defaultRole = await this.prisma.role.findFirst({
+  //     where: { roleName: 'user' },
+  //   });
+  //
+  //   return this.prisma.user.create({
+  //     data: {
+  //       googleId: payload.googleId,
+  //       email: payload.email,
+  //       fullName: payload.displayName,
+  //       avatar: payload.avatar,
+  //       status: 'ACTIVE',
+  //       // Google users have no local password; null is intentional
+  //       password: null,
+  //       roleId: defaultRole?.id ?? null,
+  //     },
+  //   });
+  // }
+  //
+  // // Issues a signed JWT for a Google-authenticated user (reused in controller)
+  // issueTokenForUser(user: { id: string; fullName: string }) {
+  //   const payload = { sub: user.id, username: user.fullName };
+  //   return {
+  //     accessToken: this.jwtService.sign(payload),
+  //     user: { id: user.id, username: user.fullName },
+  //   };
+  // }
 }

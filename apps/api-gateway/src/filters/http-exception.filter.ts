@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import type { Request, Response } from 'express';
 import { ErrorCode } from '../../../../shared/error-codes';
 
@@ -26,7 +27,7 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     let code = ErrorCode.INTERNAL_ERROR as string;
     let message = 'An unexpected error occurred.';
-    let details: unknown[] = [];
+    let details: unknown;
 
     if (exception instanceof HttpException) {
       const res = exception.getResponse();
@@ -35,34 +36,46 @@ export class HttpExceptionFilter implements ExceptionFilter {
         message = res;
         code = this.codeFromStatus(status);
       } else if (typeof res === 'object' && res !== null) {
-        const r = res as Record<string, any>;
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-        code = r.code ?? this.codeFromStatus(status);
+        const r = res as Record<string, unknown>;
+
+        code =
+          typeof r.code === 'string' ? r.code : this.codeFromStatus(status);
 
         // class-validator produces { message: string[] }
         if (Array.isArray(r.message)) {
           message = 'Validation failed.';
           details = r.message;
           code = ErrorCode.VALIDATION_ERROR;
-        } else {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-          message = r.message ?? message;
+        } else if (typeof r.message === 'string') {
+          message = r.message;
+        }
+
+        // Preserve custom downstream details from gateway forwarding.
+        if (r.details !== undefined) {
+          details = r.details;
         }
       }
     } else if (exception instanceof Error) {
       message = this.isProd
         ? 'An unexpected error occurred.'
         : exception.message;
+
       this.logger.error(exception.message, exception.stack);
     }
 
-    const traceId = crypto.randomUUID();
+    const traceId = randomUUID();
 
     this.logger.error(
-      JSON.stringify({ traceId, status, code, message, path: request?.url }),
+      JSON.stringify({
+        traceId,
+        status,
+        code,
+        message,
+        path: request?.url,
+      }),
     );
 
-    const payload: Record<string, any> = {
+    const payload: Record<string, unknown> = {
       success: false,
       statusCode: status,
       code,
@@ -72,7 +85,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
     };
 
-    if (details.length) payload.details = details;
+    if (details !== undefined) {
+      payload.details = details;
+    }
 
     response.status(status).json(payload);
   }
@@ -86,7 +101,9 @@ export class HttpExceptionFilter implements ExceptionFilter {
       409: ErrorCode.USER_ALREADY_EXISTS,
       422: ErrorCode.VALIDATION_ERROR,
       500: ErrorCode.INTERNAL_ERROR,
+      502: ErrorCode.INTERNAL_ERROR,
     };
+
     return map[status] ?? ErrorCode.INTERNAL_ERROR;
   }
 }

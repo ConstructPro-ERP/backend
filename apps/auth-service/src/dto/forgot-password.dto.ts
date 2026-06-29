@@ -1,7 +1,7 @@
-import { IsEmail, IsNotEmpty } from 'class-validator';
+import { z } from 'zod';
 
-export class ForgotPasswordDto {
-  @IsEmail()
-  @IsNotEmpty()
-  email!: string;
-}
+export const ForgotPasswordSchema = z.object({
+  email: z.string().email('Must be a valid email address'),
+});
+
+export type ForgotPasswordDto = z.infer<typeof ForgotPasswordSchema>;

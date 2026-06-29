@@ -52,6 +52,10 @@ class RegisterDto {
   @IsEmail()
   @IsNotEmpty()
   email!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  roleId!: string;
 }
 
 @Controller('auth')
@@ -111,4 +115,18 @@ export class AuthGatewayController {
       );
     }
   }
+  // @Get('google')
+  // googleLogin(@Res() res: import('express').Response) {
+  //   // Redirect browser directly to auth-service Google initiation URL
+  //   res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
+  // }
+  //
+  // @Get('google/callback')
+  // googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
+  //   // auth-service handles the callback and redirects to frontend;
+  //   // gateway just passes the request through transparently
+  //   res.redirect(
+  //     `${AUTH_SERVICE_URL}/auth/google/callback?${new URLSearchParams(req.query as any).toString()}`,
+  //   );
+  // }
 }

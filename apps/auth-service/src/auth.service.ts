@@ -1,5 +1,7 @@
 import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import type { SignOptions } from 'jsonwebtoken';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
@@ -16,6 +18,7 @@ export class AuthService {
   constructor(
     private readonly jwtService: JwtService,
     private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
   ) {}
 
   async register(
@@ -49,7 +52,7 @@ export class AuthService {
       );
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 12);
     const user = await this.prisma.user.create({
       data: {
         fullName: username,
@@ -60,7 +63,17 @@ export class AuthService {
       },
     });
 
-    return { id: user.id, username: user.fullName, email: user.email };
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') || '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') || '7d') as SignOptions['expiresIn'],
+      }),
+      user: { id: user.id, username: user.fullName, email: user.email },
+    };
   }
 
   async validateUser(email: string, password: string) {
@@ -84,7 +97,13 @@ export class AuthService {
 
     const payload = { sub: user.id, username: user.fullName };
     return {
-      accessToken: this.jwtService.sign(payload),
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') || '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') || '7d') as SignOptions['expiresIn'],
+      }),
       user: { id: user.id, username: user.fullName, email: user.email },
     };
   }

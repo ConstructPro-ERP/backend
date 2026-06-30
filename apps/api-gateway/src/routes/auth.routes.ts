@@ -28,6 +28,13 @@ export const authRoutes = [
     description: 'Example admin-only route proxied to gateway controller',
     target: 'http://localhost:3333/auth/admin',
   },
+  {
+    method: 'POST',
+    path: '/auth/refresh',
+    description:
+      'Proxy: forwards refresh token to Auth Service to get a new token pair',
+    target: 'http://localhost:3333/auth/refresh',
+  },
   // Append to authRoutes array:
   {
     method: 'GET',

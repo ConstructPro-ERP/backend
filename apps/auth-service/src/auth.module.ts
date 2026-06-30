@@ -24,7 +24,7 @@ import { join } from 'path';
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'), // ← loads AFTER .env is ready
-        signOptions: { expiresIn: '7d' },
+        signOptions: { expiresIn: '15m' },
       }),
     }),
     HttpModule,

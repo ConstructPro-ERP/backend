@@ -13,6 +13,7 @@ import type { Request } from 'express';
 import { AuthService } from './auth.service';
 import * as registerDto from './dto/register.dto';
 import * as loginDto from './dto/login.dto';
+import * as refreshDto from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './strategies/jwt.strategy';
 import { ErrorCode } from '../../../shared/error-codes';
 import { UseGuards } from '@nestjs/common';
@@ -68,6 +69,12 @@ export class AuthController {
       role: roleName,
       roles: roleName ? [roleName] : [],
     };
+  }
+
+  @Post('refresh')
+  @UsePipes(new ZodValidationPipe(refreshDto.RefreshTokenSchema))
+  async refresh(@Body() dto: refreshDto.RefreshTokenDto) {
+    return this.authService.refreshTokens(dto.refreshToken);
   }
 
   // @Get('google')

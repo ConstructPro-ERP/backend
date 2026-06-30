@@ -58,6 +58,12 @@ class RegisterDto {
   roleId!: string;
 }
 
+class RefreshDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken!: string;
+}
+
 @Controller('auth')
 export class AuthGatewayController {
   constructor(private readonly httpService: HttpService) {}
@@ -74,6 +80,13 @@ export class AuthGatewayController {
   async register(@Body() dto: RegisterDto): Promise<unknown> {
     return this.forwardRequest(() =>
       this.httpService.post(`${AUTH_SERVICE_URL}/auth/register`, dto),
+    );
+  }
+
+  @Post('refresh')
+  async refresh(@Body() dto: RefreshDto): Promise<unknown> {
+    return this.forwardRequest(() =>
+      this.httpService.post(`${AUTH_SERVICE_URL}/auth/refresh`, dto),
     );
   }
 

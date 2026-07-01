@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { UserModule } from './user.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(UserModule);
 
   app.useGlobalPipes(
@@ -25,4 +25,6 @@ async function bootstrap() {
   console.log(`User service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

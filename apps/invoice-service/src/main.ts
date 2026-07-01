@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { InvoiceModule } from './invoice.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(InvoiceModule);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -48,4 +48,6 @@ async function bootstrap() {
   console.log(`Invoice service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

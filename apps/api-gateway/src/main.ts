@@ -7,7 +7,7 @@ import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { authRoutes } from './routes/auth.routes';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
   app.useGlobalInterceptors(new ResponseInterceptor()); // normalizes successful responses
@@ -41,4 +41,7 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`API gateway listening on http://localhost:${port}`);
 }
-void bootstrap();
+
+if (require.main === module) {
+  void bootstrap();
+}

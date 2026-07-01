@@ -2,7 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AuthModule } from './auth.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AuthModule);
 
   app.useGlobalPipes(
@@ -25,4 +25,6 @@ async function bootstrap() {
   console.log(`Auth service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

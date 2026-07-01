@@ -25,6 +25,8 @@
     "dev:analytics-service": "ts-node -r tsconfig-paths/register apps/analytics-service/src/main.ts",
     "dev:user-service": "ts-node -r tsconfig-paths/register apps/user-service/src/main.ts",
     "dev:ai-service": "ts-node -r tsconfig-paths/register apps/ai-service/src/main.ts",
+    "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
+    "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
 
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
@@ -35,6 +37,9 @@
     "start:payment-service": "node dist/apps/payment-service/src/main.js",
     "start:analytics-service": "node dist/apps/analytics-service/src/main.js",
     "start:ai-service": "node dist/apps/ai-service/src/main.js",
+    "start:client-service": "node dist/apps/client-service/src/main.js",
+    "start:lead-service": "node dist/apps/lead-service/src/main.js",
+
     "start:vercel": "node dist/server.js",
 
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",

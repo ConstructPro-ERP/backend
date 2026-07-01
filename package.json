@@ -1,6 +1,7 @@
 {
   "name": "construct-pro-api",
   "version": "0.0.1",
+  "main": "server.ts",
   "description": "",
   "author": "",
   "private": true,

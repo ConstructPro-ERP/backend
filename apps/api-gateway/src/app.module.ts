@@ -10,6 +10,8 @@ import { PaymentsGatewayController } from './controllers/payments-gateway.contro
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
 import { RagGatewayController } from './controllers/rag-gateway.controller';
 import { RoutesController } from './controllers/routes.controller';
+import { LeadGatewayController } from './controllers/lead-gateway.controller';
+import { ClientGatewayController } from './controllers/client-gateway.controller';
 
 @Module({
   imports: [
@@ -28,6 +30,8 @@ import { RoutesController } from './controllers/routes.controller';
     PaymentsGatewayController,
     RagGatewayController,
     RoutesController,
+    LeadGatewayController,
+    ClientGatewayController,
   ],
 })
 export class AppModule {}

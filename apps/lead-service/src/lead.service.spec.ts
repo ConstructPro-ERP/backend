@@ -321,7 +321,9 @@ describe('LeadService', () => {
       mockLeadRepository.findById.mockResolvedValue({
         id: 'lead-1',
       });
-      mockLeadRepository.updateContact.mockRejectedValue(new Error('Not found'));
+      mockLeadRepository.updateContact.mockRejectedValue(
+        new Error('Not found'),
+      );
 
       await expect(
         service.updateContact('lead-1', 'missing-contact', {

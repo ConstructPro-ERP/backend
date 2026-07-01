@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { put } from '@vercel/blob';
 
 interface InvoicePdfData {
   invoiceId: string;
@@ -21,15 +22,25 @@ interface InvoicePdfData {
 @Injectable()
 export class InvoicePdfService {
   async generate(data: InvoicePdfData) {
-    const directory = resolve(process.cwd(), 'storage', 'invoices');
     const fileName = `${sanitize(data.invoiceNumber)}.pdf`;
+    const pdfBuffer = buildPdf(data);
+
+    if (shouldUseBlobStorage()) {
+      return this.storeInvoicePdfInBlob(fileName, pdfBuffer);
+    }
+
+    return this.storeInvoicePdfLocally(fileName, pdfBuffer);
+  }
+
+  private async storeInvoicePdfLocally(fileName: string, pdfBuffer: Buffer) {
+    const directory = resolve(process.cwd(), 'storage', 'invoices');
     const filePath = join(directory, fileName);
     const publicBaseUrl =
       process.env.INVOICE_PDF_BASE_URL ??
       'http://localhost:4010/files/invoices';
 
     await mkdir(directory, { recursive: true });
-    await writeFile(filePath, buildPdf(data), 'binary');
+    await writeFile(filePath, pdfBuffer, 'binary');
 
     return {
       filePath,
@@ -39,10 +50,30 @@ export class InvoicePdfService {
       fileName,
     };
   }
+
+  private async storeInvoicePdfInBlob(fileName: string, pdfBuffer: Buffer) {
+    const { url, pathname } = await put(`invoices/${fileName}`, pdfBuffer, {
+      access: 'public',
+      addRandomSuffix: false,
+      contentType: 'application/pdf',
+    });
+
+    return {
+      filePath: pathname,
+      publicUrl: url,
+      generatedAt: new Date(),
+      directory: 'vercel-blob:invoices',
+      fileName,
+    };
+  }
 }
 
 function sanitize(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, '-');
+}
+
+function shouldUseBlobStorage(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
 }
 
 function escapePdfText(value: string): string {

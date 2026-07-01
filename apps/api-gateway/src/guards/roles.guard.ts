@@ -6,45 +6,114 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ROLES_KEY } from '../decorators/roles.decorator';
 import type { Request } from 'express';
+import { ErrorCode } from '../../../../shared/error-codes';
+import { ROLES_KEY } from '../decorators/roles.decorator';
 
-type AuthenticatedUser = { roles?: unknown; role?: unknown };
+type AuthenticatedUser = {
+  id?: unknown;
+  roleId?: unknown;
+  role?: unknown;
+  roles?: unknown;
+};
+
 type AuthRequest = Request & { user?: AuthenticatedUser };
 
 @Injectable()
 export class RolesGuard implements CanActivate {
-  constructor(private reflector: Reflector) {}
+  constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    // getAllAndOverride expects the metadata key and an array of targets
     const requiredRoles = this.reflector.getAllAndOverride<string[]>(
       ROLES_KEY,
       [context.getHandler(), context.getClass()],
     );
+
     if (!requiredRoles || requiredRoles.length === 0) {
-      return true; // no roles required
+      return true;
     }
 
     const req = context.switchToHttp().getRequest<AuthRequest>();
     const user = req.user;
+
     if (!user) {
-      throw new ForbiddenException('User not available for role check');
+      throw new ForbiddenException({
+        code: ErrorCode.FORBIDDEN,
+        message: 'User not available for role check.',
+      });
     }
 
-    const userRoles: string[] = Array.isArray(user.roles)
-      ? user.roles.filter((role): role is string => typeof role === 'string')
-      : typeof user.role === 'string'
-        ? [user.role]
-        : [];
-    const normalizedUserRoles = userRoles.map(normalizeRole);
-    const hasRole = requiredRoles
-      .map(normalizeRole)
-      .some((role) => normalizedUserRoles.includes(role));
-    if (!hasRole) {
-      throw new ForbiddenException('Insufficient role');
+    /*
+     * JwtAuthGuard calls Auth Service /auth/me and attaches its response to req.user.
+     * Therefore, this guard should read role/roles from req.user.
+     * It should not query Prisma again.
+     */
+    const userRoles = this.extractRoles(user);
+
+    if (userRoles.length === 0) {
+      throw new ForbiddenException({
+        code: ErrorCode.FORBIDDEN,
+        message:
+          'User role not available for role check. Check Auth Service /auth/me response.',
+      });
     }
+
+    const normalizedRequiredRoles = requiredRoles.map(normalizeRole);
+    const normalizedUserRoles = userRoles.map(normalizeRole);
+
+    const hasRole = normalizedUserRoles.some((role) =>
+      normalizedRequiredRoles.includes(role),
+    );
+
+    if (!hasRole) {
+      throw new ForbiddenException({
+        code: ErrorCode.INSUFFICIENT_ROLE,
+        message: 'Insufficient role.',
+      });
+    }
+
     return true;
+  }
+
+  private extractRoles(user: AuthenticatedUser): string[] {
+    const roles: string[] = [];
+
+    if (typeof user.role === 'string') {
+      roles.push(user.role);
+    }
+
+    if (Array.isArray(user.roles)) {
+      for (const role of user.roles) {
+        if (typeof role === 'string') {
+          roles.push(role);
+        }
+      }
+    }
+
+    /*
+     * Some responses may come as:
+     * { data: { role: 'ADMIN', roles: ['ADMIN'] } }
+     * This fallback protects the guard if a response interceptor wraps /auth/me.
+     */
+    const maybeWrappedUser = user as AuthenticatedUser & {
+      data?: AuthenticatedUser;
+    };
+
+    if (maybeWrappedUser.data) {
+      if (typeof maybeWrappedUser.data.role === 'string') {
+        roles.push(maybeWrappedUser.data.role);
+      }
+
+      if (Array.isArray(maybeWrappedUser.data.roles)) {
+        for (const role of maybeWrappedUser.data.roles) {
+          if (typeof role === 'string') {
+            roles.push(role);
+          }
+        }
+      }
+    }
+
+    return [...new Set(roles)];
   }
 }
 

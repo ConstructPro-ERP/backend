@@ -28,6 +28,27 @@ export const authRoutes = [
     description: 'Example admin-only route proxied to gateway controller',
     target: 'http://localhost:3333/auth/admin',
   },
+  {
+    method: 'POST',
+    path: '/auth/refresh',
+    description:
+      'Proxy: forwards refresh token to Auth Service to get a new token pair',
+    target: 'http://localhost:3333/auth/refresh',
+  },
+  // Append to authRoutes array:
+  {
+    method: 'GET',
+    path: '/auth/google',
+    description: 'Initiates Google OAuth2 consent flow',
+    target: `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/google`,
+  },
+  {
+    method: 'GET',
+    path: '/auth/google/callback',
+    description:
+      'Google OAuth2 callback — issues JWT and redirects to frontend',
+    target: `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/google/callback`,
+  },
 ];
 
 export type AuthRoute = (typeof authRoutes)[number];

@@ -43,21 +43,21 @@ model Role {
 }
 
 model User {
+    // make optional — not all users login via Google
   id        String     @id @default(uuid())
   fullName  String
   email     String     @unique
-  password  String
-  roleId    String
+  password  String?            // make optional — Google users have no password
+  roleId    String            // make optional — Google users may not have role yet
+             // add avatar field
   status    UserStatus @default(ACTIVE)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  role              Role           @relation(fields: [roleId], references: [id])
+  role              Role?          @relation(fields: [roleId], references: [id])
   refreshTokens     RefreshToken[]
   auditLogs         AuditLog[]
-  // Migration 2
   assignedLeads     Lead[]         @relation("AssignedLeads")
-  // Migration 3
   managedProjects   Project[]      @relation("ProjectManager")
   assignedTasks     Task[]         @relation("AssignedTasks")
   recordedExpenses  Expense[]      @relation("RecordedBy")

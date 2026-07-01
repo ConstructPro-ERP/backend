@@ -9,6 +9,7 @@ import { InvoicesGatewayController } from './controllers/invoices-gateway.contro
 import { PaymentsGatewayController } from './controllers/payments-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
 import { RagGatewayController } from './controllers/rag-gateway.controller';
+import { UsersGatewayController } from './controllers/users-gateway.controller';
 import { RoutesController } from './controllers/routes.controller';
 import { LeadGatewayController } from './controllers/lead-gateway.controller';
 import { ClientGatewayController } from './controllers/client-gateway.controller';
@@ -29,6 +30,7 @@ import { ClientGatewayController } from './controllers/client-gateway.controller
     InvoicesGatewayController,
     PaymentsGatewayController,
     RagGatewayController,
+    UsersGatewayController,
     RoutesController,
     LeadGatewayController,
     ClientGatewayController,

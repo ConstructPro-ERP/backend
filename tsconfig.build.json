@@ -1,6 +1,24 @@
-
 {
   "extends": "./tsconfig.json",
-  "exclude": ["node_modules", "test", "dist", "**/*.spec.ts"]
+  "compilerOptions": {
+    "outDir": "./dist",
+    "rootDir": ".",
+    "declaration": false,
+    "incremental": false,
+    "noEmitOnError": true
+  },
+  "include": [
+    "apps/**/*.ts",
+    "libs/**/*.ts",
+    "prisma/prisma.service.ts",
+    "shared/**/*.ts",
+    "server.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts"
+  ]
 }
-

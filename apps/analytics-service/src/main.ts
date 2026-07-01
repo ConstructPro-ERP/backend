@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AnalyticsModule } from './analytics.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(AnalyticsModule);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -36,4 +36,6 @@ async function bootstrap() {
   console.log(`Analytics service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

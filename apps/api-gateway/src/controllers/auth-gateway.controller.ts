@@ -7,10 +7,11 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import { AxiosError, AxiosResponse } from 'axios';
+import { AxiosError, type AxiosResponse } from 'axios';
 import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
 import type { Request } from 'express';
 import { firstValueFrom, type Observable } from 'rxjs';
@@ -100,6 +101,24 @@ export class AuthGatewayController {
     );
   }
 
+  @Get('google')
+  googleLogin(@Res() res: import('express').Response) {
+    res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
+  }
+
+  @Get('google/callback')
+  googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
+    const query = new URLSearchParams(
+      req.query as Record<string, string>,
+    ).toString();
+
+    res.redirect(
+      query
+        ? `${AUTH_SERVICE_URL}/auth/google/callback?${query}`
+        : `${AUTH_SERVICE_URL}/auth/google/callback`,
+    );
+  }
+
   private async forwardRequest<T>(
     call: () => Observable<DownstreamSuccess<T>>,
   ) {
@@ -128,18 +147,4 @@ export class AuthGatewayController {
       );
     }
   }
-  // @Get('google')
-  // googleLogin(@Res() res: import('express').Response) {
-  //   // Redirect browser directly to auth-service Google initiation URL
-  //   res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
-  // }
-  //
-  // @Get('google/callback')
-  // googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
-  //   // auth-service handles the callback and redirects to frontend;
-  //   // gateway just passes the request through transparently
-  //   res.redirect(
-  //     `${AUTH_SERVICE_URL}/auth/google/callback?${new URLSearchParams(req.query as any).toString()}`,
-  //   );
-  // }
 }

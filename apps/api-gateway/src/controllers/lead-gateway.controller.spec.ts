@@ -8,6 +8,16 @@ import { HttpService } from '@nestjs/axios';
 import { Reflector } from '@nestjs/core';
 import { of, throwError } from 'rxjs';
 import type { Request } from 'express';
+import type { AssignLeadDto } from '../../../lead-service/src/dto/assign-lead.dto';
+import type { CreateLeadNoteDto } from '../../../lead-service/src/dto/create-lead-note.dto';
+import type { CreateLeadDto } from '../../../lead-service/src/dto/create-lead.dto';
+import type {
+  CreateLeadContactDto,
+  UpdateLeadContactDto,
+} from '../../../lead-service/src/dto/lead-contact.dto';
+import type { ListLeadsQueryDto } from '../../../lead-service/src/dto/list-lead-query.dto';
+import type { UpdateLeadStatusDto } from '../../../lead-service/src/dto/update-lead-status.dto';
+import type { UpdateLeadDto } from '../../../lead-service/src/dto/update-lead.dto';
 import { LeadGatewayController } from './lead-gateway.controller';
 import { RolesGuard } from '../guards/roles.guard';
 
@@ -21,12 +31,18 @@ function contextFor(role?: string): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function reqWith(overrides: Partial<Request> = {}): any {
+type AuthenticatedTestRequest = Request & {
+  user?: { id?: string; sub?: string };
+};
+
+function reqWith(
+  overrides: Partial<AuthenticatedTestRequest> = {},
+): AuthenticatedTestRequest {
   return {
     headers: { authorization: 'Bearer test-token' },
     user: { id: 'user-1' },
     ...overrides,
-  };
+  } as AuthenticatedTestRequest;
 }
 
 describe('LeadGatewayController roles', () => {
@@ -84,11 +100,9 @@ describe('LeadGatewayController', () => {
   it('forwards create() to POST /leads with auth + actor headers', async () => {
     httpService.post.mockReturnValue(of({ data: { id: 'lead-1' } }));
     const req = reqWith();
+    const body: CreateLeadDto = { customerName: 'John Silva' };
 
-    const result = await controller.create(
-      { customerName: 'John Silva' } as any,
-      req,
-    );
+    const result = await controller.create(body, req);
 
     expect(httpService.post).toHaveBeenCalledWith(
       'http://lead-service.test/leads',
@@ -103,7 +117,7 @@ describe('LeadGatewayController', () => {
   it('forwards findAll() to GET /leads with query params', async () => {
     httpService.get.mockReturnValue(of({ data: [] }));
     const req = reqWith();
-    const query = { page: 1, limit: 20 } as any;
+    const query = { page: 1, limit: 20 } as ListLeadsQueryDto;
 
     await controller.findAll(query, req);
 
@@ -134,7 +148,9 @@ describe('LeadGatewayController', () => {
     httpService.patch.mockReturnValue(of({ data: { id: 'lead-1' } }));
     const req = reqWith();
 
-    await controller.update('lead-1', { customerName: 'Jane' } as any, req);
+    const body: UpdateLeadDto = { customerName: 'Jane' };
+
+    await controller.update('lead-1', body, req);
 
     expect(httpService.patch).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1',
@@ -163,11 +179,9 @@ describe('LeadGatewayController', () => {
     httpService.patch.mockReturnValue(of({ data: { id: 'lead-1' } }));
     const req = reqWith();
 
-    await controller.assign(
-      'lead-1',
-      { assignedToId: 'manager-1' } as any,
-      req,
-    );
+    const body: AssignLeadDto = { assignedToId: 'manager-1' };
+
+    await controller.assign('lead-1', body, req);
 
     expect(httpService.patch).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1/assign',
@@ -182,11 +196,11 @@ describe('LeadGatewayController', () => {
     httpService.patch.mockReturnValue(of({ data: { id: 'lead-1' } }));
     const req = reqWith();
 
-    await controller.updateStatus(
-      'lead-1',
-      { status: 'CONTACTED' } as any,
-      req,
-    );
+    const body = {
+      status: 'CONTACTED',
+    } satisfies UpdateLeadStatusDto;
+
+    await controller.updateStatus('lead-1', body, req);
 
     expect(httpService.patch).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1/status',
@@ -201,11 +215,9 @@ describe('LeadGatewayController', () => {
     httpService.post.mockReturnValue(of({ data: { id: 'note-1' } }));
     const req = reqWith();
 
-    await controller.addNote(
-      'lead-1',
-      { content: 'Called client' } as any,
-      req,
-    );
+    const body: CreateLeadNoteDto = { content: 'Called client' };
+
+    await controller.addNote('lead-1', body, req);
 
     expect(httpService.post).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1/notes',
@@ -248,11 +260,12 @@ describe('LeadGatewayController', () => {
     httpService.post.mockReturnValue(of({ data: { id: 'contact-1' } }));
     const req = reqWith();
 
-    await controller.addContact(
-      'lead-1',
-      { label: 'primary_phone', value: '+94771234567' } as any,
-      req,
-    );
+    const body: CreateLeadContactDto = {
+      label: 'primary_phone',
+      value: '+94771234567',
+    };
+
+    await controller.addContact('lead-1', body, req);
 
     expect(httpService.post).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1/contacts',
@@ -267,12 +280,12 @@ describe('LeadGatewayController', () => {
     httpService.patch.mockReturnValue(of({ data: { id: 'contact-1' } }));
     const req = reqWith();
 
-    await controller.updateContact(
-      'lead-1',
-      'contact-1',
-      { label: 'secondary_email', value: 'john.alt@example.com' } as any,
-      req,
-    );
+    const body: UpdateLeadContactDto = {
+      label: 'secondary_email',
+      value: 'john.alt@example.com',
+    };
+
+    await controller.updateContact('lead-1', 'contact-1', body, req);
 
     expect(httpService.patch).toHaveBeenCalledWith(
       'http://lead-service.test/leads/lead-1/contacts/contact-1',

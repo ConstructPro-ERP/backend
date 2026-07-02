@@ -8,6 +8,10 @@ import { HttpService } from '@nestjs/axios';
 import { Reflector } from '@nestjs/core';
 import { of, throwError } from 'rxjs';
 import type { Request } from 'express';
+import type {
+  CreateClientDto,
+  UpdateClientDto,
+} from '../../../client-service/src/dto/client.dto';
 import { ClientGatewayController } from './client-gateway.controller';
 import { RolesGuard } from '../guards/roles.guard';
 
@@ -21,12 +25,18 @@ function contextFor(role?: string): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function reqWith(overrides: Partial<Request> = {}): any {
+type AuthenticatedTestRequest = Request & {
+  user?: { id?: string; sub?: string };
+};
+
+function reqWith(
+  overrides: Partial<AuthenticatedTestRequest> = {},
+): AuthenticatedTestRequest {
   return {
     headers: { authorization: 'Bearer test-token' },
     user: { id: 'user-1' },
     ...overrides,
-  };
+  } as AuthenticatedTestRequest;
 }
 
 describe('ClientGatewayController roles', () => {
@@ -81,11 +91,9 @@ describe('ClientGatewayController', () => {
   it('forwards create() to POST /clients with auth + actor headers', async () => {
     httpService.post.mockReturnValue(of({ data: { id: 'client-1' } }));
     const req = reqWith();
+    const body: CreateClientDto = { fullName: 'John Silva', leadId: 'lead-1' };
 
-    const result = await controller.create(
-      { fullName: 'John Silva', leadId: 'lead-1' } as any,
-      req,
-    );
+    const result = await controller.create(body, req);
 
     expect(httpService.post).toHaveBeenCalledWith(
       'http://client-service.test/clients',
@@ -130,7 +138,9 @@ describe('ClientGatewayController', () => {
     httpService.patch.mockReturnValue(of({ data: { id: 'client-1' } }));
     const req = reqWith();
 
-    await controller.update('client-1', { fullName: 'Jane Doe' } as any, req);
+    const body: UpdateClientDto = { fullName: 'Jane Doe' };
+
+    await controller.update('client-1', body, req);
 
     expect(httpService.patch).toHaveBeenCalledWith(
       'http://client-service.test/clients/client-1',

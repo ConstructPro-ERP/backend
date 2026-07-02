@@ -3,7 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { LeadStatus, Prisma } from '@prisma/client';
 import { CreateLeadNoteDto } from './dto/create-lead-note.dto';
 import { CreateLeadDto } from './dto/create-lead.dto';
 import {
@@ -110,9 +110,9 @@ export class LeadService {
     return this.leads.update(id, { assignedToId });
   }
 
-  async updateStatus(id: string, status: string) {
+  async updateStatus(id: string, status: LeadStatus) {
     await this.ensureLeadExists(id);
-    return this.leads.update(id, { status: status as any });
+    return this.leads.update(id, { status });
   }
 
   // ── Notes ─────────────────────────────────────────────────────────────────────

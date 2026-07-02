@@ -6,12 +6,10 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
 
-/*interface GoogleUserPayload {
-  googleId: string;
+interface GoogleUserPayload {
   email: string;
   displayName: string;
-  avatar?: string;
-}*/
+}
 
 @Injectable()
 export class AuthService {
@@ -36,7 +34,7 @@ export class AuthService {
           code: ErrorCode.USER_ALREADY_EXISTS,
           message: 'An account with this email already exists.',
         },
-        HttpStatus.CONFLICT, // 409
+        HttpStatus.CONFLICT,
       );
     }
     const role = await this.prisma.role.findUnique({
@@ -58,24 +56,12 @@ export class AuthService {
         fullName: username,
         password: hashedPassword,
         email,
-        roleId: roleId,
+        roleId,
         status: 'ACTIVE',
       },
     });
 
-    const payload = { sub: user.id, username: user.fullName };
-    return {
-      accessToken: this.jwtService.sign(payload, {
-        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
-          '15m') as SignOptions['expiresIn'],
-      }),
-      refreshToken: this.jwtService.sign(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
-          '7d') as SignOptions['expiresIn'],
-      }),
-      user: { id: user.id, username: user.fullName, email: user.email },
-    };
+    return this.issueTokenForUser(user);
   }
 
   async validateUser(email: string, password: string) {
@@ -93,23 +79,11 @@ export class AuthService {
           code: ErrorCode.INVALID_CREDENTIALS,
           message: 'Email or password is incorrect.',
         },
-        HttpStatus.UNAUTHORIZED, // 401
+        HttpStatus.UNAUTHORIZED,
       );
     }
 
-    const payload = { sub: user.id, username: user.fullName };
-    return {
-      accessToken: this.jwtService.sign(payload, {
-        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
-          '15m') as SignOptions['expiresIn'],
-      }),
-      refreshToken: this.jwtService.sign(payload, {
-        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
-        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
-          '7d') as SignOptions['expiresIn'],
-      }),
-      user: { id: user.id, username: user.fullName, email: user.email },
-    };
+    return this.issueTokenForUser(user);
   }
 
   findById(id: string) {
@@ -150,49 +124,55 @@ export class AuthService {
       );
     }
   }
-  // async findOrCreateGoogleUser(payload: GoogleUserPayload) {
-  //   const existing = await this.prisma.user.findFirst({
-  //     where: {
-  //       OR: [{ googleId: payload.googleId }, { email: payload.email }],
-  //     },
-  //   });
-  //
-  //   if (existing) {
-  //     // Attach googleId if the user previously registered with email/password
-  //     if (!existing.googleId) {
-  //       return this.prisma.user.update({
-  //         where: { id: existing.id },
-  //         data: { googleId: payload.googleId, avatar: payload.avatar },
-  //       });
-  //     }
-  //     return existing;
-  //   }
-  //
-  //   // New user — fetch the default "user" role to avoid requiring roleId
-  //   const defaultRole = await this.prisma.role.findFirst({
-  //     where: { roleName: 'user' },
-  //   });
-  //
-  //   return this.prisma.user.create({
-  //     data: {
-  //       googleId: payload.googleId,
-  //       email: payload.email,
-  //       fullName: payload.displayName,
-  //       avatar: payload.avatar,
-  //       status: 'ACTIVE',
-  //       // Google users have no local password; null is intentional
-  //       password: null,
-  //       roleId: defaultRole?.id ?? null,
-  //     },
-  //   });
-  // }
-  //
-  // // Issues a signed JWT for a Google-authenticated user (reused in controller)
-  // issueTokenForUser(user: { id: string; fullName: string }) {
-  //   const payload = { sub: user.id, username: user.fullName };
-  //   return {
-  //     accessToken: this.jwtService.sign(payload),
-  //     user: { id: user.id, username: user.fullName },
-  //   };
-  // }
+
+  async findOrCreateGoogleUser(payload: GoogleUserPayload) {
+    const existing = await this.prisma.user.findUnique({
+      where: { email: payload.email },
+    });
+
+    if (existing) {
+      return existing;
+    }
+
+    const defaultRole = await this.prisma.role.findFirst({
+      where: { roleName: 'CLIENT_PORTAL_USER' },
+      select: { id: true },
+    });
+
+    if (!defaultRole) {
+      throw new HttpException(
+        {
+          code: ErrorCode.ROLE_NOT_FOUND,
+          message: 'Default Google sign-in role is not configured.',
+        },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+
+    return this.prisma.user.create({
+      data: {
+        email: payload.email,
+        fullName: payload.displayName,
+        password: null,
+        status: 'ACTIVE',
+        roleId: defaultRole.id,
+      },
+    });
+  }
+
+  issueTokenForUser(user: { id: string; fullName: string; email?: string }) {
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+          '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+          '7d') as SignOptions['expiresIn'],
+      }),
+      user: { id: user.id, username: user.fullName, email: user.email },
+    };
+  }
 }

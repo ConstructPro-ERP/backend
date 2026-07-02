@@ -4,20 +4,21 @@ import {
   Get,
   Body,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   NotFoundException,
   UsePipes,
+  UseGuards,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { AuthGuard } from '@nestjs/passport';
+import type { Request, Response } from 'express';
 import { AuthService } from './auth.service';
 import * as registerDto from './dto/register.dto';
 import * as loginDto from './dto/login.dto';
 import * as refreshDto from './dto/refresh-token.dto';
 import { JwtAuthGuard } from './strategies/jwt.strategy';
 import { ErrorCode } from '../../../shared/error-codes';
-import { UseGuards } from '@nestjs/common';
-import type { Response } from 'express';
 import { ZodValidationPipe } from './dto/zod-validation.pipe';
 
 interface AuthenticatedRequest extends Request {
@@ -51,17 +52,13 @@ export class AuthController {
     const user = await this.authService.findById(req.user.sub);
 
     if (!user) {
-      // Token valid but user row was deleted — return 404, not 200
       throw new NotFoundException({
         code: ErrorCode.NOT_FOUND,
         message: 'Authenticated user no longer exists.',
       });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, role, ...safe } = user;
-
-    // Safely extract the roleName, falling back to null to prevent runtime crashes.
     const roleName = role?.roleName || null;
 
     return {
@@ -77,25 +74,22 @@ export class AuthController {
     return this.authService.refreshTokens(dto.refreshToken);
   }
 
-  // @Get('google')
-  // @UseGuards(AuthGuard('google'))
-  // googleLogin() {
-  //   // Passport redirects to Google; this handler body never executes
-  // }
-  //
-  // // Google redirects back here after the user grants consent
-  // @Get('google/callback')
-  // @UseGuards(AuthGuard('google'))
-  // googleCallback(
-  //   @Req() req: AuthenticatedRequest & { user: any },
-  //   @Res() res: Response,
-  // ) {
-  //   // req.user is set by GoogleStrategy.validate()
-  //   const { accessToken } = this.authService.issueTokenForUser(req.user);
-  //
-  //   // Redirect the frontend to a deep-link that carries the token
-  //   // Frontend reads the hash and stores it (avoids token in server logs)
-  //   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  //   res.redirect(`${frontendUrl}/auth/callback#token=${accessToken}`);
-  // }
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  googleLogin() {
+    // Passport redirects to Google; this handler body never executes.
+  }
+
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  googleCallback(
+    @Req() req: Request & {
+      user: { id: string; fullName: string; email: string };
+    },
+    @Res() res: Response,
+  ) {
+    const { accessToken } = this.authService.issueTokenForUser(req.user);
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/auth/callback#token=${accessToken}`);
+  }
 }

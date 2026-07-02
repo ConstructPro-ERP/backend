@@ -10,6 +10,7 @@ import { AxiosError } from 'axios';
 import type { Request } from 'express';
 import { firstValueFrom } from 'rxjs';
 import { ErrorCode } from '../../../../shared/error-codes';
+import { getAuthServiceUrl } from '../auth-service-url';
 
 type AuthenticatedUser = { [key: string]: unknown };
 type AuthRequest = Request & { user?: AuthenticatedUser };
@@ -23,6 +24,7 @@ function isAuthenticatedUser(value: unknown): value is AuthenticatedUser {
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
   private readonly logger = new Logger(JwtAuthGuard.name);
+  private readonly authServiceUrl = getAuthServiceUrl();
 
   constructor(private readonly httpService: HttpService) {}
 
@@ -41,7 +43,7 @@ export class JwtAuthGuard implements CanActivate {
     try {
       const response = await firstValueFrom(
         this.httpService.get(
-          `${process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333'}/auth/me`,
+          `${this.authServiceUrl}/auth/me`,
           { headers: { authorization: `Bearer ${token}` } },
         ),
       );

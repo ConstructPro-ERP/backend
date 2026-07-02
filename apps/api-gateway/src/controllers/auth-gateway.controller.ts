@@ -7,17 +7,16 @@ import {
   HttpStatus,
   Post,
   Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
 import { AxiosError, AxiosResponse } from 'axios';
 import { IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { firstValueFrom, type Observable } from 'rxjs';
+import { getAuthServiceUrl } from '../auth-service-url';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-
-const AUTH_SERVICE_URL =
-  process.env.AUTH_SERVICE_URL ?? 'http://localhost:3333';
 
 interface DownstreamError {
   statusCode?: number;
@@ -66,27 +65,29 @@ class RefreshDto {
 
 @Controller('auth')
 export class AuthGatewayController {
+  private readonly authServiceUrl = getAuthServiceUrl();
+
   constructor(private readonly httpService: HttpService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto): Promise<unknown> {
     return this.forwardRequest(() =>
-      this.httpService.post(`${AUTH_SERVICE_URL}/auth/login`, dto),
+      this.httpService.post(`${this.authServiceUrl}/auth/login`, dto),
     );
   }
 
   @Post('register')
   async register(@Body() dto: RegisterDto): Promise<unknown> {
     return this.forwardRequest(() =>
-      this.httpService.post(`${AUTH_SERVICE_URL}/auth/register`, dto),
+      this.httpService.post(`${this.authServiceUrl}/auth/register`, dto),
     );
   }
 
   @Post('refresh')
   async refresh(@Body() dto: RefreshDto): Promise<unknown> {
     return this.forwardRequest(() =>
-      this.httpService.post(`${AUTH_SERVICE_URL}/auth/refresh`, dto),
+      this.httpService.post(`${this.authServiceUrl}/auth/refresh`, dto),
     );
   }
 
@@ -94,10 +95,24 @@ export class AuthGatewayController {
   @UseGuards(JwtAuthGuard)
   async me(@Req() req: Request): Promise<unknown> {
     return this.forwardRequest(() =>
-      this.httpService.get(`${AUTH_SERVICE_URL}/auth/me`, {
+      this.httpService.get(`${this.authServiceUrl}/auth/me`, {
         headers: { authorization: req.headers.authorization },
       }),
     );
+  }
+
+  @Get('google')
+  googleLogin(@Res() res: Response) {
+    res.redirect(`${this.authServiceUrl}/auth/google`);
+  }
+
+  @Get('google/callback')
+  googleCallback(@Req() req: Request, @Res() res: Response) {
+    const query = new URLSearchParams(
+      req.query as Record<string, string>,
+    ).toString();
+    const suffix = query ? `?${query}` : '';
+    res.redirect(`${this.authServiceUrl}/auth/google/callback${suffix}`);
   }
 
   private async forwardRequest<T>(
@@ -128,18 +143,4 @@ export class AuthGatewayController {
       );
     }
   }
-  // @Get('google')
-  // googleLogin(@Res() res: import('express').Response) {
-  //   // Redirect browser directly to auth-service Google initiation URL
-  //   res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
-  // }
-  //
-  // @Get('google/callback')
-  // googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
-  //   // auth-service handles the callback and redirects to frontend;
-  //   // gateway just passes the request through transparently
-  //   res.redirect(
-  //     `${AUTH_SERVICE_URL}/auth/google/callback?${new URLSearchParams(req.query as any).toString()}`,
-  //   );
-  // }
 }

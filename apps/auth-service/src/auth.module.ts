@@ -8,29 +8,27 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { HttpModule } from '@nestjs/axios';
 import { join } from 'path';
-// import { GoogleStrategy } from './strategies/google.strategy';
+import { GoogleStrategy } from './strategies/google.strategy';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
-      // ← move ConfigModule FIRST
       isGlobal: true,
-      envFilePath: join(process.cwd(), '.env'), // ← absolute path, more reliable
+      envFilePath: join(process.cwd(), '.env'),
     }),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
-      // ← change to registerAsync
       imports: [ConfigModule],
       inject: [ConfigService],
       useFactory: (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET'), // ← loads AFTER .env is ready
+        secret: configService.get<string>('JWT_SECRET'),
         signOptions: { expiresIn: '15m' },
       }),
     }),
     HttpModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, PrismaService],
+  providers: [AuthService, JwtStrategy, GoogleStrategy, PrismaService],
   exports: [AuthService],
 })
 export class AuthModule {}

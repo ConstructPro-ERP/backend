@@ -15,10 +15,10 @@ export async function bootstrap() {
 
   app.enableCors();
 
-  const envPort = process.env.AUTH_SERVICE_PORT;
+  const envPort = process.env.AUTH_SERVICE_PORT ?? process.env.PORT;
   const port = envPort ? Number.parseInt(envPort, 10) : 3333;
   if (!Number.isFinite(port)) {
-    throw new Error(`Invalid AUTH_SERVICE_PORT: ${envPort}`);
+    throw new Error(`Invalid auth service port: ${envPort}`);
   }
 
   await app.listen(port);

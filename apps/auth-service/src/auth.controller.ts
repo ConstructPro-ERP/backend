@@ -76,6 +76,10 @@ export class AuthController {
   async refresh(@Body() dto: refreshDto.RefreshTokenDto) {
     return this.authService.refreshTokens(dto.refreshToken);
   }
+  @Get('roles')
+  async getRoles(@Req() req: AuthenticatedRequest) {
+    return this.authService.getRoles();
+  }
 
   // @Get('google')
   // @UseGuards(AuthGuard('google'))

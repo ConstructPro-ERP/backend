@@ -5,6 +5,7 @@ import type { SignOptions } from 'jsonwebtoken';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
+import { RoleDto } from './dto/getRoles.dto';
 
 /*interface GoogleUserPayload {
   googleId: string;
@@ -150,6 +151,17 @@ export class AuthService {
       );
     }
   }
+
+  async getRoles(): Promise<RoleDto[]> {
+    return this.prisma.role.findMany({
+      select: {
+        id: true,
+        roleName: true,
+        description: true,
+      },
+    });
+  }
+
   // async findOrCreateGoogleUser(payload: GoogleUserPayload) {
   //   const existing = await this.prisma.user.findFirst({
   //     where: {

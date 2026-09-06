@@ -99,6 +99,12 @@ export class AuthGatewayController {
       }),
     );
   }
+  @Get('roles')
+  async roles(): Promise<unknown> {
+    return this.forwardRequest(() => {
+      return this.httpService.get(`${AUTH_SERVICE_URL}/auth/roles`);
+    });
+  }
 
   private async forwardRequest<T>(
     call: () => Observable<DownstreamSuccess<T>>,

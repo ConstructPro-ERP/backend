@@ -59,7 +59,11 @@ export class LeadRepository {
       status?: LeadStatus;
     },
   ) {
-    return this.prisma.lead.update({ where: { id }, data, include: leadInclude });
+    return this.prisma.lead.update({
+      where: { id },
+      data,
+      include: leadInclude,
+    });
   }
 
   delete(id: string) {

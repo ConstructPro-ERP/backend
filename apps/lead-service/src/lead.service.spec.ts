@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import { LeadStatus } from '@prisma/client';
+import { LeadSortBy, SortOrder } from './dto/list-lead-query.dto';
 import { LeadService } from './lead.service';
 import { LeadRepository } from './repository/lead.repository';
 
@@ -143,8 +144,8 @@ describe('LeadService', () => {
       const result = await service.findAll({
         page: 1,
         limit: 20,
-        sortBy: 'createdAt' as any,
-        sortOrder: 'desc' as any,
+        sortBy: LeadSortBy.CREATED_AT,
+        sortOrder: SortOrder.DESC,
       });
 
       expect(result).toEqual({
@@ -198,9 +199,9 @@ describe('LeadService', () => {
     it('throws NotFoundException when lead does not exist', async () => {
       mockLeadRepository.findById.mockResolvedValue(null);
 
-      await expect(service.assign('missing-lead', 'user-1')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.assign('missing-lead', 'user-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(mockLeadRepository.findUser).not.toHaveBeenCalled();
       expect(mockLeadRepository.update).not.toHaveBeenCalled();
@@ -212,9 +213,9 @@ describe('LeadService', () => {
       });
       mockLeadRepository.findUser.mockResolvedValue(null);
 
-      await expect(service.assign('lead-1', 'missing-user')).rejects.toBeInstanceOf(
-        BadRequestException,
-      );
+      await expect(
+        service.assign('lead-1', 'missing-user'),
+      ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(mockLeadRepository.update).not.toHaveBeenCalled();
     });
@@ -280,9 +281,9 @@ describe('LeadService', () => {
       });
       mockLeadRepository.deleteNote.mockRejectedValue(new Error('Not found'));
 
-      await expect(service.deleteNote('lead-1', 'missing-note')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.deleteNote('lead-1', 'missing-note'),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -337,7 +338,9 @@ describe('LeadService', () => {
       mockLeadRepository.findById.mockResolvedValue({
         id: 'lead-1',
       });
-      mockLeadRepository.deleteContact.mockRejectedValue(new Error('Not found'));
+      mockLeadRepository.deleteContact.mockRejectedValue(
+        new Error('Not found'),
+      );
 
       await expect(
         service.deleteContact('lead-1', 'missing-contact'),

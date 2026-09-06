@@ -1,12 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { LeadStatus } from '@prisma/client';
-import {
-  IsEmail,
-  IsEnum,
-  IsOptional,
-  IsString,
-  IsUUID,
-} from 'class-validator';
+import { IsEmail, IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class UpdateLeadDto {
   @ApiPropertyOptional({ example: 'John Silva' })

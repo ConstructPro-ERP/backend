@@ -80,10 +80,7 @@ export class LeadGatewayController {
   @ApiOperation({
     summary: 'List leads with search, filtering, sorting and pagination',
   })
-  findAll(
-    @Query() query: ListLeadsQueryDto,
-    @Req() req: AuthenticatedRequest,
-  ) {
+  findAll(@Query() query: ListLeadsQueryDto, @Req() req: AuthenticatedRequest) {
     return this.forward(() =>
       this.httpService.get(this.url('/leads'), {
         headers: this.forwardHeaders(req),

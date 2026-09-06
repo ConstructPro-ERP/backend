@@ -77,7 +77,7 @@ export class AuthController {
     return this.authService.refreshTokens(dto.refreshToken);
   }
   @Get('roles')
-  async getRoles(@Req() req: AuthenticatedRequest) {
+  async getRoles() {
     return this.authService.getRoles();
   }
 

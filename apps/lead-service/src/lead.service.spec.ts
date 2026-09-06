@@ -222,9 +222,12 @@ describe('LeadService', () => {
   });
 
   describe('notes', () => {
-    it('adds a note after validating lead exists', async () => {
+    it('adds a note after validating lead and author exist', async () => {
       mockLeadRepository.findById.mockResolvedValue({
         id: 'lead-1',
+      });
+      mockLeadRepository.findUser.mockResolvedValue({
+        id: 'user-1',
       });
       mockLeadRepository.createNote.mockResolvedValue({
         id: 'note-1',
@@ -253,6 +256,38 @@ describe('LeadService', () => {
         content: 'Customer is interested.',
         authorId: 'user-1',
       });
+      expect(mockLeadRepository.findUser).toHaveBeenCalledWith('user-1');
+    });
+
+    it('adds a note without actorId without checking user', async () => {
+      mockLeadRepository.findById.mockResolvedValue({ id: 'lead-1' });
+      mockLeadRepository.createNote.mockResolvedValue({
+        id: 'note-1',
+        leadId: 'lead-1',
+        content: 'Note without author',
+        authorId: undefined,
+      });
+
+      const result = await service.addNote('lead-1', {
+        content: 'Note without author',
+      });
+
+      expect(result).toEqual({
+        id: 'note-1',
+        leadId: 'lead-1',
+        content: 'Note without author',
+        authorId: undefined,
+      });
+      expect(mockLeadRepository.findUser).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when note author does not exist', async () => {
+      mockLeadRepository.findById.mockResolvedValue({ id: 'lead-1' });
+      mockLeadRepository.findUser.mockResolvedValue(null);
+
+      await expect(
+        service.addNote('lead-1', { content: 'Note text' }, 'nonexistent-user'),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('gets notes after validating lead exists', async () => {

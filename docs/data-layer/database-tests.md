@@ -390,6 +390,7 @@ This pattern applies to any model that references `Project` without an explicit 
 **File:** `test/quotation-service/quotation.e2e-spec.ts`  
 **Runner:** Jest (configured in `test/jest-e2e.json`)  
 **Database:** NeonDB (PostgreSQL) — same test branch as the database integration tests  
+**Env:** Set `DATABASE_URL_TEST` and set `DATABASE_URL` to the same test-branch connection string before running, so `PrismaService` does not connect to a non-test database.  
 **HTTP client:** Supertest (spins up the full NestJS app in-process)
 
 ---

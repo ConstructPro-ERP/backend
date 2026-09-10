@@ -85,7 +85,9 @@ NeonDB connections go over the internet. Each query has network latency on top o
 
 ---
 
-### 3. `cleanDatabase` function
+### 3. `cleanDatabase` function (recommended)
+
+> **Note:** `src/database/__tests__/database.spec.ts` currently cleans the database via sequential `deleteMany()` calls. The `TRUNCATE TABLE ... CASCADE` helper below is a recommended optimization if cleanup becomes a bottleneck on Neon.
 
 ```ts
 async function cleanDatabase() {

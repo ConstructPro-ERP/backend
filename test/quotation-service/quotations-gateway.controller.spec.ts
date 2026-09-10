@@ -1,8 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { RolesGuard } from '../guards/roles.guard';
-import { ROLES_KEY } from '../decorators/roles.decorator';
+import { RolesGuard } from '../../apps/api-gateway/src/guards/roles.guard';
+import { ROLES_KEY } from '../../apps/api-gateway/src/decorators/roles.decorator';
 
 function makeContext(
   userRoles: string[],

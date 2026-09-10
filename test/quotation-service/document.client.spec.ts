@@ -1,7 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { of, throwError } from 'rxjs';
-import { DocumentClient } from './document.client';
+import { DocumentClient } from '../../apps/quotation-service/src/document.client';
 
 const mockHttpService = {
   post: jest.fn(),

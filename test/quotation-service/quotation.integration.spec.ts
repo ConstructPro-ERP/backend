@@ -6,11 +6,11 @@ import { PrismaClient } from '@prisma/client';
 import { PrismaNeon } from '@prisma/adapter-neon';
 import { neonConfig } from '@neondatabase/serverless';
 import ws from 'ws';
-import { QuotationModule } from './quotation.module';
-import { HttpExceptionFilter } from './filters/http-exception.filter';
-import { DocumentClient } from './document.client';
-import { ProjectClient } from './project.client';
-import { NotificationClient } from './notification.client';
+import { QuotationModule } from '../../apps/quotation-service/src/quotation.module';
+import { HttpExceptionFilter } from '../../apps/quotation-service/src/filters/http-exception.filter';
+import { DocumentClient } from '../../apps/quotation-service/src/document.client';
+import { ProjectClient } from '../../apps/quotation-service/src/project.client';
+import { NotificationClient } from '../../apps/quotation-service/src/notification.client';
 
 neonConfig.webSocketConstructor = ws;
 

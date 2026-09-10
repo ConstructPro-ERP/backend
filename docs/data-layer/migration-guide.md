@@ -4,7 +4,7 @@
 
 | Requirement | Version |
 |---|---|
-| Node.js | 20 LTS or later |
+| Node.js | 22 or later (see `engines` in `package.json`) |
 | npm | 10 or later |
 | PostgreSQL-compatible database | Neon (recommended) or any Postgres 15+ |
 
@@ -206,7 +206,7 @@ Error: P1000: Authentication failed against database server
 
 ---
 
-### `P1001` — SSL required / connection refused
+### `P1001` — SSL required / connection refused (general)
 
 ```
 Error: P1001: Can't reach database server
@@ -214,6 +214,8 @@ Error: P1001: Can't reach database server
 
 **Cause:** Missing `?sslmode=require` on a Neon connection, or the host/port is wrong.  
 **Fix:** Append `?sslmode=require` to both `DATABASE_URL` and `DIRECT_URL`. Confirm the host is the direct endpoint (not the pooler) when running Prisma CLI commands.
+
+> For the specific case of `migrate deploy` failing on the Neon test branch, see **`P1001` on Neon test branch** below.
 
 ---
 
@@ -245,6 +247,30 @@ If running tests, ensure `DATABASE_URL_TEST` points to a database where migratio
 
 ---
 
+### `P1001` on Neon test branch — `migrate deploy` fails even with correct credentials
+
+```
+Error: P1001: Can't reach database server at `<host>:5432`
+```
+
+**Cause:** Prisma's migration engine always uses a raw TCP connection on port 5432, regardless of whether you supply a pooler URL or a direct URL. Neon's pooler speaks HTTP/WebSocket (port 443), not TCP — so `migrate deploy` cannot reach it. The direct endpoint only responds on port 5432 when the branch's compute is **Active**; idle or Schema-only branches drop the connection.
+
+**This affects `DIRECT_URL_TEST` in `prisma.config.ts`** — even setting it to the pooler URL does not help because Prisma ignores the protocol and always tries port 5432.
+
+**Workaround — use the Neon SQL Editor (HTTP-based, bypasses port 5432)**
+
+When you need to apply a new migration to the test branch, paste the migration SQL directly into the Neon console SQL Editor for that branch and run it. The SQL Editor uses Neon's HTTP API and works regardless of compute state.
+
+Steps:
+1. Open [console.neon.tech](https://console.neon.tech) → your project → **Branches** → **test**
+2. Click **SQL Editor**
+3. Paste the migration SQL from `prisma/migrations/<migration-folder>/migration.sql`
+4. Click **Run**
+
+> **Note:** Running SQL manually does not write a record to the `_prisma_migrations` table. Because all ConstructPro migrations use `CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, and guarded `DO $$` blocks, the SQL is safe to re-run. When the test branch compute is eventually active and you run `npx prisma migrate deploy`, Prisma will re-execute the SQL (which is a no-op due to `IF NOT EXISTS`) and record the migration properly.
+
+---
+
 ### `P2002` — Unique constraint violation in seed
 
 ```
@@ -260,62 +286,82 @@ npx prisma migrate reset
 
 ---
 
-## 9. Migration History — Sprint 5
+## 9. Migration History
 
-All three migrations below were shipped in Sprint 5 as part of the Data Layer initiative (feature branch `feature/7-prisma-schema-setup`).
-
-### Migration 1 — Auth Models
-
-**Name:** `0001_auth_models`
-
-Creates the authentication and access-control foundation:
-
-| Model | Purpose |
-|---|---|
-| `Role` | Named roles (`ADMIN`, `SALES_MANAGER`, etc.) |
-| `Permission` | Action + resource pairs (`create:users`, `read:leads`, …) |
-| `RolePermission` | Junction table linking roles to permissions (composite PK) |
-| `User` | Application users with `email` unique constraint and `status` enum |
-| `RefreshToken` | JWT refresh tokens tied to a `User` |
-| `AuditLog` | Append-only audit trail for mutations |
-
-Enums introduced: `UserStatus` (`ACTIVE`, `INACTIVE`).
+All migration files live in `prisma/migrations/`. Each directory name encodes a UTC timestamp and a short description.
 
 ---
 
-### Migration 2 — CRM & Sales Models
+### `20260611000001_add_cascade_deletes`
 
-**Name:** `0002_crm_models`
+Tightened referential integrity by upgrading three FK constraints from `RESTRICT` / `SET NULL` to `CASCADE`:
 
-Adds the customer relationship management layer:
-
-| Model | Purpose |
-|---|---|
-| `Lead` | Inbound or prospected contacts; optional assignment to a `User` |
-| `Customer` | Converted leads; optional 1-to-1 back-link to `Lead` via `leadId` |
-| `Quotation` | Sales quotations linked to a `Customer` |
-| `QuotationItem` | Line items within a quotation |
-
-Enums introduced: `LeadStatus` (`NEW`, `CONTACTED`, `QUALIFIED`, `CONVERTED`, `LOST`), `QuotationStatus` (`DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REJECTED`).
+| Table | Column | Old behaviour | New behaviour |
+|---|---|---|---|
+| `RefreshToken` | `userId` | `RESTRICT` | `CASCADE` — tokens are deleted when the parent `User` is deleted |
+| `Customer` | `leadId` | `SET NULL` | `CASCADE` — customer record is deleted when the parent `Lead` is deleted |
+| `QuotationItem` | `quotationId` | `RESTRICT` | `CASCADE` — line items are deleted when the parent `Quotation` is deleted |
 
 ---
 
-### Migration 3 — Operations, Finance & Documents
+### `20260618000001_add_quotation_tables`
 
-**Name:** `0003_operations_finance_documents`
+Restructured the quotation data model to link quotations to `Lead` instead of directly to `Customer`, and aligned the table with the CRM flow:
 
-Adds the full project execution, finance, and document management layer:
+- Dropped the old `Quotation` and `QuotationItem` tables and the `quotationId` column on `Project`.
+- Created new `quotation` and `quotation_item` tables (lowercase, mapped names).
+- `quotation.leadId` → `Lead` (`RESTRICT`); `quotation.projectId` → `Project` (`SET NULL`).
+- `quotation_item.quotationId` → `quotation` (`CASCADE`).
+- Added `CONVERTED` value to the `QuotationStatus` enum.
 
-| Model | Purpose |
-|---|---|
-| `Project` | Core project entity; linked to a `Quotation` and a project manager `User` |
-| `Milestone` | Phases within a project |
-| `Task` | Work items within a project, optionally assigned to a `Milestone` and `User` |
-| `Expense` | Cost entries recorded against a project |
-| `Invoice` | Billing documents linking a project to a `Customer` |
-| `Payment` | Payments received against an `Invoice` |
-| `DocumentCategory` | Classification labels for uploaded files |
-| `Document` | Files uploaded against a project with an optional uploader |
-| `AnalyticsReport` | Aggregated financial/progress snapshots per project |
+---
 
-Enums introduced: `ProjectStatus`, `MilestoneStatus`, `TaskStatus`, `InvoiceStatus`, `PaymentMethod`.
+### `20260622000001_ddp23_invoice_crud`
+
+DDP-23 — Invoice CRUD and project invoice generation:
+
+- Renamed `InvoiceStatus` enum value `SENT` → `ISSUED`.
+- Added `PARTIALLY_PAID` value to `InvoiceStatus`.
+- Added `notes`, `createdBy`, and `updatedBy` columns to `Invoice`.
+- Changed `Invoice.totalAmount` precision to `DECIMAL(12,2)`.
+- Created indexes: `Invoice_projectId_idx`, `Invoice_customerId_idx`, `Invoice_status_idx`.
+
+---
+
+### `20260622000002_ddp24_payment_tracking`
+
+DDP-24 — Payment tracking and persisted invoice balances:
+
+- Added `paidAmount DECIMAL(12,2)` and `outstandingAmount DECIMAL(12,2)` to `Invoice` (both default `0`).
+- Added `referenceNumber TEXT UNIQUE NOT NULL`, `notes TEXT`, and `createdBy TEXT` to `Payment`.
+- Changed `Payment.amount` precision to `DECIMAL(12,2)`.
+- Backfilled `paidAmount`, `outstandingAmount`, and `status` on all existing invoices from existing payment history.
+- Created indexes: `Payment_referenceNumber_key` (unique), `Payment_invoiceId_idx`, `Payment_paymentDate_idx`.
+
+---
+
+### `20260622000003_ddp26_invoice_number_pdf`
+
+DDP-26 — Invoice numbering and PDF support:
+
+- Added `invoiceNumber TEXT UNIQUE`, `pdfPath TEXT`, `pdfUrl TEXT`, and `pdfGeneratedAt TIMESTAMP` to `Invoice`.
+- Created unique index `Invoice_invoiceNumber_key` and regular index `Invoice_invoiceNumber_idx`.
+
+---
+
+### `20260624000001_ddp32_ai_knowledge_chunks`
+
+DDP-32 — AI knowledge chunk storage with vector embeddings:
+
+- Enabled the `pgvector` PostgreSQL extension (`CREATE EXTENSION IF NOT EXISTS vector`).
+- Created `AiKnowledgeSourceType` enum (`PROJECT`, `MILESTONE`, `INVOICE`, `PAYMENT`, `EXPENSE`).
+- Created `ai_knowledge_chunks` table with a `vector(1536)` embedding column and `onDelete: CASCADE` from `Project`.
+- Created indexes: `ai_knowledge_chunks_projectId_idx`, `ai_knowledge_chunks_sourceType_sourceId_idx`, and an IVFFlat index on the embedding column for approximate nearest-neighbour search.
+
+---
+
+### `20260624000002_ddp33_rag_indexing_retrieval`
+
+DDP-33 — RAG indexing and retrieval:
+
+- Added a unique composite index `ai_knowledge_chunks_projectId_sourceType_sourceId_key` on `(projectId, sourceType, sourceId)` to prevent duplicate chunks per source entity.

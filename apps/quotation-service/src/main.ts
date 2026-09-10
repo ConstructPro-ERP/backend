@@ -3,7 +3,7 @@ import { ValidationPipe } from '@nestjs/common';
 import { QuotationModule } from './quotation.module';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(QuotationModule);
 
   app.useGlobalPipes(
@@ -25,4 +25,6 @@ async function bootstrap() {
   console.log(`Quotation service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

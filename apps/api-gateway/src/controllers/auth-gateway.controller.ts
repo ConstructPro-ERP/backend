@@ -52,6 +52,16 @@ class RegisterDto {
   @IsEmail()
   @IsNotEmpty()
   email!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  roleId!: string;
+}
+
+class RefreshDto {
+  @IsString()
+  @IsNotEmpty()
+  refreshToken!: string;
 }
 
 @Controller('auth')
@@ -73,6 +83,13 @@ export class AuthGatewayController {
     );
   }
 
+  @Post('refresh')
+  async refresh(@Body() dto: RefreshDto): Promise<unknown> {
+    return this.forwardRequest(() =>
+      this.httpService.post(`${AUTH_SERVICE_URL}/auth/refresh`, dto),
+    );
+  }
+
   @Get('me')
   @UseGuards(JwtAuthGuard)
   async me(@Req() req: Request): Promise<unknown> {
@@ -81,6 +98,12 @@ export class AuthGatewayController {
         headers: { authorization: req.headers.authorization },
       }),
     );
+  }
+  @Get('roles')
+  async roles(): Promise<unknown> {
+    return this.forwardRequest(() => {
+      return this.httpService.get(`${AUTH_SERVICE_URL}/auth/roles`);
+    });
   }
 
   private async forwardRequest<T>(
@@ -111,4 +134,18 @@ export class AuthGatewayController {
       );
     }
   }
+  // @Get('google')
+  // googleLogin(@Res() res: import('express').Response) {
+  //   // Redirect browser directly to auth-service Google initiation URL
+  //   res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
+  // }
+  //
+  // @Get('google/callback')
+  // googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
+  //   // auth-service handles the callback and redirects to frontend;
+  //   // gateway just passes the request through transparently
+  //   res.redirect(
+  //     `${AUTH_SERVICE_URL}/auth/google/callback?${new URLSearchParams(req.query as any).toString()}`,
+  //   );
+  // }
 }

@@ -15,7 +15,7 @@ export interface CreateProjectResponse {
 export class ProjectClient {
   private readonly logger = new Logger(ProjectClient.name);
   private readonly baseUrl =
-    process.env.PROJECT_SERVICE_URL ?? 'http://localhost:3007';
+    process.env.PROJECT_SERVICE_URL ?? 'http://localhost:3003';
   private readonly useStub = process.env.PROJECT_SERVICE_STUB === 'true';
 
   constructor(private readonly httpService: HttpService) {}

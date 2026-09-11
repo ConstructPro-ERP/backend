@@ -52,7 +52,9 @@ describe('User model', () => {
         roleId: role.id,
       },
     });
-    const found = await prisma.user.findUnique({ where: { email: 'alice@example.com' } });
+    const found = await prisma.user.findUnique({
+      where: { email: 'alice@example.com' },
+    });
 
     // Assert
     expect(found).not.toBeNull();
@@ -101,7 +103,9 @@ describe('User model', () => {
     await prisma.user.delete({ where: { id: user.id } });
 
     // Assert
-    const remaining = await prisma.refreshToken.findMany({ where: { userId: user.id } });
+    const remaining = await prisma.refreshToken.findMany({
+      where: { userId: user.id },
+    });
     expect(remaining).toHaveLength(0);
   });
 });
@@ -119,7 +123,9 @@ describe('Role and Permission', () => {
     });
 
     // Act
-    await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permissionId: permission.id },
+    });
     const found = await prisma.role.findUnique({
       where: { id: role.id },
       include: { permissions: { include: { permission: true } } },
@@ -135,8 +141,12 @@ describe('Role and Permission', () => {
   it('should return a User with their Role and Permissions given Prisma include is used', async () => {
     // Arrange
     const role = await prisma.role.create({ data: { roleName: 'VIEWER' } });
-    const permission = await prisma.permission.create({ data: { action: 'read', resource: 'reports' } });
-    await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: permission.id } });
+    const permission = await prisma.permission.create({
+      data: { action: 'read', resource: 'reports' },
+    });
+    await prisma.rolePermission.create({
+      data: { roleId: role.id, permissionId: permission.id },
+    });
 
     // Act
     const user = await prisma.user.create({
@@ -191,7 +201,9 @@ describe('Client and Lead', () => {
 
   it('should cascade delete the linked Customer given the parent Lead is deleted', async () => {
     // Arrange — Customer.leadId has onDelete: Cascade, so deleting Lead removes the Customer
-    const lead = await prisma.lead.create({ data: { customerName: 'Linked Lead', status: 'NEW' } });
+    const lead = await prisma.lead.create({
+      data: { customerName: 'Linked Lead', status: 'NEW' },
+    });
     const customer = await prisma.customer.create({
       data: { fullName: 'Linked Client', leadId: lead.id },
     });
@@ -200,7 +212,9 @@ describe('Client and Lead', () => {
     await prisma.lead.delete({ where: { id: lead.id } });
 
     // Assert
-    const remaining = await prisma.customer.findUnique({ where: { id: customer.id } });
+    const remaining = await prisma.customer.findUnique({
+      where: { id: customer.id },
+    });
     expect(remaining).toBeNull();
   });
 });
@@ -221,7 +235,12 @@ describe('Quotation and QuotationItem', () => {
         totalAmount: 4500,
         items: {
           create: [
-            { itemName: 'Foundation Work', quantity: 1, unitPrice: 2000, amount: 2000 },
+            {
+              itemName: 'Foundation Work',
+              quantity: 1,
+              unitPrice: 2000,
+              amount: 2000,
+            },
             { itemName: 'Roofing', quantity: 5, unitPrice: 500, amount: 2500 },
           ],
         },
@@ -232,22 +251,39 @@ describe('Quotation and QuotationItem', () => {
     // Assert
     expect(Number(quotation.totalAmount)).toBe(4500);
     expect(quotation.items).toHaveLength(2);
-    const dbItems = await prisma.quotationItem.findMany({ where: { quotationId: quotation.id } });
+    const dbItems = await prisma.quotationItem.findMany({
+      where: { quotationId: quotation.id },
+    });
     expect(dbItems).toHaveLength(2);
-    expect(dbItems.map((i) => i.itemName).sort()).toEqual(['Foundation Work', 'Roofing']);
+    expect(dbItems.map((i) => i.itemName).sort()).toEqual([
+      'Foundation Work',
+      'Roofing',
+    ]);
   });
 
   it('should cascade delete QuotationItems given the parent Quotation is deleted', async () => {
     // Arrange
-    const lead = await prisma.lead.create({ data: { customerName: 'Cascade Co. Lead', status: 'NEW' } });
+    const lead = await prisma.lead.create({
+      data: { customerName: 'Cascade Co. Lead', status: 'NEW' },
+    });
     const quotation = await prisma.quotation.create({
       data: {
         leadId: lead.id,
         totalAmount: 1000,
         items: {
           create: [
-            { itemName: 'Line Item A', quantity: 2, unitPrice: 250, amount: 500 },
-            { itemName: 'Line Item B', quantity: 1, unitPrice: 500, amount: 500 },
+            {
+              itemName: 'Line Item A',
+              quantity: 2,
+              unitPrice: 250,
+              amount: 500,
+            },
+            {
+              itemName: 'Line Item B',
+              quantity: 1,
+              unitPrice: 500,
+              amount: 500,
+            },
           ],
         },
       },
@@ -257,7 +293,9 @@ describe('Quotation and QuotationItem', () => {
     await prisma.quotation.delete({ where: { id: quotation.id } });
 
     // Assert
-    const orphaned = await prisma.quotationItem.findMany({ where: { quotationId: quotation.id } });
+    const orphaned = await prisma.quotationItem.findMany({
+      where: { quotationId: quotation.id },
+    });
     expect(orphaned).toHaveLength(0);
   });
 });
@@ -276,8 +314,12 @@ describe('Project and Milestone', () => {
         roleId: role.id,
       },
     });
-    const lead = await prisma.lead.create({ data: { customerName: 'Dev Corp', status: 'QUALIFIED' } });
-    const quotation = await prisma.quotation.create({ data: { leadId: lead.id, totalAmount: 50000 } });
+    const lead = await prisma.lead.create({
+      data: { customerName: 'Dev Corp', status: 'QUALIFIED' },
+    });
+    const quotation = await prisma.quotation.create({
+      data: { leadId: lead.id, totalAmount: 50000 },
+    });
 
     // Act
     const project = await prisma.project.create({
@@ -288,7 +330,10 @@ describe('Project and Milestone', () => {
       },
     });
     // Quotation holds the FK to Project (quotation.projectId), so we update the quotation to link
-    await prisma.quotation.update({ where: { id: quotation.id }, data: { projectId: project.id } });
+    await prisma.quotation.update({
+      where: { id: quotation.id },
+      data: { projectId: project.id },
+    });
     const found = await prisma.project.findUnique({
       where: { id: project.id },
       include: { quotation: true },
@@ -333,8 +378,12 @@ describe('Project and Milestone', () => {
     await prisma.project.delete({ where: { id: project.id } });
 
     // Assert
-    const remainingMilestones = await prisma.milestone.findMany({ where: { projectId: project.id } });
-    const deletedProject = await prisma.project.findUnique({ where: { id: project.id } });
+    const remainingMilestones = await prisma.milestone.findMany({
+      where: { projectId: project.id },
+    });
+    const deletedProject = await prisma.project.findUnique({
+      where: { id: project.id },
+    });
     expect(remainingMilestones).toHaveLength(0);
     expect(deletedProject).toBeNull();
   });

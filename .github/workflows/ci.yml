@@ -44,13 +44,15 @@ jobs:
         run: npm run lint
 
       - name: Build NestJS backend
-        run: npm run build
+        run: npm run build:all
 
       - name: Run unit test suite
         run: npm run test:unit
 
       - name: Run integration test suite
         run: npm run test:e2e
+        env:
+          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
 
       - name: Run dependency security scan
         continue-on-error: true

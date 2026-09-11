@@ -369,13 +369,13 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     });
 
     // When / Then
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
 
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toMatchObject({ response: { code: 'ALREADY_CONVERTED' } });
+    await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
+      response: { code: 'ALREADY_CONVERTED' },
+    });
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -398,9 +398,9 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       projectId: 'existing-proj',
     });
 
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
+      ConflictException,
+    );
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -411,13 +411,13 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       status: 'REJECTED',
     });
 
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
 
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toMatchObject({ response: { code: 'QUOTATION_REJECTED' } });
+    await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
+      response: { code: 'QUOTATION_REJECTED' },
+    });
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -456,9 +456,9 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     );
 
     // Act / Assert
-    await expect(
-      service.approveAndConvert('quot-1'),
-    ).rejects.toThrow('project service down');
+    await expect(service.approveAndConvert('quot-1')).rejects.toThrow(
+      'project service down',
+    );
 
     // second update (CONVERTED + projectId) must NOT have been called
     expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);

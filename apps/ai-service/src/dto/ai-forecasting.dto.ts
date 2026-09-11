@@ -37,8 +37,7 @@ export class RetrievedChunkDto {
   @ApiPropertyOptional({ nullable: true }) sourceId!: string | null;
   @ApiProperty() summary!: string;
   @ApiProperty({ required: false, nullable: true }) similarityScore!:
-    | number
-    | null;
+    number | null;
   @ApiPropertyOptional({ nullable: true }) relatedProjectId!: string | null;
 }
 

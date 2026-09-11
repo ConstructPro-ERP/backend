@@ -36,7 +36,9 @@ describe('Quotation E2E', () => {
       .overrideProvider(ProjectClient)
       .useValue(mockProjectClient)
       .overrideProvider(NotificationClient)
-      .useValue({ notifyProjectCreated: jest.fn().mockResolvedValue(undefined) })
+      .useValue({
+        notifyProjectCreated: jest.fn().mockResolvedValue(undefined),
+      })
       .compile();
 
     prisma = module.get<PrismaService>(PrismaService);
@@ -192,7 +194,9 @@ describe('Quotation E2E', () => {
           leadId,
           totalAmount: 750,
           items: {
-            create: [{ itemName: 'Glass', quantity: 3, unitPrice: 250, amount: 750 }],
+            create: [
+              { itemName: 'Glass', quantity: 3, unitPrice: 250, amount: 750 },
+            ],
           },
         },
       });
@@ -225,7 +229,12 @@ describe('Quotation E2E', () => {
           status: 'PENDING_APPROVAL',
           items: {
             create: [
-              { itemName: 'Foundation', quantity: 4, unitPrice: 3000, amount: 12000 },
+              {
+                itemName: 'Foundation',
+                quantity: 4,
+                unitPrice: 3000,
+                amount: 12000,
+              },
             ],
           },
         },
@@ -255,7 +264,12 @@ describe('Quotation E2E', () => {
           projectId: realProjectId,
           items: {
             create: [
-              { itemName: 'Roofing', quantity: 1, unitPrice: 5000, amount: 5000 },
+              {
+                itemName: 'Roofing',
+                quantity: 1,
+                unitPrice: 5000,
+                amount: 5000,
+              },
             ],
           },
         },

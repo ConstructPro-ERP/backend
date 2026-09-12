@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { join } from 'node:path';
+import { PrismaService } from '../../../prisma/prisma.service';
 import { ProjectController } from './project.controller';
+import { ProjectRepository } from './repositories/project.repository';
 import { ProjectService } from './project.service';
 
 @Module({
@@ -12,6 +14,6 @@ import { ProjectService } from './project.service';
     }),
   ],
   controllers: [ProjectController],
-  providers: [ProjectService],
+  providers: [ProjectService, ProjectRepository, PrismaService],
 })
 export class ProjectModule {}

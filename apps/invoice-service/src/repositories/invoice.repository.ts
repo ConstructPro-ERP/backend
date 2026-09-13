@@ -38,7 +38,7 @@ export class InvoiceRepository {
     return this.prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        quotation: {
+        quotations: {
           include: {
             lead: {
               include: { customer: true },

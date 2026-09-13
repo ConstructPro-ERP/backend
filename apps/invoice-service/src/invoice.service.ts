@@ -258,8 +258,13 @@ export class InvoiceService {
       });
     }
 
-    const convertedCustomerId = project.quotation?.lead.customer?.id;
-    if (convertedCustomerId && convertedCustomerId !== customerId) {
+    const hasCustomerMismatch = project.quotations.some(
+      (quotation) =>
+        quotation.lead.customer !== null &&
+        quotation.lead.customer.id !== customerId,
+    );
+
+    if (hasCustomerMismatch) {
       throw new BadRequestException({
         code: 'PROJECT_CUSTOMER_MISMATCH',
         message: 'The selected customer does not own this project.',

@@ -4,7 +4,6 @@ export interface CreateProjectPayload {
   startDate: string;
   endDate?: string;
   budget?: number;
-  quotationId?: string;
   projectManagerId: string;
 }
 

@@ -177,7 +177,7 @@ model Quotation {
   totalAmount   Decimal         @db.Decimal(12, 2)
   pdfUrl        String?
   notes         String?
-  projectId     String?         @unique
+  projectId     String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
@@ -185,6 +185,7 @@ model Quotation {
   project Project?        @relation(fields: [projectId], references: [id])
   items   QuotationItem[]
 
+  @@index([projectId])
   @@map("quotation")
 }
 
@@ -265,7 +266,7 @@ model Project {
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  quotation         Quotation?
+  quotations        Quotation[]
   projectManager    User               @relation("ProjectManager", fields: [projectManagerId], references: [id])
   milestones        Milestone[]
   tasks             Task[]

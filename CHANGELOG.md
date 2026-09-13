@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+
 - **UC-04 / FR-004 — Convert Quotation to Project** (issue #2)
   - `PATCH /quotations/:id/approve` — approves and converts a quotation to a project; allowed roles: `Admin`, `Management`
   - Business Rule 10.2 enforced: `CONVERTED` status or existing `projectId` → `409 ALREADY_CONVERTED` (idempotent, project service never called); `REJECTED` → `400 QUOTATION_REJECTED`
@@ -36,6 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integration (real test DB): POST 201 + DB row verification, POST 400 validations, GET 200 + 404
 
 ### Changed
+
 - `docker-compose.yml` — added `api-gateway`, `auth-service`, and `quotation-service` service definitions (file was previously empty)
 - `libs/config/src/configuration.ts` — added `quotation.port` (env `QUOTATION_SERVICE_PORT`, default `3009`)
 - `libs/config/src/env.validation.ts` — added Joi rule for `QUOTATION_SERVICE_PORT`
@@ -43,4 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `src/database/__tests__/database.spec.ts` — updated `Quotation` tests to use `leadId` (schema migration)
 
 ### Fixed
+
 - Installed missing `@nestjs/axios` package (was declared in `package.json` but absent from `node_modules`, causing TypeScript errors across all HTTP-using guards and controllers)
+- **DDP-67 — Project/Quotation cardinality**
+  - Changed Project → Quotation from one-to-one to one-to-many based on client-confirmed requirements.
+  - Removed the unique constraint on `quotation.projectId` and added a non-unique index.
+  - Updated affected invoice validation and database tests for multiple quotations per project.

@@ -30,7 +30,7 @@ const project = {
   projectName: 'Tower A',
   location: 'Colombo',
   status: 'ACTIVE',
-  quotation: null,
+  quotations: [],
 };
 
 const customer = {
@@ -134,14 +134,16 @@ describe('InvoiceService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('rejects a customer that differs from the converted quotation customer', async () => {
+  it('rejects a customer that differs from a linked quotation customer', async () => {
     repository.findProjectWithCustomer.mockResolvedValue({
       ...project,
-      quotation: {
-        lead: {
-          customer: { id: '00000000-0000-4000-8000-999999999999' },
+      quotations: [
+        {
+          lead: {
+            customer: { id: '00000000-0000-4000-8000-999999999999' },
+          },
         },
-      },
+      ],
     });
 
     await expect(
@@ -152,6 +154,35 @@ describe('InvoiceService', () => {
         totalAmount: 1000,
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('allows multiple quotations belonging to the selected customer', async () => {
+    repository.findProjectWithCustomer.mockResolvedValue({
+      ...project,
+      quotations: [
+        {
+          lead: {
+            customer: { id: customer.id },
+          },
+        },
+        {
+          lead: {
+            customer: { id: customer.id },
+          },
+        },
+      ],
+    });
+
+    repository.create.mockResolvedValue(baseInvoice);
+
+    await expect(
+      service.create({
+        projectId: project.id,
+        customerId: customer.id,
+        invoiceDate: '2026-06-22',
+        totalAmount: 1000,
+      }),
+    ).resolves.toBeDefined();
   });
 
   it('returns paid and outstanding amounts on invoice detail', async () => {

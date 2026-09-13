@@ -28,6 +28,7 @@ npm test
 These are **integration tests**, not unit tests. They connect to a real PostgreSQL database (your Neon test branch) and execute actual SQL. Nothing is mocked.
 
 This means they verify:
+
 - That Prisma models map correctly to real database tables
 - That foreign key constraints and cascade rules defined in `schema.prisma` are enforced by the database engine
 - That Prisma `include` (JOIN) queries return the correct related records
@@ -134,11 +135,11 @@ afterAll(async () => {
 afterEach(cleanDatabase);
 ```
 
-| Hook | When it runs | What it does |
-|---|---|---|
+| Hook        | When it runs                | What it does                                                                   |
+| ----------- | --------------------------- | ------------------------------------------------------------------------------ |
 | `beforeAll` | Once, before the first test | Opens the DB connection and wipes any stale data left by a previous failed run |
-| `afterAll` | Once, after the last test | Closes the DB connection cleanly |
-| `afterEach` | After every single test | Wipes all test data so the next test starts with a completely empty database |
+| `afterAll`  | Once, after the last test   | Closes the DB connection cleanly                                               |
+| `afterEach` | After every single test     | Wipes all test data so the next test starts with a completely empty database   |
 
 **Why clean in `beforeAll` as well as `afterEach`?**
 
@@ -169,6 +170,7 @@ All tests are named using the **Given-When-Then** style:
 ```
 
 Examples:
+
 - `'should create a user and find it by email given all required fields are provided'`
 - `'should throw a Prisma P2002 error given a duplicate email is inserted'`
 - `'should cascade delete RefreshTokens given the parent User is deleted'`
@@ -190,6 +192,7 @@ Tests the `User` model and its relationship with `Role` and `RefreshToken`.
 Creates a `Role`, then creates a `User` linked to that role, then fetches the user back with `findUnique` using the email as the lookup key.
 
 Verifies:
+
 - The returned record is not null
 - The `id` matches the one returned by `create`
 - `fullName` is stored correctly
@@ -243,7 +246,11 @@ Fetches the user with a deeply nested `include` that joins all four tables in on
 include: {
   role: {
     include: {
-      permissions: { include: { permission: true } }
+      permissions: {
+        include: {
+          permission: true;
+        }
+      }
     }
   }
 }
@@ -296,8 +303,13 @@ prisma.quotation.create({
     totalAmount: 4500,
     items: {
       create: [
-        { itemName: 'Foundation Work', quantity: 1, unitPrice: 2000, amount: 2000 },
-        { itemName: 'Roofing',         quantity: 5, unitPrice: 500,  amount: 2500 },
+        {
+          itemName: 'Foundation Work',
+          quantity: 1,
+          unitPrice: 2000,
+          amount: 2000,
+        },
+        { itemName: 'Roofing', quantity: 5, unitPrice: 500, amount: 2500 },
       ],
     },
   },
@@ -323,21 +335,34 @@ Tests `Project` and `Milestone`. Projects require a `projectManagerId` (a `User`
 
 ---
 
-**`should create a Project linked to a Quotation given both a Lead and Quotation exist`**
+**`should link multiple Quotations to the same Project`**
 
-The FK relationship here is unusual: **`Quotation` holds the FK to `Project`** (`quotation.projectId`), not the other way around. This means you cannot set the link at project creation time — you must update the quotation afterwards:
+`Quotation` holds the FK to `Project` through `quotation.projectId`. A project can be associated with multiple quotations, while each quotation can reference at most one project.
+
+The test creates multiple quotations and one project, then assigns the same `projectId` to each quotation:
 
 ```ts
 const project = await prisma.project.create({ data: { ... } });
-await prisma.quotation.update({
-  where: { id: quotation.id },
-  data: { projectId: project.id },
+
+await prisma.quotation.updateMany({
+  where: {
+    id: {
+      in: [
+        designQuotation.id,
+        visualizationQuotation.id,
+        constructionQuotation.id,
+      ],
+    },
+  },
+  data: {
+    projectId: project.id,
+  },
 });
 ```
 
-Then fetches the project with `include: { quotation: true }` and verifies the quotation is accessible on the returned object.
+Then fetches the project with `include: { quotations: true }` and verifies that all linked quotations are accessible on the returned object.
 
-This test documents the correct way to link a Project to a Quotation in the ConstructPro data model.
+This test documents the correct one-to-many relationship between Project and Quotation in the ConstructPro data model.
 
 ---
 
@@ -364,19 +389,19 @@ This pattern applies to any model that references `Project` without an explicit 
 
 ## FK Cascade Reference
 
-| Child table | FK column | `onDelete` behaviour |
-|---|---|---|
-| `RefreshToken` | `userId → User` | **CASCADE** — deleted with user |
-| `Customer` | `leadId → Lead` | **CASCADE** — deleted with lead |
-| `quotation_item` | `quotationId → quotation` | **CASCADE** — deleted with quotation |
-| `ai_knowledge_chunks` | `projectId → Project` | **CASCADE** — deleted with project |
-| `Milestone` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `Task` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `Expense` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `Invoice` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `Document` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `AnalyticsReport` | `projectId → Project` | **RESTRICT** — must delete manually first |
-| `quotation` | `projectId → Project` | **SET NULL** — `projectId` is set to null when project is deleted |
+| Child table           | FK column                 | `onDelete` behaviour                                              |
+| --------------------- | ------------------------- | ----------------------------------------------------------------- |
+| `RefreshToken`        | `userId → User`           | **CASCADE** — deleted with user                                   |
+| `Customer`            | `leadId → Lead`           | **CASCADE** — deleted with lead                                   |
+| `quotation_item`      | `quotationId → quotation` | **CASCADE** — deleted with quotation                              |
+| `ai_knowledge_chunks` | `projectId → Project`     | **CASCADE** — deleted with project                                |
+| `Milestone`           | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `Task`                | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `Expense`             | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `Invoice`             | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `Document`            | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `AnalyticsReport`     | `projectId → Project`     | **RESTRICT** — must delete manually first                         |
+| `quotation`           | `projectId → Project`     | **SET NULL** — `projectId` is set to null when project is deleted |
 
 ---
 

@@ -164,9 +164,9 @@ export class ProjectService {
       throw new NotFoundException('Project not found');
     }
 
-    const hasDependencies =
-      project.quotation !== null ||
-      Object.values(project._count).some((count) => count > 0);
+    const hasDependencies = Object.values(project._count).some(
+      (count) => count > 0,
+    );
 
     if (hasDependencies) {
       // Preserve project history when other domain records already depend on it.

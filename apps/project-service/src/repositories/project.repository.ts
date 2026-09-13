@@ -11,7 +11,7 @@ const projectInclude = Prisma.validator<Prisma.ProjectInclude>()({
       status: true,
     },
   },
-  quotation: {
+  quotations: {
     select: {
       id: true,
       leadId: true,
@@ -98,13 +98,9 @@ export class ProjectRepository {
     return this.prisma.project.findUnique({
       where: { id },
       select: {
-        quotation: {
-          select: {
-            id: true,
-          },
-        },
         _count: {
           select: {
+            quotations: true,
             milestones: true,
             tasks: true,
             expenses: true,

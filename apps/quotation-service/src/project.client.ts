@@ -1,10 +1,27 @@
-import { Injectable, BadGatewayException, Logger } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import {
+  BadGatewayException,
+  HttpException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import { firstValueFrom } from 'rxjs';
+import type {
+  CreateProjectFromQuotationPayload,
+  CreateProjectFromQuotationResponse,
+} from '../../../libs/contracts/src/payloads/project.payload';
 
-export interface CreateProjectResponse {
-  projectId: string;
-  status: string;
+interface DownstreamProjectError {
+  code?: string;
+  message?: string;
+  details?: unknown;
+}
+
+interface AxiosErrorShape {
+  response?: {
+    status?: number;
+    data?: DownstreamProjectError;
+  };
 }
 
 /**
@@ -21,33 +38,56 @@ export class ProjectClient {
   constructor(private readonly httpService: HttpService) {}
 
   async createFromQuotation(
-    quotationId: string,
-    leadId: string,
-    budget: number,
-  ): Promise<CreateProjectResponse> {
+    payload: CreateProjectFromQuotationPayload,
+  ): Promise<CreateProjectFromQuotationResponse> {
     if (this.useStub) {
       this.logger.warn(
-        `[STUB] PROJECT_SERVICE_STUB=true — returning fake projectId for quotation ${quotationId}`,
+        `[STUB] PROJECT_SERVICE_STUB=true — returning fake projectId for quotation ${payload.quotationId}`,
       );
-      return { projectId: `stub-project-${quotationId}`, status: 'PLANNING' };
+
+      return {
+        projectId:
+          payload.targetProjectId ?? `stub-project-${payload.quotationId}`,
+        status: 'ACTIVE',
+      };
     }
 
     try {
-      const resp = await firstValueFrom(
-        this.httpService.post<CreateProjectResponse>(
+      const response = await firstValueFrom(
+        this.httpService.post<CreateProjectFromQuotationResponse>(
           `${this.baseUrl}/projects/from-quotation`,
-          { quotationId, leadId, budget },
+          payload,
         ),
       );
-      return resp.data;
+
+      return response.data;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const axiosError = err as AxiosErrorShape;
+      const status = axiosError.response?.status;
+      const downstream = axiosError.response?.data;
+
+      if (status && downstream) {
+        throw new HttpException(
+          {
+            code: downstream.code ?? 'PROJECT_SERVICE_ERROR',
+            message:
+              downstream.message ??
+              'Project service rejected the quotation conversion.',
+            details: downstream.details,
+          },
+          status,
+        );
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+
       this.logger.error(
-        `Project service call failed for quotation ${quotationId}: ${msg}`,
+        `Project service call failed for quotation ${payload.quotationId}: ${message}`,
       );
+
       throw new BadGatewayException({
         code: 'PROJECT_SERVICE_UNAVAILABLE',
-        message: 'Project service could not create the project.',
+        message: 'Project service could not process the quotation conversion.',
       });
     }
   }

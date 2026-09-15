@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { QuotationService } from './quotation.service';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { ApproveQuotationDto } from './dto/approve-quotation.dto';
 
 @Controller('quotations')
 export class QuotationController {
@@ -27,7 +28,7 @@ export class QuotationController {
   }
 
   @Patch(':id/approve')
-  approveAndConvert(@Param('id') id: string) {
-    return this.quotationService.approveAndConvert(id);
+  approveAndConvert(@Param('id') id: string, @Body() dto: ApproveQuotationDto) {
+    return this.quotationService.approveAndConvert(id, dto);
   }
 }

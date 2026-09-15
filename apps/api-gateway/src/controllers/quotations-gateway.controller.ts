@@ -69,12 +69,13 @@ export class QuotationsGatewayController {
   @Roles('Admin', 'Management')
   async approveAndConvert(
     @Param('id') id: string,
+    @Body() body: unknown,
     @Req() req: Request,
   ): Promise<unknown> {
     return this.forward(() =>
       this.httpService.patch(
         `${QUOTATION_SERVICE_URL}/quotations/${id}/approve`,
-        {},
+        body,
         { headers: { authorization: req.headers.authorization } },
       ),
     );

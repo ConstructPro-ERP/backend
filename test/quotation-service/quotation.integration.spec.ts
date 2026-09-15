@@ -21,54 +21,101 @@ const prisma = new PrismaClient({ adapter });
 
 jest.setTimeout(30000);
 
-// Holds the real projectId created in beforeAll for FK constraint satisfaction
+const runId = Date.now().toString();
+
+// Holds the persistent FK fixtures created by this test suite.
 let realProjectId: string;
+let fixtureUserId: string;
+let fixtureRoleId: string;
 
 // Mutable mock so we can set the resolved value after the DB project is created
 const mockProjectClient = {
   createFromQuotation: jest.fn(),
 };
 
-async function cleanup() {
-  await prisma.quotationItem.deleteMany();
-  await prisma.quotation.deleteMany();
-  await prisma.lead.deleteMany();
-}
-
 describe('QuotationService — integration', () => {
   let app: INestApplication;
-  let leadId: string;
+  let leadId = '';
+
+  async function cleanupLead(leadIdToDelete: string) {
+    if (!leadIdToDelete) {
+      return;
+    }
+
+    const quotations = await prisma.quotation.findMany({
+      where: {
+        leadId: leadIdToDelete,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const quotationIds = quotations.map((quotation) => quotation.id);
+
+    if (quotationIds.length > 0) {
+      await prisma.quotationItem.deleteMany({
+        where: {
+          quotationId: {
+            in: quotationIds,
+          },
+        },
+      });
+
+      await prisma.quotation.deleteMany({
+        where: {
+          id: {
+            in: quotationIds,
+          },
+        },
+      });
+    }
+
+    await prisma.lead.deleteMany({
+      where: {
+        id: leadIdToDelete,
+      },
+    });
+  }
 
   beforeAll(async () => {
     await prisma.$connect();
 
     // Create a minimal Role → User → Project chain so we have a real projectId
     // for FK constraint satisfaction when the approve endpoint stores projectId.
-    const suffix = Date.now();
     const role = await prisma.role.create({
-      data: { roleName: `integration-role-${suffix}` },
+      data: {
+        roleName: `integration-role-${runId}`,
+      },
     });
+
+    fixtureRoleId = role.id;
+
     const user = await prisma.user.create({
       data: {
         fullName: 'Integration PM',
-        email: `integration-pm-${suffix}@test.com`,
+        email: `integration-pm-${runId}@test.com`,
         password: 'hashed',
         roleId: role.id,
       },
     });
+
+    fixtureUserId = user.id;
+
     const project = await prisma.project.create({
       data: {
-        projectName: 'Integration Test Project',
+        projectName: `Integration Test Project ${runId}`,
         startDate: new Date(),
         projectManagerId: user.id,
       },
     });
+
     realProjectId = project.id;
 
     // Now wire the mock to return the real projectId
     mockProjectClient.createFromQuotation.mockResolvedValue({
       projectId: realProjectId,
-      status: 'PLANNING',
+      status: 'ACTIVE', // An approved quotation causes the Project to be active.
     });
 
     const module: TestingModule = await Test.createTestingModule({
@@ -97,16 +144,46 @@ describe('QuotationService — integration', () => {
   });
 
   afterAll(async () => {
-    await cleanup();
-    await prisma.$disconnect();
+    await cleanupLead(leadId);
+
+    if (realProjectId) {
+      await prisma.project.deleteMany({
+        where: {
+          id: realProjectId,
+        },
+      });
+    }
+
+    if (fixtureUserId) {
+      await prisma.user.deleteMany({
+        where: {
+          id: fixtureUserId,
+        },
+      });
+    }
+
+    if (fixtureRoleId) {
+      await prisma.role.deleteMany({
+        where: {
+          id: fixtureRoleId,
+        },
+      });
+    }
+
     await app.close();
+    await prisma.$disconnect();
   });
 
   beforeEach(async () => {
-    await cleanup();
+    await cleanupLead(leadId);
+
     const lead = await prisma.lead.create({
-      data: { customerName: 'Test Lead Corp', status: 'QUALIFIED' },
+      data: {
+        customerName: `Integration Lead ${runId}`,
+        status: 'QUALIFIED',
+      },
     });
+
     leadId = lead.id;
   });
 
@@ -215,7 +292,7 @@ describe('QuotationService — integration', () => {
   });
 
   describe('PATCH /quotations/:id/approve', () => {
-    it('200 — converts PENDING_APPROVAL quotation and stores projectId in DB', async () => {
+    it('200 — converts PENDING_APPROVAL quotation using an existing project', async () => {
       const quotation = await prisma.quotation.create({
         data: {
           leadId,
@@ -236,16 +313,102 @@ describe('QuotationService — integration', () => {
 
       const res = await request(app.getHttpServer())
         .patch(`/quotations/${quotation.id}/approve`)
+        .send({
+          targetProjectId: realProjectId,
+        })
         .expect(200);
 
       expect(res.body.projectId).toBe(realProjectId);
+      expect(res.body.projectStatus).toBe('ACTIVE');
       expect(res.body.quotation.status).toBe('CONVERTED');
+
+      expect(mockProjectClient.createFromQuotation).toHaveBeenLastCalledWith({
+        quotationId: quotation.id,
+        leadId,
+        targetProjectId: realProjectId,
+      });
 
       const db = await prisma.quotation.findUnique({
         where: { id: quotation.id },
       });
+
       expect(db!.projectId).toBe(realProjectId);
       expect(db!.status).toBe('CONVERTED');
+    });
+
+    it('200 — resumes conversion when an APPROVED quotation already has projectId', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 4500,
+          status: 'APPROVED',
+          projectId: realProjectId,
+          items: {
+            create: [
+              {
+                itemName: 'House Design',
+                quantity: 1,
+                unitPrice: 4500,
+                amount: 4500,
+              },
+            ],
+          },
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/approve`)
+        .expect(200);
+
+      expect(res.body.projectId).toBe(realProjectId);
+      expect(res.body.projectStatus).toBe('ACTIVE');
+      expect(res.body.quotation.status).toBe('CONVERTED');
+
+      expect(mockProjectClient.createFromQuotation).toHaveBeenLastCalledWith({
+        quotationId: quotation.id,
+        leadId,
+        targetProjectId: realProjectId,
+      });
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+
+      expect(db!.projectId).toBe(realProjectId);
+      expect(db!.status).toBe('CONVERTED');
+    });
+
+    it('400 PROJECT_DETAILS_REQUIRED — new project details are missing', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 6000,
+          status: 'PENDING_APPROVAL',
+          items: {
+            create: [
+              {
+                itemName: 'Plan Preparation',
+                quantity: 1,
+                unitPrice: 6000,
+                amount: 6000,
+              },
+            ],
+          },
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/approve`)
+        .expect(400);
+
+      expect(res.body.code).toBe('PROJECT_DETAILS_REQUIRED');
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+
+      expect(db!.status).toBe('PENDING_APPROVAL');
+      expect(db!.projectId).toBeNull();
     });
 
     it('409 ALREADY_CONVERTED — quotation already in CONVERTED state is rejected', async () => {

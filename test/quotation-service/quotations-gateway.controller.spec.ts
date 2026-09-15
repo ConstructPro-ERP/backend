@@ -3,6 +3,10 @@ import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { RolesGuard } from '../../apps/api-gateway/src/guards/roles.guard';
 import { ROLES_KEY } from '../../apps/api-gateway/src/decorators/roles.decorator';
+import { HttpService } from '@nestjs/axios';
+import type { Request } from 'express';
+import { of } from 'rxjs';
+import { QuotationsGatewayController } from '../../apps/api-gateway/src/controllers/quotations-gateway.controller';
 
 function makeContext(
   userRoles: string[],
@@ -106,5 +110,65 @@ describe('RolesGuard — quotations endpoint access', () => {
     expect(() =>
       guard.canActivate(makeContext(['Project Manager'], approveHandler)),
     ).toThrow(ForbiddenException);
+  });
+});
+
+describe('QuotationsGatewayController', () => {
+  let controller: QuotationsGatewayController;
+  let httpService: {
+    patch: jest.Mock;
+  };
+
+  beforeEach(async () => {
+    httpService = {
+      patch: jest.fn(),
+    };
+
+    const module: TestingModule = await Test.createTestingModule({
+      controllers: [QuotationsGatewayController],
+      providers: [{ provide: HttpService, useValue: httpService }],
+    }).compile();
+
+    controller = module.get<QuotationsGatewayController>(
+      QuotationsGatewayController,
+    );
+  });
+
+  it('forwards approveAndConvert() body to PATCH /quotations/:id/approve', async () => {
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          projectId: 'project-1',
+          projectStatus: 'ACTIVE',
+        },
+      }),
+    );
+
+    const body = {
+      targetProjectId: '00000000-0000-4000-8000-000000000001',
+    };
+
+    const req = {
+      headers: {
+        authorization: 'Bearer test-token',
+      },
+    } as unknown as Request;
+
+    const result = await controller.approveAndConvert('quotation-1', body, req);
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/quotation-1/approve'),
+      body,
+      {
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      projectId: 'project-1',
+      projectStatus: 'ACTIVE',
+    });
   });
 });

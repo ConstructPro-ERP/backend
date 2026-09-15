@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, ProjectStatus } from '@prisma/client';
+import { Prisma, ProjectStatus, QuotationStatus } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 
 const projectInclude = Prisma.validator<Prisma.ProjectInclude>()({
@@ -25,6 +25,8 @@ export type ProjectWithDetails = Prisma.ProjectGetPayload<{
   include: typeof projectInclude;
 }>;
 
+export type ProjectTransaction = Prisma.TransactionClient;
+
 type CreateProjectData = {
   projectName: string;
   location?: string;
@@ -49,8 +51,42 @@ type UpdateProjectData = {
 export class ProjectRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  transaction<T>(work: (tx: ProjectTransaction) => Promise<T>): Promise<T> {
+    return this.prisma.$transaction(work, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+    });
+  }
+
+  lockQuotation(tx: ProjectTransaction, quotationId: string) {
+    return tx.$queryRaw<Array<{ id: string }>>`
+      SELECT "id"
+      FROM "quotation"
+      WHERE "id" = ${quotationId}
+      FOR UPDATE
+    `;
+  }
+
+  findQuotation(tx: ProjectTransaction, quotationId: string) {
+    return tx.quotation.findUnique({
+      where: { id: quotationId },
+      select: {
+        id: true,
+        leadId: true,
+        status: true,
+        projectId: true,
+      },
+    });
+  }
+
   create(data: CreateProjectData) {
     return this.prisma.project.create({
+      data,
+      include: projectInclude,
+    });
+  }
+
+  createInTransaction(tx: ProjectTransaction, data: CreateProjectData) {
+    return tx.project.create({
       data,
       include: projectInclude,
     });
@@ -80,11 +116,61 @@ export class ProjectRepository {
     });
   }
 
+  findProjectInTransaction(tx: ProjectTransaction, projectId: string) {
+    return tx.project.findUnique({
+      where: { id: projectId },
+      include: projectInclude,
+    });
+  }
+
+  findApprovedQuotation(projectId: string) {
+    return this.prisma.quotation.findFirst({
+      where: {
+        projectId,
+        status: {
+          in: [QuotationStatus.APPROVED, QuotationStatus.CONVERTED],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  }
+
   update(id: string, data: UpdateProjectData) {
     return this.prisma.project.update({
       where: { id },
       data,
       include: projectInclude,
+    });
+  }
+
+  updateInTransaction(
+    tx: ProjectTransaction,
+    projectId: string,
+    data: UpdateProjectData,
+  ) {
+    return tx.project.update({
+      where: { id: projectId },
+      data,
+      include: projectInclude,
+    });
+  }
+
+  linkQuotation(
+    tx: ProjectTransaction,
+    quotationId: string,
+    projectId: string,
+  ) {
+    return tx.quotation.update({
+      where: { id: quotationId },
+      data: { projectId },
+      select: {
+        id: true,
+        projectId: true,
+        status: true,
+      },
     });
   }
 
@@ -116,6 +202,19 @@ export class ProjectRepository {
 
   findProjectManager(userId: string) {
     return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        status: true,
+        roleId: true,
+      },
+    });
+  }
+
+  findProjectManagerInTransaction(tx: ProjectTransaction, userId: string) {
+    return tx.user.findUnique({
       where: { id: userId },
       select: {
         id: true,

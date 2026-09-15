@@ -24,6 +24,7 @@ import { ProjectQueryDto } from './dto/project-query.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { UpdateProjectStatusDto } from './dto/project-status.dto';
 import { ProjectService } from './project.service';
+import { CreateProjectFromQuotationDto } from './dto/create-project-from-quotation.dto';
 
 @ApiTags('Projects')
 @Controller('projects')
@@ -43,6 +44,27 @@ export class ProjectController {
   @ApiBadRequestResponse({ description: 'Invalid project data' })
   create(@Body() dto: CreateProjectDto) {
     return this.projectService.create(dto);
+  }
+
+  @Post('from-quotation')
+  @ApiOperation({
+    summary:
+      'Create a new project or attach an approved quotation to an existing project',
+  })
+  @ApiCreatedResponse({
+    description: 'Quotation linked successfully and project activated',
+  })
+  @ApiBadRequestResponse({
+    description: 'Invalid quotation or project conversion data',
+  })
+  @ApiNotFoundResponse({
+    description: 'Quotation, project, or project manager not found',
+  })
+  @ApiConflictResponse({
+    description: 'Quotation is already associated with a different project',
+  })
+  createFromQuotation(@Body() dto: CreateProjectFromQuotationDto) {
+    return this.projectService.createFromQuotation(dto);
   }
 
   @Get()
@@ -75,6 +97,10 @@ export class ProjectController {
   @Patch(':id/status')
   @ApiOperation({ summary: 'Update project status' })
   @ApiOkResponse({ description: 'Project status updated successfully' })
+  @ApiBadRequestResponse({
+    description:
+      'Project cannot enter ACTIVE/PLANNING because of quotation state',
+  })
   @ApiNotFoundResponse({ description: 'Project not found' })
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,

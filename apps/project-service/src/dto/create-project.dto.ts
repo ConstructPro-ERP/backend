@@ -1,8 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { ProjectStatus } from '@prisma/client';
 import {
   IsDateString,
-  IsEnum,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -42,12 +40,4 @@ export class CreateProjectDto {
   })
   @IsUUID()
   projectManagerId!: string;
-
-  @ApiPropertyOptional({
-    enum: ProjectStatus,
-    default: ProjectStatus.PLANNING,
-  })
-  @IsOptional()
-  @IsEnum(ProjectStatus)
-  status?: ProjectStatus;
 }

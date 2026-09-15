@@ -2,7 +2,7 @@
 
 **Version:** 1.0  
 **Stack:** NestJS 11 · Prisma v5 · PostgreSQL 18 (NeonDB serverless) · TypeScript  
-**Pattern:** Microservices over TCP · Shared library monorepo  
+**Pattern:** Microservices over TCP · Shared library monorepo
 
 ---
 
@@ -63,23 +63,23 @@ backend/
 
 ## 2. Tech Stack & Versions
 
-| Dependency | Version | Purpose |
-|---|---|---|
-| `@nestjs/core` | ^11 | NestJS framework |
-| `@nestjs/microservices` | ^11 | TCP transport between services |
-| `@nestjs/jwt` | ^11 | JWT signing / verification |
-| `@nestjs/passport` | ^11 | Strategy-based auth guards |
-| `@nestjs/config` | ^4 | Typed env configuration |
-| `prisma` | 5.22.0 | ORM & migration runner |
-| `@prisma/client` | 5.22.0 | Generated type-safe query client |
-| `@prisma/adapter-neon` | 5.22.0 | Neon serverless driver adapter |
-| `@neondatabase/serverless` | latest | HTTP driver for Neon Postgres |
-| `ws` | latest | WebSocket constructor for Neon Pool |
-| `bcrypt` | latest | Password hashing (12 salt rounds) |
-| `class-validator` | latest | DTO validation decorators |
-| `class-transformer` | latest | DTO transformation (plainToInstance) |
-| `joi` | latest | Environment variable schema validation |
-| `passport-jwt` | latest | JWT extraction & verification strategy |
+| Dependency                 | Version | Purpose                                |
+| -------------------------- | ------- | -------------------------------------- |
+| `@nestjs/core`             | ^11     | NestJS framework                       |
+| `@nestjs/microservices`    | ^11     | TCP transport between services         |
+| `@nestjs/jwt`              | ^11     | JWT signing / verification             |
+| `@nestjs/passport`         | ^11     | Strategy-based auth guards             |
+| `@nestjs/config`           | ^4      | Typed env configuration                |
+| `prisma`                   | 5.22.0  | ORM & migration runner                 |
+| `@prisma/client`           | 5.22.0  | Generated type-safe query client       |
+| `@prisma/adapter-neon`     | 5.22.0  | Neon serverless driver adapter         |
+| `@neondatabase/serverless` | latest  | HTTP driver for Neon Postgres          |
+| `ws`                       | latest  | WebSocket constructor for Neon Pool    |
+| `bcrypt`                   | latest  | Password hashing (12 salt rounds)      |
+| `class-validator`          | latest  | DTO validation decorators              |
+| `class-transformer`        | latest  | DTO transformation (plainToInstance)   |
+| `joi`                      | latest  | Environment variable schema validation |
+| `passport-jwt`             | latest  | JWT extraction & verification strategy |
 
 ---
 
@@ -137,20 +137,22 @@ PrismaService
 ```
 
 **`libs/database/src/prisma.service.ts`** — NestJS injectable service:
+
 - Extends `PrismaClient` with the Neon adapter injected via `super({ adapter })`
 - `onModuleInit` / `onModuleDestroy` manage connection lifecycle
 - Pool is closed cleanly on shutdown to avoid dangling WebSocket connections
 
 **`libs/database/src/prisma-client.ts`** — singleton for scripts / seeding:
+
 - Uses `globalThis` caching to prevent multiple clients in dev hot-reload
 
 ### 4.2 Migration History
 
-| # | Name | Models added |
-|---|------|-------------|
-| 1 | `add-auth-models` | `Role`, `User`, `RefreshToken`, `AuditLog` |
-| 2 | `add-crm-finance-models` | `Lead`, `Customer`, `Quotation`, `QuotationItem` |
-| 3 | `add-document-analytics-models` | `Project`, `Milestone`, `Task`, `Expense`, `Invoice`, `Payment`, `DocumentCategory`, `Document`, `AnalyticsReport` |
+| #   | Name                            | Models added                                                                                                       |
+| --- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1   | `add-auth-models`               | `Role`, `User`, `RefreshToken`, `AuditLog`                                                                         |
+| 2   | `add-crm-finance-models`        | `Lead`, `Customer`, `Quotation`, `QuotationItem`                                                                   |
+| 3   | `add-document-analytics-models` | `Project`, `Milestone`, `Task`, `Expense`, `Invoice`, `Payment`, `DocumentCategory`, `Document`, `AnalyticsReport` |
 
 Migration 3 was deferred until after Migration 2 because `Invoice` and `AnalyticsReport` carry a non-nullable FK to `Project`. All three migrations must be applied in order.
 
@@ -163,9 +165,13 @@ Auth domain
   Role ──< User ──< RefreshToken
                 └─< AuditLog
 
-CRM domain
-  User ──< Lead ──1:1── Customer ──< Quotation ──< QuotationItem
-                                              └──1:1── Project
+CRM / project initiation domain
+  User ──< Lead ──1:1── Customer
+         └──< Quotation ──< QuotationItem
+                  │
+                  └──> Project
+
+  Project 1 ──< Quotation *
 
 Operations domain
   Project ──< Milestone ──< Task
@@ -184,18 +190,30 @@ Analytics domain
   Project ──< AnalyticsReport
 ```
 
+**Project–Quotation design traceability**
+
+- **SRS FR-004:** Quotations convert into Projects.
+- **SRS §10.2:** Quotations must be approved before conversion into active Projects.
+- **SRS UC-04 (§14.4):** conversion of an approved Quotation creates an active construction Project.
+- **SDS §2.1.1:** approved Quotations may be converted into Projects.
+- **SDS §2.2.3, Tables 11–12:** documents the original single-quotation Project relationship used as the design baseline.
+- **SDS §5.2.2, Figure 18:** documents the lead → quotation → Project creation workflow.
+- **SDS §5.2.3, Figure 19:** describes operations inside an active Project.
+- **Final Design Report §4.1.2–§4.1.3:** preserves the approval-before-Project and active-Project workflow.
+- **Client-confirmed refinement:** one Project may contain multiple Quotations for separate scopes. The implemented FK therefore resides on `Quotation.projectId`; the database cardinality change was implemented by DDP-67.
+
 **Enums**
 
-| Enum | Values |
-|------|--------|
-| `UserStatus` | `ACTIVE`, `INACTIVE` |
-| `LeadStatus` | `NEW`, `CONTACTED`, `QUALIFIED`, `CONVERTED`, `LOST` |
-| `QuotationStatus` | `DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REJECTED` |
-| `ProjectStatus` | `PLANNING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
-| `MilestoneStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED` |
-| `TaskStatus` | `TODO`, `IN_PROGRESS`, `COMPLETED`, `BLOCKED` |
-| `InvoiceStatus` | `DRAFT`, `SENT`, `PAID`, `OVERDUE`, `CANCELLED` |
-| `PaymentMethod` | `CASH`, `BANK_TRANSFER`, `CHEQUE`, `ONLINE` |
+| Enum              | Values                                                           |
+| ----------------- | ---------------------------------------------------------------- |
+| `UserStatus`      | `ACTIVE`, `INACTIVE`                                             |
+| `LeadStatus`      | `NEW`, `CONTACTED`, `QUALIFIED`, `CONVERTED`, `LOST`             |
+| `QuotationStatus` | `DRAFT`, `PENDING_APPROVAL`, `APPROVED`, `REJECTED`, `CONVERTED` |
+| `ProjectStatus`   | `PLANNING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`, `CANCELLED`        |
+| `MilestoneStatus` | `PENDING`, `IN_PROGRESS`, `COMPLETED`                            |
+| `TaskStatus`      | `TODO`, `IN_PROGRESS`, `COMPLETED`, `BLOCKED`                    |
+| `InvoiceStatus`   | `DRAFT`, `SENT`, `PAID`, `OVERDUE`, `CANCELLED`                  |
+| `PaymentMethod`   | `CASH`, `BANK_TRANSFER`, `CHEQUE`, `ONLINE`                      |
 
 ---
 
@@ -205,12 +223,12 @@ All shared code lives under `libs/`. Each library is imported by the apps that n
 
 ### 5.1 libs/database
 
-| File | Purpose |
-|------|---------|
-| `prisma.service.ts` | NestJS injectable Prisma client using Neon adapter |
-| `prisma-client.ts` | Singleton for use outside NestJS DI (scripts, seeds) |
+| File                 | Purpose                                                               |
+| -------------------- | --------------------------------------------------------------------- |
+| `prisma.service.ts`  | NestJS injectable Prisma client using Neon adapter                    |
+| `prisma-client.ts`   | Singleton for use outside NestJS DI (scripts, seeds)                  |
 | `database.module.ts` | `@Global()` NestJS module — import once in root, available everywhere |
-| `index.ts` | Barrel export |
+| `index.ts`           | Barrel export                                                         |
 
 **Usage in any service:**
 
@@ -222,11 +240,11 @@ constructor(private readonly prisma: PrismaService) {}
 
 ### 5.2 libs/config
 
-| File | Purpose |
-|------|---------|
-| `env.validation.ts` | Joi schema — validates all required env vars at startup |
-| `configuration.ts` | Factory that maps `process.env` to a typed config object |
-| `config.module.ts` | Wraps `@nestjs/config` `ConfigModule.forRoot()` — import in AppModule |
+| File                | Purpose                                                               |
+| ------------------- | --------------------------------------------------------------------- |
+| `env.validation.ts` | Joi schema — validates all required env vars at startup               |
+| `configuration.ts`  | Factory that maps `process.env` to a typed config object              |
+| `config.module.ts`  | Wraps `@nestjs/config` `ConfigModule.forRoot()` — import in AppModule |
 
 **Access typed config anywhere:**
 
@@ -240,42 +258,42 @@ const port   = this.config.get<number>('services.auth.port');
 
 **Enums** (mirror Prisma enums, usable without importing Prisma):
 
-| File | Exports |
-|------|---------|
-| `enums/user-role.enum.ts` | `UserRole` |
-| `enums/project-status.enum.ts` | `ProjectStatus` |
-| `enums/task-status.enum.ts` | `TaskStatus` |
+| File                           | Exports                          |
+| ------------------------------ | -------------------------------- |
+| `enums/user-role.enum.ts`      | `UserRole`                       |
+| `enums/project-status.enum.ts` | `ProjectStatus`                  |
+| `enums/task-status.enum.ts`    | `TaskStatus`                     |
 | `enums/payment-status.enum.ts` | `PaymentMethod`, `InvoiceStatus` |
 
 **Interfaces:**
 
-| File | Exports |
-|------|---------|
-| `interfaces/jwt-payload.interface.ts` | `JwtPayload` — `{ sub, email, roleId, roleName }` |
+| File                                       | Exports                                                     |
+| ------------------------------------------ | ----------------------------------------------------------- |
+| `interfaces/jwt-payload.interface.ts`      | `JwtPayload` — `{ sub, email, roleId, roleName }`           |
 | `interfaces/service-response.interface.ts` | `ServiceResponse<T>` — standard microservice reply envelope |
-| `interfaces/pagination.interface.ts` | `PaginationQuery`, `PaginatedResult<T>` |
+| `interfaces/pagination.interface.ts`       | `PaginationQuery`, `PaginatedResult<T>`                     |
 
 **Decorators:**
 
-| Decorator | Usage |
-|-----------|-------|
-| `@CurrentUser()` | Param decorator — extracts `JwtPayload` from request |
-| `@Public()` | Marks a route as unauthenticated |
-| `@Roles(...roles)` | Marks required roles for RBAC guard |
+| Decorator          | Usage                                                |
+| ------------------ | ---------------------------------------------------- |
+| `@CurrentUser()`   | Param decorator — extracts `JwtPayload` from request |
+| `@Public()`        | Marks a route as unauthenticated                     |
+| `@Roles(...roles)` | Marks required roles for RBAC guard                  |
 
 **Exceptions:**
 
-| Class | HTTP Status |
-|-------|-------------|
-| `AppException` | 500 (base, configurable) |
+| Class                 | HTTP Status              |
+| --------------------- | ------------------------ |
+| `AppException`        | 500 (base, configurable) |
 | `ValidationException` | 422 Unprocessable Entity |
 
 **Filters & Interceptors:**
 
-| Class | Purpose |
-|-------|---------|
-| `AllRpcExceptionFilter` | Catches `RpcException` from microservice calls |
-| `LoggingInterceptor` | Logs method + URL + response time |
+| Class                          | Purpose                                             |
+| ------------------------------ | --------------------------------------------------- |
+| `AllRpcExceptionFilter`        | Catches `RpcException` from microservice calls      |
+| `LoggingInterceptor`           | Logs method + URL + response time                   |
 | `TransformResponseInterceptor` | Wraps all responses: `{ success, data, timestamp }` |
 
 ### 5.4 libs/contracts
@@ -288,7 +306,7 @@ The single source of truth for inter-service communication. Both the API Gateway
 import { AUTH_PATTERNS } from '@contracts';
 
 // Gateway → Auth Service
-this.client.send(AUTH_PATTERNS.LOGIN, payload)
+this.client.send(AUTH_PATTERNS.LOGIN, payload);
 
 // Pattern values:
 // AUTH_PATTERNS.REGISTER        → 'auth.register'
@@ -310,13 +328,14 @@ import type { LoginPayload, AuthTokensPayload } from '@contracts';
 
 ### 5.5 libs/auth
 
-| File | Purpose |
-|------|---------|
-| `password.service.ts` | `hash(plain)` / `verify(plain, hashed)` — bcrypt, 12 salt rounds |
-| `jwt.service.ts` | `signAccess(payload)`, `signRefresh(payload)`, `verifyAccess(token)`, `verifyRefresh(token)` |
-| `auth-shared.module.ts` | NestJS module — import in `AuthService` module |
+| File                    | Purpose                                                                                      |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| `password.service.ts`   | `hash(plain)` / `verify(plain, hashed)` — bcrypt, 12 salt rounds                             |
+| `jwt.service.ts`        | `signAccess(payload)`, `signRefresh(payload)`, `verifyAccess(token)`, `verifyRefresh(token)` |
+| `auth-shared.module.ts` | NestJS module — import in `AuthService` module                                               |
 
 Both tokens use separate secrets from `ConfigService`:
+
 - Access token: `JWT_SECRET` / `JWT_EXPIRY` (default 15 min)
 - Refresh token: `JWT_REFRESH_SECRET` / `JWT_REFRESH_EXPIRY` (default 7 days)
 
@@ -343,6 +362,7 @@ api-gateway :3000
 ```
 
 Each microservice:
+
 1. Imports `DatabaseModule` from `libs/database`
 2. Imports `AppConfigModule` from `libs/config`
 3. Imports `AuthSharedModule` from `libs/auth` (if it handles authenticated requests)
@@ -354,6 +374,7 @@ Each microservice:
 ## 7. Getting Started
 
 ### Prerequisites
+
 - Node.js ≥ 20
 - A Neon project (get connection strings from the Neon Console)
 
@@ -419,4 +440,4 @@ npx prisma validate
 
 ---
 
-*End of document*
+_End of document_

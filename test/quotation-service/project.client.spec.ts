@@ -12,13 +12,11 @@ describe('ProjectClient', () => {
   let client: ProjectClient;
 
   const originalProjectServiceUrl = process.env.PROJECT_SERVICE_URL;
-  const originalProjectServiceStub = process.env.PROJECT_SERVICE_STUB;
 
   beforeEach(async () => {
     jest.clearAllMocks();
 
     process.env.PROJECT_SERVICE_URL = 'http://project-service.test';
-    process.env.PROJECT_SERVICE_STUB = 'false';
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -38,12 +36,6 @@ describe('ProjectClient', () => {
       delete process.env.PROJECT_SERVICE_URL;
     } else {
       process.env.PROJECT_SERVICE_URL = originalProjectServiceUrl;
-    }
-
-    if (originalProjectServiceStub === undefined) {
-      delete process.env.PROJECT_SERVICE_STUB;
-    } else {
-      process.env.PROJECT_SERVICE_STUB = originalProjectServiceStub;
     }
   });
 
@@ -106,13 +98,14 @@ describe('ProjectClient', () => {
     const httpError = caughtError as HttpException;
 
     expect(httpError.getStatus()).toBe(404);
+
     expect(httpError.getResponse()).toMatchObject({
       code: 'PROJECT_NOT_FOUND',
       message: 'Target project not found.',
     });
   });
 
-  it('throws BadGatewayException when project-service fails', async () => {
+  it('throws BadGatewayException when project-service is unavailable', async () => {
     const loggerSpy = jest
       .spyOn(Logger.prototype, 'error')
       .mockImplementation(() => undefined);

@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Added ADR-10 (`docs/adr/ADR-10-project-activation-and-multiple-quotations.md`) to record Project activation, multiple-Quotation cardinality, retry behavior, concurrency handling, and Project budget semantics.
   - Added Project Service unit and integration coverage for standalone Project creation, quotation-driven activation, existing Project attachment, partial-conversion recovery, and concurrent conversion idempotency.
   - Added Quotation Service, ProjectClient, API Gateway, integration, and E2E coverage for the revised Project conversion workflow.
+  - Added real cross-service integration coverage for Quotation Service → ProjectClient → Project Service using the test database and actual HTTP communication.
 
 ### Changed
 
@@ -65,6 +66,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - An `APPROVED` Quotation that already contains a `projectId` is treated as a recoverable partial conversion and reuses the existing Project.
   - Project `budget` is treated independently from an individual Quotation's `totalAmount`.
   - Project and database architecture documentation now records the implemented Project 1:N Quotation relationship and its traceability to the original SRS/SDS baseline and later client-confirmed refinement.
+  - Removed the temporary `PROJECT_SERVICE_STUB` fallback now that quotation conversion is integrated with the real Project Service.
 
 ### Fixed
 

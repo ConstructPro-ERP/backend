@@ -21,7 +21,18 @@ function contextFor(
   role: string | undefined,
   handlerName: keyof ProjectsGatewayController,
 ): ExecutionContext {
-  const handler = ProjectsGatewayController.prototype[handlerName];
+  const descriptor = Object.getOwnPropertyDescriptor(
+    ProjectsGatewayController.prototype,
+    handlerName,
+  );
+
+  const handler = descriptor?.value as unknown;
+
+  if (typeof handler !== 'function') {
+    throw new Error(
+      `Could not resolve ProjectsGatewayController.${String(handlerName)}`,
+    );
+  }
 
   return {
     switchToHttp: () => ({
@@ -29,7 +40,7 @@ function contextFor(
         user: role ? { role } : undefined,
       }),
     }),
-    getHandler: () => handler as unknown as () => void,
+    getHandler: () => handler,
     getClass: () => ProjectsGatewayController,
   } as unknown as ExecutionContext;
 }

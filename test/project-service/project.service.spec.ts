@@ -90,6 +90,29 @@ function createNeonSerializationConflict() {
   );
 }
 
+function createPrismaTransactionConflict() {
+  return new Prisma.PrismaClientKnownRequestError(
+    'Transaction failed due to a write conflict',
+    {
+      code: 'P2034',
+      clientVersion: '7.10.0',
+    },
+  );
+}
+
+function createDirectSqlStateSerializationConflict() {
+  return new Prisma.PrismaClientKnownRequestError(
+    'Raw query failed with SQLSTATE 40001',
+    {
+      code: 'P2010',
+      clientVersion: '7.10.0',
+      meta: {
+        code: '40001',
+      },
+    },
+  );
+}
+
 describe('ProjectService', () => {
   let service: ProjectService;
 
@@ -427,6 +450,129 @@ describe('ProjectService', () => {
       });
 
       expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('retries when Prisma reports a P2034 transaction conflict', async () => {
+      // Arrange
+      mockProjectRepository.transaction
+        .mockRejectedValueOnce(createPrismaTransactionConflict())
+        .mockImplementationOnce(
+          (work: (tx: ProjectTransaction) => Promise<unknown>) =>
+            work(fakeTransaction),
+        );
+
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: 'project-1',
+      });
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      // Act
+      const result = await service.createFromQuotation({
+        quotationId: 'quotation-1',
+        leadId: 'lead-1',
+      });
+
+      // Assert
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(2);
+
+      expect(result).toEqual({
+        projectId: 'project-1',
+        status: ProjectStatus.ACTIVE,
+      });
+
+      expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('retries when P2010 exposes PostgreSQL 40001 directly in meta', async () => {
+      // Arrange
+      mockProjectRepository.transaction
+        .mockRejectedValueOnce(createDirectSqlStateSerializationConflict())
+        .mockImplementationOnce(
+          (work: (tx: ProjectTransaction) => Promise<unknown>) =>
+            work(fakeTransaction),
+        );
+
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: 'project-1',
+      });
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      // Act
+      const result = await service.createFromQuotation({
+        quotationId: 'quotation-1',
+        leadId: 'lead-1',
+      });
+
+      // Assert
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(2);
+
+      expect(result).toEqual({
+        projectId: 'project-1',
+        status: ProjectStatus.ACTIVE,
+      });
+    });
+
+    it('does not retry a non-retryable Prisma error', async () => {
+      // Arrange
+      const nonRetryableError = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        {
+          code: 'P2002',
+          clientVersion: '7.10.0',
+        },
+      );
+
+      mockProjectRepository.transaction.mockRejectedValue(nonRetryableError);
+
+      // Act / Assert
+      await expect(
+        service.createFromQuotation({
+          quotationId: 'quotation-1',
+          leadId: 'lead-1',
+        }),
+      ).rejects.toBe(nonRetryableError);
+
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry P2010 when it is not a serialization conflict', async () => {
+      // Arrange
+      const nonSerializationError = new Prisma.PrismaClientKnownRequestError(
+        'Raw query failed with a non-retryable database error',
+        {
+          code: 'P2010',
+          clientVersion: '7.10.0',
+          meta: {
+            code: '23505',
+          },
+        },
+      );
+
+      mockProjectRepository.transaction.mockRejectedValue(
+        nonSerializationError,
+      );
+
+      // Act / Assert
+      await expect(
+        service.createFromQuotation({
+          quotationId: 'quotation-1',
+          leadId: 'lead-1',
+        }),
+      ).rejects.toBe(nonSerializationError);
+
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(1);
     });
 
     it('throws a concurrency conflict after three serialization failures', async () => {

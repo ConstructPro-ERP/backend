@@ -24,34 +24,18 @@ interface AxiosErrorShape {
   };
 }
 
-/**
- * TEMPORARY STUB: When PROJECT_SERVICE_STUB=true, returns a fake projectId
- * without calling the real project service. Remove once project-service is live.
- */
 @Injectable()
 export class ProjectClient {
   private readonly logger = new Logger(ProjectClient.name);
+
   private readonly baseUrl =
     process.env.PROJECT_SERVICE_URL ?? 'http://localhost:3003';
-  private readonly useStub = process.env.PROJECT_SERVICE_STUB === 'true';
 
   constructor(private readonly httpService: HttpService) {}
 
   async createFromQuotation(
     payload: CreateProjectFromQuotationPayload,
   ): Promise<CreateProjectFromQuotationResponse> {
-    if (this.useStub) {
-      this.logger.warn(
-        `[STUB] PROJECT_SERVICE_STUB=true — returning fake projectId for quotation ${payload.quotationId}`,
-      );
-
-      return {
-        projectId:
-          payload.targetProjectId ?? `stub-project-${payload.quotationId}`,
-        status: 'ACTIVE',
-      };
-    }
-
     try {
       const response = await firstValueFrom(
         this.httpService.post<CreateProjectFromQuotationResponse>(

@@ -18,13 +18,52 @@ const mockProjectClient = {
 describe('Quotation E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
-  let leadId: string;
+  let leadId = '';
   let realProjectId: string;
+  let fixtureUserId: string;
+  let fixtureRoleId: string;
 
-  async function cleanQuotations() {
-    await prisma.quotationItem.deleteMany();
-    await prisma.quotation.deleteMany();
-    await prisma.lead.deleteMany();
+  const runId = Date.now().toString();
+
+  async function cleanupLead(leadIdToDelete: string) {
+    if (!leadIdToDelete) {
+      return;
+    }
+
+    const quotations = await prisma.quotation.findMany({
+      where: {
+        leadId: leadIdToDelete,
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    const quotationIds = quotations.map((quotation) => quotation.id);
+
+    if (quotationIds.length > 0) {
+      await prisma.quotationItem.deleteMany({
+        where: {
+          quotationId: {
+            in: quotationIds,
+          },
+        },
+      });
+
+      await prisma.quotation.deleteMany({
+        where: {
+          id: {
+            in: quotationIds,
+          },
+        },
+      });
+    }
+
+    await prisma.lead.deleteMany({
+      where: {
+        id: leadIdToDelete,
+      },
+    });
   }
 
   beforeAll(async () => {
@@ -44,30 +83,38 @@ describe('Quotation E2E', () => {
     prisma = module.get<PrismaService>(PrismaService);
 
     // Create Role → User → Project so realProjectId satisfies the FK on Quotation.projectId
-    const suffix = Date.now();
     const role = await prisma.role.create({
-      data: { roleName: `e2e-role-${suffix}` },
+      data: {
+        roleName: `e2e-role-${runId}`,
+      },
     });
+
+    fixtureRoleId = role.id;
+
     const user = await prisma.user.create({
       data: {
         fullName: 'E2E Project Manager',
-        email: `e2e-pm-${suffix}@test.com`,
+        email: `e2e-pm-${runId}@test.com`,
         password: 'hashed',
         roleId: role.id,
       },
     });
+
+    fixtureUserId = user.id;
+
     const project = await prisma.project.create({
       data: {
-        projectName: 'E2E Test Project',
+        projectName: `E2E Test Project ${runId}`,
         startDate: new Date(),
         projectManagerId: user.id,
       },
     });
+
     realProjectId = project.id;
 
     mockProjectClient.createFromQuotation.mockResolvedValue({
       projectId: realProjectId,
-      status: 'PLANNING',
+      status: 'ACTIVE',
     });
 
     app = module.createNestApplication();
@@ -83,20 +130,51 @@ describe('Quotation E2E', () => {
   });
 
   afterAll(async () => {
-    await cleanQuotations();
+    await cleanupLead(leadId);
+
+    if (realProjectId) {
+      await prisma.project.deleteMany({
+        where: {
+          id: realProjectId,
+        },
+      });
+    }
+
+    if (fixtureUserId) {
+      await prisma.user.deleteMany({
+        where: {
+          id: fixtureUserId,
+        },
+      });
+    }
+
+    if (fixtureRoleId) {
+      await prisma.role.deleteMany({
+        where: {
+          id: fixtureRoleId,
+        },
+      });
+    }
+
     await app.close();
   });
 
   beforeEach(async () => {
-    await cleanQuotations();
+    await cleanupLead(leadId);
+
     const lead = await prisma.lead.create({
-      data: { customerName: 'E2E Lead Corp', status: 'QUALIFIED' },
+      data: {
+        customerName: `E2E Lead ${runId}`,
+        status: 'QUALIFIED',
+      },
     });
+
     leadId = lead.id;
   });
 
   afterEach(async () => {
-    await cleanQuotations();
+    await cleanupLead(leadId);
+    leadId = '';
   });
 
   // ─── POST /quotations ──────────────────────────────────────────────────────
@@ -221,7 +299,7 @@ describe('Quotation E2E', () => {
   // ─── PATCH /quotations/:id/approve ────────────────────────────────────────
 
   describe('PATCH /quotations/:id/approve', () => {
-    it('TC-E2E-009: returns 200 and flips status to CONVERTED with a projectId', async () => {
+    it('TC-E2E-009: returns 200 and converts quotation using an existing project', async () => {
       const quotation = await prisma.quotation.create({
         data: {
           leadId,
@@ -242,15 +320,25 @@ describe('Quotation E2E', () => {
 
       const res = await request(app.getHttpServer())
         .patch(`/quotations/${quotation.id}/approve`)
+        .send({
+          targetProjectId: realProjectId,
+        })
         .expect(200);
 
-      // approveAndConvert returns { quotation: Quotation, projectId: string }
       expect(res.body.quotation.status).toBe('CONVERTED');
-      expect(res.body.projectId).toBeDefined();
+      expect(res.body.projectId).toBe(realProjectId);
+      expect(res.body.projectStatus).toBe('ACTIVE');
+
+      expect(mockProjectClient.createFromQuotation).toHaveBeenLastCalledWith({
+        quotationId: quotation.id,
+        leadId,
+        targetProjectId: realProjectId,
+      });
 
       const db = await prisma.quotation.findUnique({
         where: { id: quotation.id },
       });
+
       expect(db!.status).toBe('CONVERTED');
       expect(db!.projectId).toBe(realProjectId);
     });
@@ -280,6 +368,75 @@ describe('Quotation E2E', () => {
         .expect(409);
 
       expect(res.body.code).toBe('ALREADY_CONVERTED');
+    });
+
+    it('TC-E2E-011: resumes an APPROVED quotation already linked to a project', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 7000,
+          status: 'APPROVED',
+          projectId: realProjectId,
+          items: {
+            create: [
+              {
+                itemName: 'House Design',
+                quantity: 1,
+                unitPrice: 7000,
+                amount: 7000,
+              },
+            ],
+          },
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/approve`)
+        .expect(200);
+
+      expect(res.body.projectId).toBe(realProjectId);
+      expect(res.body.projectStatus).toBe('ACTIVE');
+      expect(res.body.quotation.status).toBe('CONVERTED');
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+
+      expect(db!.projectId).toBe(realProjectId);
+      expect(db!.status).toBe('CONVERTED');
+    });
+
+    it('TC-E2E-012: returns 400 when no existing project or new project details are provided', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 9500,
+          status: 'PENDING_APPROVAL',
+          items: {
+            create: [
+              {
+                itemName: '3D Visualization',
+                quantity: 1,
+                unitPrice: 9500,
+                amount: 9500,
+              },
+            ],
+          },
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/approve`)
+        .expect(400);
+
+      expect(res.body.code).toBe('PROJECT_DETAILS_REQUIRED');
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+
+      expect(db!.status).toBe('PENDING_APPROVAL');
+      expect(db!.projectId).toBeNull();
     });
   });
 });

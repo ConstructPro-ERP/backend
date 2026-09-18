@@ -10,6 +10,7 @@ import { DocumentClient } from './document.client';
 import { ProjectClient } from './project.client';
 import { NotificationClient } from './notification.client';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
+import { ApproveQuotationDto } from './dto/approve-quotation.dto';
 
 @Injectable()
 export class QuotationService {
@@ -87,7 +88,7 @@ export class QuotationService {
     return quotation;
   }
 
-  async approveAndConvert(id: string) {
+  async approveAndConvert(id: string, dto: ApproveQuotationDto) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
       include: { items: true },
@@ -100,8 +101,7 @@ export class QuotationService {
       });
     }
 
-    // BR 10.2 + idempotency — check BEFORE any writes or external calls
-    if (quotation.status === 'CONVERTED' || quotation.projectId !== null) {
+    if (quotation.status === 'CONVERTED') {
       throw new ConflictException({
         code: 'ALREADY_CONVERTED',
         message: 'Quotation has already been converted to a project.',
@@ -115,37 +115,81 @@ export class QuotationService {
       });
     }
 
-    // Mark APPROVED
-    await this.prisma.quotation.update({
-      where: { id },
-      data: { status: 'APPROVED' },
-    });
+    if (
+      quotation.projectId &&
+      dto.targetProjectId &&
+      quotation.projectId !== dto.targetProjectId
+    ) {
+      throw new ConflictException({
+        code: 'QUOTATION_PROJECT_MISMATCH',
+        message: 'Quotation is already linked to a different project.',
+      });
+    }
 
-    // Call project service — throws BadGatewayException on failure (safe to retry)
-    const { projectId } = await this.projectClient.createFromQuotation(
-      id,
-      quotation.leadId,
-      Number(quotation.totalAmount),
-    );
+    const targetProjectId = quotation.projectId ?? dto.targetProjectId;
 
-    // Only mark CONVERTED after the project service confirmed success
+    if (
+      !targetProjectId &&
+      (!dto.projectName || !dto.startDate || !dto.projectManagerId)
+    ) {
+      throw new BadRequestException({
+        code: 'PROJECT_DETAILS_REQUIRED',
+        message:
+          'projectName, startDate, and projectManagerId are required when creating a new project.',
+      });
+    }
+
+    if (quotation.status !== 'APPROVED') {
+      await this.prisma.quotation.update({
+        where: { id },
+        data: { status: 'APPROVED' },
+      });
+    }
+
+    const projectResult = targetProjectId
+      ? await this.projectClient.createFromQuotation({
+          quotationId: id,
+          leadId: quotation.leadId,
+          targetProjectId,
+        })
+      : await this.projectClient.createFromQuotation({
+          quotationId: id,
+          leadId: quotation.leadId,
+          projectName: dto.projectName,
+          location: dto.location,
+          startDate: dto.startDate,
+          endDate: dto.endDate,
+          projectManagerId: dto.projectManagerId,
+          budget: dto.budget,
+        });
+
     const converted = await this.prisma.quotation.update({
       where: { id },
-      data: { status: 'CONVERTED', projectId },
+      data: {
+        status: 'CONVERTED',
+        projectId: projectResult.projectId,
+      },
       include: { items: true },
     });
 
-    // Best-effort notification — failure must not fail the conversion
     try {
-      await this.notificationClient.notifyProjectCreated(id, projectId);
+      await this.notificationClient.notifyProjectCreated(
+        id,
+        projectResult.projectId,
+      );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
+
       this.logger.warn(
         `Notification error after converting quotation ${id}: ${msg}`,
       );
     }
 
-    return { quotation: converted, projectId };
+    return {
+      quotation: converted,
+      projectId: projectResult.projectId,
+      projectStatus: projectResult.status,
+    };
   }
 }
 

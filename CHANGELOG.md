@@ -36,6 +36,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit: `DocumentClient` HTTP success, failure, missing pdfUrl field
   - Integration (real test DB): POST 201 + DB row verification, POST 400 validations, GET 200 + 404
 
+- **Issue #65 — Project Domain Foundation and Quotation Conversion**
+  - Added `POST /projects/from-quotation` to support Project creation from an approved Quotation or attachment of an approved Quotation to an existing Project.
+  - Added `CreateProjectFromQuotationDto` for quotation-driven Project conversion requests.
+  - Added shared Project conversion request and response contracts for communication between quotation-service and project-service.
+  - Added Project Service transaction handling for quotation conversion using `SERIALIZABLE` isolation and `SELECT ... FOR UPDATE` row locking.
+  - Added retry handling for Prisma transaction conflicts and PostgreSQL serialization conflicts surfaced through the Neon driver adapter.
+  - Added ADR-10 (`docs/adr/ADR-10-project-activation-and-multiple-quotations.md`) to record Project activation, multiple-Quotation cardinality, retry behavior, concurrency handling, and Project budget semantics.
+  - Added Project Service unit and integration coverage for standalone Project creation, quotation-driven activation, existing Project attachment, partial-conversion recovery, and concurrent conversion idempotency.
+  - Added Quotation Service, ProjectClient, API Gateway, integration, and E2E coverage for the revised Project conversion workflow.
+  - Added real cross-service integration coverage for Quotation Service → ProjectClient → Project Service using the test database and actual HTTP communication.
+
 ### Changed
 
 - `docker-compose.yml` — added `api-gateway`, `auth-service`, and `quotation-service` service definitions (file was previously empty)
@@ -44,6 +55,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `package.json` — added `start:dev:quotation-service` script; installed `@nestjs/axios` and `axios` (were listed as dependencies but not installed)
 - `src/database/__tests__/database.spec.ts` — updated `Quotation` tests to use `leadId` (schema migration)
 
+- **Issue #65 — Project lifecycle and Quotation conversion**
+  - Standalone Projects now start in `PLANNING` status.
+  - A Project created from an approved Quotation is created as `ACTIVE`.
+  - An approved Quotation may create a new Project or attach to an existing Project.
+  - A `PLANNING` Project becomes `ACTIVE` when an associated Quotation reaches `APPROVED` or `CONVERTED`.
+  - Automatic quotation-driven activation is limited to `PLANNING → ACTIVE` and does not overwrite `ON_HOLD`, `COMPLETED`, or `CANCELLED`.
+  - Multiple Quotations may belong to the same Project while each Quotation references at most one Project.
+  - Quotation approval requests now forward Project conversion details through the API Gateway and quotation-service.
+  - An `APPROVED` Quotation that already contains a `projectId` is treated as a recoverable partial conversion and reuses the existing Project.
+  - Project `budget` is treated independently from an individual Quotation's `totalAmount`.
+  - Project and database architecture documentation now records the implemented Project 1:N Quotation relationship and its traceability to the original SRS/SDS baseline and later client-confirmed refinement.
+  - Removed the temporary `PROJECT_SERVICE_STUB` fallback now that quotation conversion is integrated with the real Project Service.
+
 ### Fixed
 
 - Installed missing `@nestjs/axios` package (was declared in `package.json` but absent from `node_modules`, causing TypeScript errors across all HTTP-using guards and controllers)
@@ -51,3 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Changed Project → Quotation from one-to-one to one-to-many based on client-confirmed requirements.
   - Removed the unique constraint on `quotation.projectId` and added a non-unique index.
   - Updated affected invoice validation and database tests for multiple quotations per project.
+
+- **Issue #65 — Project conversion reliability**
+  - Prevented duplicate Projects when the same approved Quotation is converted concurrently.
+  - Added retry support for PostgreSQL `40001` serialization conflicts returned through Prisma and the Neon driver adapter.
+  - Scoped Quotation integration and E2E database cleanup to suite-owned fixtures so parallel test suites no longer delete each other's Leads and Quotations.

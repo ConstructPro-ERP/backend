@@ -328,19 +328,31 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       .mockResolvedValueOnce(convertedQuotation);
     mockProjectClient.createFromQuotation.mockResolvedValue({
       projectId: 'proj-abc',
-      status: 'PLANNING',
+      status: 'ACTIVE',
     });
     mockNotificationClient.notifyProjectCreated.mockResolvedValue(undefined);
 
     // Act
-    const result = await service.approveAndConvert('quot-1');
+    const result = await service.approveAndConvert('quot-1', {
+      projectName: 'House Construction Project',
+      location: 'Colombo',
+      startDate: '2026-10-01T00:00:00.000Z',
+      endDate: '2027-04-30T00:00:00.000Z',
+      projectManagerId: 'manager-uuid-1',
+      budget: 5000000,
+    });
 
-    // Assert — ProjectClient called with quotation's own data
-    expect(mockProjectClient.createFromQuotation).toHaveBeenCalledWith(
-      'quot-1',
-      'lead-uuid-1',
-      5000,
-    );
+    // Assert — ProjectClient called with quotation and project data
+    expect(mockProjectClient.createFromQuotation).toHaveBeenCalledWith({
+      quotationId: 'quot-1',
+      leadId: 'lead-uuid-1',
+      projectName: 'House Construction Project',
+      location: 'Colombo',
+      startDate: '2026-10-01T00:00:00.000Z',
+      endDate: '2027-04-30T00:00:00.000Z',
+      projectManagerId: 'manager-uuid-1',
+      budget: 5000000,
+    });
 
     // second prisma update must flip to CONVERTED and store projectId
     expect(mockPrisma.quotation.update).toHaveBeenNthCalledWith(
@@ -352,6 +364,7 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
 
     // returned projectId must match the one from ProjectClient
     expect(result.projectId).toBe('proj-abc');
+    expect(result.projectStatus).toBe('ACTIVE');
 
     // notification sent with quotation id and project id
     expect(mockNotificationClient.notifyProjectCreated).toHaveBeenCalledWith(
@@ -369,13 +382,15 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     });
 
     // When / Then
-    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
-      ConflictException,
-    );
+    await expect(
+      service.approveAndConvert('quot-1', {}),
+    ).rejects.toBeInstanceOf(ConflictException);
 
-    await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
-      response: { code: 'ALREADY_CONVERTED' },
-    });
+    await expect(service.approveAndConvert('quot-1', {})).rejects.toMatchObject(
+      {
+        response: { code: 'ALREADY_CONVERTED' },
+      },
+    );
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -386,21 +401,71 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
 
     // When / Then
     await expect(
-      service.approveAndConvert('missing-quot'),
+      service.approveAndConvert('missing-quot', {}),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('should throw ConflictException when projectId is already set even if status differs (BR-10.2)', async () => {
-    // Given — projectId is set but status is still APPROVED (partial state)
-    mockPrisma.quotation.findUnique.mockResolvedValue({
+  it('should continue conversion when an APPROVED quotation already has a projectId', async () => {
+    // Arrange — quotation was linked before a previous conversion attempt stopped
+    const approvedQuotation = {
       ...pendingQuotation,
       status: 'APPROVED',
       projectId: 'existing-proj',
+    };
+
+    mockPrisma.quotation.findUnique.mockResolvedValue(approvedQuotation);
+    mockProjectClient.createFromQuotation.mockResolvedValue({
+      projectId: 'existing-proj',
+      status: 'ACTIVE',
+    });
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...approvedQuotation,
+      status: 'CONVERTED',
+    });
+    mockNotificationClient.notifyProjectCreated.mockResolvedValue(undefined);
+
+    // Act
+    const result = await service.approveAndConvert('quot-1', {});
+
+    // Assert — existing project must be reused
+    expect(mockProjectClient.createFromQuotation).toHaveBeenCalledWith({
+      quotationId: 'quot-1',
+      leadId: 'lead-uuid-1',
+      targetProjectId: 'existing-proj',
     });
 
-    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
-      ConflictException,
+    expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          status: 'CONVERTED',
+          projectId: 'existing-proj',
+        },
+      }),
     );
+
+    expect(result.projectId).toBe('existing-proj');
+    expect(result.projectStatus).toBe('ACTIVE');
+  });
+
+  it('should throw ConflictException when quotation is already linked to a different project', async () => {
+    // Arrange
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      ...pendingQuotation,
+      status: 'APPROVED',
+      projectId: 'project-1',
+    });
+
+    // Act / Assert
+    await expect(
+      service.approveAndConvert('quot-1', {
+        targetProjectId: 'project-2',
+      }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'QUOTATION_PROJECT_MISMATCH',
+      },
+    });
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -411,13 +476,33 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       status: 'REJECTED',
     });
 
-    await expect(service.approveAndConvert('quot-1')).rejects.toBeInstanceOf(
-      BadRequestException,
+    await expect(
+      service.approveAndConvert('quot-1', {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(service.approveAndConvert('quot-1', {})).rejects.toMatchObject(
+      {
+        response: { code: 'QUOTATION_REJECTED' },
+      },
     );
 
-    await expect(service.approveAndConvert('quot-1')).rejects.toMatchObject({
-      response: { code: 'QUOTATION_REJECTED' },
-    });
+    expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
+  });
+
+  it('should throw BadRequestException when creating a new project without required project details', async () => {
+    // Arrange — quotation has no existing project
+    mockPrisma.quotation.findUnique.mockResolvedValue(pendingQuotation);
+
+    // Act / Assert
+    await expect(
+      service.approveAndConvert('quot-1', {}),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(service.approveAndConvert('quot-1', {})).rejects.toMatchObject(
+      {
+        response: { code: 'PROJECT_DETAILS_REQUIRED' },
+      },
+    );
 
     expect(mockProjectClient.createFromQuotation).not.toHaveBeenCalled();
   });
@@ -430,17 +515,23 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       .mockResolvedValueOnce(convertedQuotation);
     mockProjectClient.createFromQuotation.mockResolvedValue({
       projectId: 'proj-abc',
-      status: 'PLANNING',
+      status: 'ACTIVE',
     });
     mockNotificationClient.notifyProjectCreated.mockRejectedValue(
       new Error('notification service down'),
     );
 
     // Act
-    const result = await service.approveAndConvert('quot-1');
+    const result = await service.approveAndConvert('quot-1', {
+      projectName: 'House Construction Project',
+      startDate: '2026-10-01T00:00:00.000Z',
+      projectManagerId: 'manager-uuid-1',
+      budget: 5000000,
+    });
 
     // Assert — conversion succeeds despite notification failure
     expect(result.projectId).toBe('proj-abc');
+    expect(result.projectStatus).toBe('ACTIVE');
     expect(result.quotation.status).toBe('CONVERTED');
   });
 
@@ -456,9 +547,14 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     );
 
     // Act / Assert
-    await expect(service.approveAndConvert('quot-1')).rejects.toThrow(
-      'project service down',
-    );
+    await expect(
+      service.approveAndConvert('quot-1', {
+        projectName: 'House Construction Project',
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: 'manager-uuid-1',
+        budget: 5000000,
+      }),
+    ).rejects.toThrow('project service down');
 
     // second update (CONVERTED + projectId) must NOT have been called
     expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);

@@ -27,6 +27,7 @@
     "dev:ai-service": "ts-node -r tsconfig-paths/register apps/ai-service/src/main.ts",
     "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
     "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
+    "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
 
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
@@ -39,6 +40,7 @@
     "start:ai-service": "node dist/apps/ai-service/src/main.js",
     "start:client-service": "node dist/apps/client-service/src/main.js",
     "start:lead-service": "node dist/apps/lead-service/src/main.js",
+    "start:project-service": "node dist/apps/project-service/src/main.js",
 
     "start:vercel": "node dist/server.js",
 

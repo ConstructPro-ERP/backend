@@ -65,6 +65,7 @@ enum QuotationStatus {
   PENDING_APPROVAL
   APPROVED
   REJECTED
+  CONVERTED
 }
 
 enum ProjectStatus {
@@ -104,6 +105,8 @@ enum PaymentMethod {
 }
 ```
 
+> **Traceability:** `APPROVED` represents the approval prerequisite defined by SRS §10.2 Quotation Approval Policy and UC-04 (§14.4). `CONVERTED` is an implementation lifecycle state used after the approved Quotation has been successfully associated with a Project. The SDS §4.3 sequence and §5.2.2 lead-quotation-project flow describe the same approval-to-project transition at design level.
+
 ---
 
 ## 2. Model Definitions
@@ -121,8 +124,8 @@ All models apply the following conventions:
 
 **Source:** SDS Table 1 (§2.2.1) and Table 8 (§2.2.3)
 
-| Field       | Prisma Type | Nullable | Unique | Description                        |
-|-------------|-------------|----------|--------|------------------------------------|
+| Field       | Prisma Type | Nullable | Unique | Description                       |
+| ----------- | ----------- | -------- | ------ | --------------------------------- |
 | id          | String      | No       | Yes    | PK, UUID                          |
 | roleName    | String      | No       | Yes    | Maps to `role_name` (Tables 1, 8) |
 | description | String      | Yes      | No     | Maps to `description` (Table 1)   |
@@ -147,16 +150,16 @@ model Role {
 
 **Source:** SDS Table 2 (§2.2.1) and Table 7 (§2.2.3); `password` from Class Diagram §3.1
 
-| Field     | Prisma Type | Nullable | Unique | Description                                                  |
-|-----------|-------------|----------|--------|--------------------------------------------------------------|
-| id        | String      | No       | Yes    | PK, UUID                                                    |
-| fullName  | String      | No       | No     | Maps to `full_name` (Tables 2, 7)                           |
-| email     | String      | No       | Yes    | Maps to `email` (Table 2)                                   |
-| password  | String      | No       | No     | Bcrypt-hashed credential; from Class Diagram §3.1           |
-| roleId    | String      | No       | No     | FK → Role.id; maps to `role_id` (Tables 2, 7)              |
-| status    | UserStatus  | No       | No     | Enum: ACTIVE \| INACTIVE; maps to `status` (Table 2)       |
-| createdAt | DateTime    | No       | No     | Auto-set on insert                                          |
-| updatedAt | DateTime    | No       | No     | Auto-updated on every write                                 |
+| Field     | Prisma Type | Nullable | Unique | Description                                          |
+| --------- | ----------- | -------- | ------ | ---------------------------------------------------- |
+| id        | String      | No       | Yes    | PK, UUID                                             |
+| fullName  | String      | No       | No     | Maps to `full_name` (Tables 2, 7)                    |
+| email     | String      | No       | Yes    | Maps to `email` (Table 2)                            |
+| password  | String      | No       | No     | Bcrypt-hashed credential; from Class Diagram §3.1    |
+| roleId    | String      | No       | No     | FK → Role.id; maps to `role_id` (Tables 2, 7)        |
+| status    | UserStatus  | No       | No     | Enum: ACTIVE \| INACTIVE; maps to `status` (Table 2) |
+| createdAt | DateTime    | No       | No     | Auto-set on insert                                   |
+| updatedAt | DateTime    | No       | No     | Auto-updated on every write                          |
 
 ```prisma
 model User {
@@ -186,16 +189,16 @@ model User {
 
 **Source:** SDS Table 3 (§2.2.1) and Table 9 (§2.2.3)
 
-| Field        | Prisma Type | Nullable | Unique | Description                                                        |
-|--------------|-------------|----------|--------|--------------------------------------------------------------------|
-| id           | String      | No       | Yes    | PK, UUID                                                          |
-| customerName | String      | No       | No     | Maps to `customer_name` (Tables 3, 9)                             |
-| phone        | String      | Yes      | No     | Maps to `phone` (Tables 3, 9)                                     |
-| email        | String      | Yes      | No     | Maps to `email` (Table 3)                                         |
-| assignedToId | String      | Yes      | No     | FK → User.id; maps to `assigned_to` (Table 3)                    |
-| status       | LeadStatus  | No       | No     | Enum: lead lifecycle; implied by CRM described in §2.1.1          |
-| createdAt    | DateTime    | No       | No     | Auto-set on insert                                                |
-| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                                       |
+| Field        | Prisma Type | Nullable | Unique | Description                                              |
+| ------------ | ----------- | -------- | ------ | -------------------------------------------------------- |
+| id           | String      | No       | Yes    | PK, UUID                                                 |
+| customerName | String      | No       | No     | Maps to `customer_name` (Tables 3, 9)                    |
+| phone        | String      | Yes      | No     | Maps to `phone` (Tables 3, 9)                            |
+| email        | String      | Yes      | No     | Maps to `email` (Table 3)                                |
+| assignedToId | String      | Yes      | No     | FK → User.id; maps to `assigned_to` (Table 3)            |
+| status       | LeadStatus  | No       | No     | Enum: lead lifecycle; implied by CRM described in §2.1.1 |
+| createdAt    | DateTime    | No       | No     | Auto-set on insert                                       |
+| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                              |
 
 ```prisma
 model Lead {
@@ -219,13 +222,13 @@ model Lead {
 
 **Source:** SDS Table 10 (§2.2.3)
 
-| Field     | Prisma Type | Nullable | Unique | Description                                              |
-|-----------|-------------|----------|--------|----------------------------------------------------------|
-| id        | String      | No       | Yes    | PK, UUID                                                |
-| leadId    | String      | Yes      | Yes    | FK → Lead.id; maps to `lead_id` (Table 10); one-to-one  |
-| fullName  | String      | No       | No     | Maps to `full_name` (Table 10)                          |
-| createdAt | DateTime    | No       | No     | Auto-set on insert                                      |
-| updatedAt | DateTime    | No       | No     | Auto-updated on every write                             |
+| Field     | Prisma Type | Nullable | Unique | Description                                            |
+| --------- | ----------- | -------- | ------ | ------------------------------------------------------ |
+| id        | String      | No       | Yes    | PK, UUID                                               |
+| leadId    | String      | Yes      | Yes    | FK → Lead.id; maps to `lead_id` (Table 10); one-to-one |
+| fullName  | String      | No       | No     | Maps to `full_name` (Table 10)                         |
+| createdAt | DateTime    | No       | No     | Auto-set on insert                                     |
+| updatedAt | DateTime    | No       | No     | Auto-updated on every write                            |
 
 ```prisma
 model Customer {
@@ -246,31 +249,42 @@ model Customer {
 
 ### 2.5 Quotation
 
-**Source:** SDS Table 12 (§2.2.3); `customerId` and `status` inferred from ER description §2.1.1 ("detailed pricing information for services or products offered to the client")
+**Source:** SDS Table 12 (§2.2.3) and ER description (§2.1.1); quotation approval/conversion lifecycle from SRS §3.2, Business Rule §10.2, and UC-04 (§14.4).
 
-| Field         | Prisma Type     | Nullable | Unique | Description                                            |
-|---------------|-----------------|----------|--------|--------------------------------------------------------|
-| id            | String          | No       | Yes    | PK, UUID                                              |
-| customerId    | String          | No       | No     | FK → Customer.id; implied by §2.1.1                  |
-| quotationDate | DateTime        | No       | No     | Maps to `quotation_date` (Table 12)                   |
-| totalAmount   | Float           | No       | No     | Maps to `total_amount` (Table 12)                     |
-| status        | QuotationStatus | No       | No     | Enum: approval workflow; implied by §2.1.1            |
-| createdAt     | DateTime        | No       | No     | Auto-set on insert                                    |
-| updatedAt     | DateTime        | No       | No     | Auto-updated on every write                           |
+> **Implementation refinement:** The original SDS normalization example stores `quotation_id` in Project (Table 11). Following the client-confirmed requirement that one Project may contain multiple Quotations for different scopes of work, the implemented foreign key is `Quotation.projectId`. Therefore, many Quotations may reference one Project, while each individual Quotation references at most one Project. See §5 Deviations from ER Diagram.
+
+| Field         | Prisma Type     | Nullable | Unique | Description                                                                          |
+| ------------- | --------------- | -------- | ------ | ------------------------------------------------------------------------------------ |
+| id            | String          | No       | Yes    | PK, UUID                                                                             |
+| leadId        | String          | No       | No     | FK → Lead.id; aligns with the lead-to-quotation workflow in SRS §14.3 and SDS §5.2.2 |
+| quotationDate | DateTime        | No       | No     | Quotation creation date; based on SDS Table 12 (§2.2.3)                              |
+| status        | QuotationStatus | No       | No     | Approval/conversion lifecycle; SRS §10.2 and §14.4                                   |
+| totalAmount   | Decimal         | No       | No     | Quotation total; `Decimal(12,2)`                                                     |
+| pdfUrl        | String          | Yes      | No     | Generated quotation PDF URL                                                          |
+| notes         | String          | Yes      | No     | Optional quotation notes                                                             |
+| projectId     | String          | Yes      | No     | FK → Project.id; implemented 1:N Project→Quotation refinement                        |
+| createdAt     | DateTime        | No       | No     | Auto-set on insert                                                                   |
+| updatedAt     | DateTime        | No       | No     | Auto-updated                                                                         |
 
 ```prisma
 model Quotation {
   id            String          @id @default(uuid())
-  customerId    String
-  quotationDate DateTime
-  totalAmount   Float
-  status        QuotationStatus @default(DRAFT)
+  leadId        String
+  quotationDate DateTime        @default(now())
+  status        QuotationStatus @default(PENDING_APPROVAL)
+  totalAmount   Decimal         @db.Decimal(12, 2)
+  pdfUrl        String?
+  notes         String?
+  projectId     String?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
-  customer Customer       @relation(fields: [customerId], references: [id])
-  items    QuotationItem[]
-  project  Project?
+  lead    Lead            @relation(fields: [leadId], references: [id])
+  project Project?        @relation(fields: [projectId], references: [id])
+  items   QuotationItem[]
+
+  @@index([projectId])
+  @@map("quotation")
 }
 ```
 
@@ -281,15 +295,15 @@ model Quotation {
 **Source:** SDS Table 4 (§2.2.2)
 
 | Field       | Prisma Type | Nullable | Unique | Description                                         |
-|-------------|-------------|----------|--------|-----------------------------------------------------|
-| id          | String      | No       | Yes    | PK, UUID                                           |
-| quotationId | String      | No       | No     | FK → Quotation.id; maps to `quotation_id` (Table 4)|
-| itemName    | String      | No       | No     | Maps to `item_name` (Table 4)                      |
-| quantity    | Int         | No       | No     | Maps to `quantity` (Table 4)                       |
-| unitPrice   | Float       | No       | No     | Maps to `unit_price` (Table 4)                     |
-| amount      | Float       | No       | No     | Maps to `amount` (Table 4); qty × unitPrice        |
-| createdAt   | DateTime    | No       | No     | Auto-set on insert                                 |
-| updatedAt   | DateTime    | No       | No     | Auto-updated on every write                        |
+| ----------- | ----------- | -------- | ------ | --------------------------------------------------- |
+| id          | String      | No       | Yes    | PK, UUID                                            |
+| quotationId | String      | No       | No     | FK → Quotation.id; maps to `quotation_id` (Table 4) |
+| itemName    | String      | No       | No     | Maps to `item_name` (Table 4)                       |
+| quantity    | Int         | No       | No     | Maps to `quantity` (Table 4)                        |
+| unitPrice   | Float       | No       | No     | Maps to `unit_price` (Table 4)                      |
+| amount      | Float       | No       | No     | Maps to `amount` (Table 4); qty × unitPrice         |
+| createdAt   | DateTime    | No       | No     | Auto-set on insert                                  |
+| updatedAt   | DateTime    | No       | No     | Auto-updated on every write                         |
 
 ```prisma
 model QuotationItem {
@@ -310,21 +324,22 @@ model QuotationItem {
 
 ### 2.7 Project
 
-**Source:** SDS Table 11 (§2.2.3); `projectName`, `location`, `startDate`, `endDate`, `budget`, `projectManagerId`, `status` from ER description §2.1.1 ("Projects store details such as project name, location, start date, end date, and budget information" and "managed by a Project Manager, who is a user in the system")
+**Source:** SDS Table 11 (§2.2.3) and ER description (§2.1.1); Project activation semantics from SRS §3.2, Business Rule §10.2, and UC-04 (§14.4).
 
-| Field            | Prisma Type   | Nullable | Unique | Description                                                |
-|------------------|---------------|----------|--------|------------------------------------------------------------|
-| id               | String        | No       | Yes    | PK, UUID                                                  |
-| projectName      | String        | No       | No     | From ER description §2.1.1                               |
-| location         | String        | Yes      | No     | From ER description §2.1.1                               |
-| startDate        | DateTime      | No       | No     | From ER description §2.1.1                               |
-| endDate          | DateTime      | Yes      | No     | From ER description §2.1.1; nullable until finalised      |
-| budget           | Float         | Yes      | No     | From ER description §2.1.1                               |
-| quotationId      | String        | Yes      | Yes    | FK → Quotation.id; maps to `quotation_id` (Table 11)     |
-| projectManagerId | String        | No       | No     | FK → User.id; from ER description §2.1.1                 |
-| status           | ProjectStatus | No       | No     | Enum: project lifecycle; implied by §2.1.1               |
-| createdAt        | DateTime      | No       | No     | Auto-set on insert                                        |
-| updatedAt        | DateTime      | No       | No     | Auto-updated on every write                              |
+> **Cardinality refinement:** SDS Table 11 originally models a Project with `quotation_id`. The current implementation reverses ownership of the relationship by storing nullable `projectId` on Quotation. This supports the later client-confirmed requirement that one Project may contain multiple Quotations while retaining the original SRS approval-to-project workflow.
+
+| Field            | Prisma Type   | Nullable | Unique | Description                                                                               |
+| ---------------- | ------------- | -------- | ------ | ----------------------------------------------------------------------------------------- |
+| id               | String        | No       | Yes    | PK, UUID                                                                                  |
+| projectName      | String        | No       | No     | From SDS ER description §2.1.1                                                            |
+| location         | String        | Yes      | No     | From SDS ER description §2.1.1                                                            |
+| startDate        | DateTime      | No       | No     | From SDS ER description §2.1.1                                                            |
+| endDate          | DateTime      | Yes      | No     | From SDS ER description §2.1.1                                                            |
+| budget           | Float         | Yes      | No     | From SDS ER description §2.1.1                                                            |
+| projectManagerId | String        | No       | No     | FK → User.id; SDS §2.1.1                                                                  |
+| status           | ProjectStatus | No       | No     | Lifecycle status; `PLANNING` by default, with activation constrained by SRS §10.2 / UC-04 |
+| createdAt        | DateTime      | No       | No     | Auto-set on insert                                                                        |
+| updatedAt        | DateTime      | No       | No     | Auto-updated                                                                              |
 
 ```prisma
 model Project {
@@ -334,20 +349,20 @@ model Project {
   startDate        DateTime
   endDate          DateTime?
   budget           Float?
-  quotationId      String?       @unique
   projectManagerId String
   status           ProjectStatus @default(PLANNING)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
 
-  quotation      Quotation?      @relation(fields: [quotationId], references: [id])
-  projectManager User            @relation("ProjectManager", fields: [projectManagerId], references: [id])
-  milestones     Milestone[]
-  tasks          Task[]
-  expenses       Expense[]
-  documents      Document[]
-  invoices       Invoice[]
-  reports        AnalyticsReport[]
+  quotations        Quotation[]
+  projectManager    User               @relation("ProjectManager", fields: [projectManagerId], references: [id])
+  milestones        Milestone[]
+  tasks             Task[]
+  expenses          Expense[]
+  invoices          Invoice[]
+  documents         Document[]
+  reports           AnalyticsReport[]
+  aiKnowledgeChunks AiKnowledgeChunk[]
 }
 ```
 
@@ -359,10 +374,10 @@ model Project {
 
 > **Note:** Table 13 is an abbreviated normalization example showing only `milestone_id` and `project_id`. A functional milestone entity requires a name, target date, and status as described in §2.1.1.
 
-| Field         | Prisma Type     | Nullable | Unique | Description                                          |
-|---------------|-----------------|----------|--------|------------------------------------------------------|
+| Field         | Prisma Type     | Nullable | Unique | Description                                         |
+| ------------- | --------------- | -------- | ------ | --------------------------------------------------- |
 | id            | String          | No       | Yes    | PK, UUID                                            |
-| projectId     | String          | No       | No     | FK → Project.id; maps to `project_id` (Table 13)   |
+| projectId     | String          | No       | No     | FK → Project.id; maps to `project_id` (Table 13)    |
 | milestoneName | String          | No       | No     | From ER description §2.1.1; progress tracking label |
 | dueDate       | DateTime        | Yes      | No     | Target completion date                              |
 | status        | MilestoneStatus | No       | No     | Enum: PENDING \| IN_PROGRESS \| COMPLETED           |
@@ -390,16 +405,16 @@ model Milestone {
 
 **Source:** SDS Table 5 (§2.2.2) and Table 14 (§2.2.3)
 
-| Field        | Prisma Type | Nullable | Unique | Description                                                    |
-|--------------|-------------|----------|--------|----------------------------------------------------------------|
-| id           | String      | No       | Yes    | PK, UUID                                                      |
-| projectId    | String      | No       | No     | FK → Project.id; maps to `project_id` (Table 5)              |
-| milestoneId  | String      | Yes      | No     | FK → Milestone.id; maps to `milestone_id` (Tables 5, 14)     |
-| assignedToId | String      | Yes      | No     | FK → User.id; maps to `assigned_to` (Table 5)                |
-| taskName     | String      | No       | No     | Maps to `task_name` (Table 5)                                 |
+| Field        | Prisma Type | Nullable | Unique | Description                                                             |
+| ------------ | ----------- | -------- | ------ | ----------------------------------------------------------------------- |
+| id           | String      | No       | Yes    | PK, UUID                                                                |
+| projectId    | String      | No       | No     | FK → Project.id; maps to `project_id` (Table 5)                         |
+| milestoneId  | String      | Yes      | No     | FK → Milestone.id; maps to `milestone_id` (Tables 5, 14)                |
+| assignedToId | String      | Yes      | No     | FK → User.id; maps to `assigned_to` (Table 5)                           |
+| taskName     | String      | No       | No     | Maps to `task_name` (Table 5)                                           |
 | status       | TaskStatus  | No       | No     | Enum: task lifecycle; implied by project management described in §2.1.1 |
-| createdAt    | DateTime    | No       | No     | Auto-set on insert                                            |
-| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                                   |
+| createdAt    | DateTime    | No       | No     | Auto-set on insert                                                      |
+| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                                             |
 
 ```prisma
 model Task {
@@ -424,14 +439,14 @@ model Task {
 
 **Source:** SDS Table 6 (§2.2.2)
 
-| Field        | Prisma Type | Nullable | Unique | Description                                                   |
-|--------------|-------------|----------|--------|---------------------------------------------------------------|
-| id           | String      | No       | Yes    | PK, UUID                                                     |
-| projectId    | String      | No       | No     | FK → Project.id; maps to `project_id` (Table 6)             |
-| recordedById | String      | No       | No     | FK → User.id; maps to `recorded_by` (Table 6)               |
-| amount       | Float       | No       | No     | Maps to `amount` (Table 6)                                   |
-| createdAt    | DateTime    | No       | No     | Auto-set on insert                                           |
-| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                                  |
+| Field        | Prisma Type | Nullable | Unique | Description                                     |
+| ------------ | ----------- | -------- | ------ | ----------------------------------------------- |
+| id           | String      | No       | Yes    | PK, UUID                                        |
+| projectId    | String      | No       | No     | FK → Project.id; maps to `project_id` (Table 6) |
+| recordedById | String      | No       | No     | FK → User.id; maps to `recorded_by` (Table 6)   |
+| amount       | Float       | No       | No     | Maps to `amount` (Table 6)                      |
+| createdAt    | DateTime    | No       | No     | Auto-set on insert                              |
+| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                     |
 
 ```prisma
 model Expense {
@@ -455,17 +470,17 @@ model Expense {
 
 > **Note:** No normalization table was provided for Invoice in the SDS text. All fields are derived from the ER entity description.
 
-| Field       | Prisma Type   | Nullable | Unique | Description                              |
-|-------------|---------------|----------|--------|------------------------------------------|
-| id          | String        | No       | Yes    | PK, UUID                                |
+| Field       | Prisma Type   | Nullable | Unique | Description                                |
+| ----------- | ------------- | -------- | ------ | ------------------------------------------ |
+| id          | String        | No       | Yes    | PK, UUID                                   |
 | projectId   | String        | No       | No     | FK → Project.id; based on project progress |
-| customerId  | String        | No       | No     | FK → Customer.id; invoice is for client  |
-| invoiceDate | DateTime      | No       | No     | Date invoice was generated              |
-| dueDate     | DateTime      | Yes      | No     | Payment due date                        |
-| totalAmount | Float         | No       | No     | Total amount billed                     |
-| status      | InvoiceStatus | No       | No     | Enum: billing lifecycle                 |
-| createdAt   | DateTime      | No       | No     | Auto-set on insert                      |
-| updatedAt   | DateTime      | No       | No     | Auto-updated on every write             |
+| customerId  | String        | No       | No     | FK → Customer.id; invoice is for client    |
+| invoiceDate | DateTime      | No       | No     | Date invoice was generated                 |
+| dueDate     | DateTime      | Yes      | No     | Payment due date                           |
+| totalAmount | Float         | No       | No     | Total amount billed                        |
+| status      | InvoiceStatus | No       | No     | Enum: billing lifecycle                    |
+| createdAt   | DateTime      | No       | No     | Auto-set on insert                         |
+| updatedAt   | DateTime      | No       | No     | Auto-updated on every write                |
 
 ```prisma
 model Invoice {
@@ -493,16 +508,16 @@ model Invoice {
 
 > **Note:** No normalization table was provided for Payment in the SDS text. All fields are derived from the ER entity description.
 
-| Field         | Prisma Type   | Nullable | Unique | Description                                               |
-|---------------|---------------|----------|--------|-----------------------------------------------------------|
-| id            | String        | No       | Yes    | PK, UUID                                                 |
-| invoiceId     | String        | Yes      | No     | FK → Invoice.id; nullable ("may be associated")          |
-| customerId    | String        | No       | No     | FK → Customer.id; client making the payment              |
-| paymentDate   | DateTime      | No       | No     | Date payment was recorded                                |
-| amount        | Float         | No       | No     | Amount paid                                              |
-| paymentMethod | PaymentMethod | No       | No     | Enum: method of payment                                  |
-| createdAt     | DateTime      | No       | No     | Auto-set on insert                                       |
-| updatedAt     | DateTime      | No       | No     | Auto-updated on every write                              |
+| Field         | Prisma Type   | Nullable | Unique | Description                                     |
+| ------------- | ------------- | -------- | ------ | ----------------------------------------------- |
+| id            | String        | No       | Yes    | PK, UUID                                        |
+| invoiceId     | String        | Yes      | No     | FK → Invoice.id; nullable ("may be associated") |
+| customerId    | String        | No       | No     | FK → Customer.id; client making the payment     |
+| paymentDate   | DateTime      | No       | No     | Date payment was recorded                       |
+| amount        | Float         | No       | No     | Amount paid                                     |
+| paymentMethod | PaymentMethod | No       | No     | Enum: method of payment                         |
+| createdAt     | DateTime      | No       | No     | Auto-set on insert                              |
+| updatedAt     | DateTime      | No       | No     | Auto-updated on every write                     |
 
 ```prisma
 model Payment {
@@ -528,11 +543,11 @@ model Payment {
 
 > **Note:** No normalization table was provided for DocumentCategory in the SDS text. Fields are derived from the ER entity description.
 
-| Field        | Prisma Type | Nullable | Unique | Description                     |
-|--------------|-------------|----------|--------|---------------------------------|
+| Field        | Prisma Type | Nullable | Unique | Description                    |
+| ------------ | ----------- | -------- | ------ | ------------------------------ |
 | id           | String      | No       | Yes    | PK, UUID                       |
-| categoryName | String      | No       | Yes    | Category label; must be unique  |
-| description  | String      | Yes      | No     | Optional detail                 |
+| categoryName | String      | No       | Yes    | Category label; must be unique |
+| description  | String      | Yes      | No     | Optional detail                |
 | createdAt    | DateTime    | No       | No     | Auto-set on insert             |
 | updatedAt    | DateTime    | No       | No     | Auto-updated on every write    |
 
@@ -556,16 +571,16 @@ model DocumentCategory {
 
 > **Note:** No normalization table was provided for Document in the SDS text. Fields are derived from the ER entity description.
 
-| Field        | Prisma Type | Nullable | Unique | Description                                   |
-|--------------|-------------|----------|--------|-----------------------------------------------|
-| id           | String      | No       | Yes    | PK, UUID                                     |
-| projectId    | String      | No       | No     | FK → Project.id; file belongs to a project   |
-| categoryId   | String      | No       | No     | FK → DocumentCategory.id                     |
-| fileName     | String      | No       | No     | Original file name                           |
-| fileUrl      | String      | No       | No     | Cloud storage URL                            |
-| uploadedById | String      | Yes      | No     | FK → User.id; uploader; nullable if system   |
-| createdAt    | DateTime    | No       | No     | Auto-set on insert                           |
-| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                  |
+| Field        | Prisma Type | Nullable | Unique | Description                                |
+| ------------ | ----------- | -------- | ------ | ------------------------------------------ |
+| id           | String      | No       | Yes    | PK, UUID                                   |
+| projectId    | String      | No       | No     | FK → Project.id; file belongs to a project |
+| categoryId   | String      | No       | No     | FK → DocumentCategory.id                   |
+| fileName     | String      | No       | No     | Original file name                         |
+| fileUrl      | String      | No       | No     | Cloud storage URL                          |
+| uploadedById | String      | Yes      | No     | FK → User.id; uploader; nullable if system |
+| createdAt    | DateTime    | No       | No     | Auto-set on insert                         |
+| updatedAt    | DateTime    | No       | No     | Auto-updated on every write                |
 
 ```prisma
 model Document {
@@ -592,17 +607,17 @@ model Document {
 
 > **Note:** No normalization table was provided for AnalyticsReport in the SDS text. The four metric fields (`totalRevenue`, `expenses`, `profit`, `completionPercentage`) are named verbatim in §2.1.1.
 
-| Field                | Prisma Type | Nullable | Unique | Description                                         |
-|----------------------|-------------|----------|--------|-----------------------------------------------------|
-| id                   | String      | No       | Yes    | PK, UUID                                           |
-| projectId            | String      | No       | No     | FK → Project.id                                    |
-| totalRevenue         | Float       | No       | No     | Named verbatim in §2.1.1                           |
-| expenses             | Float       | No       | No     | Named verbatim in §2.1.1                           |
-| profit               | Float       | No       | No     | Named verbatim in §2.1.1                           |
-| completionPercentage | Float       | No       | No     | Named verbatim in §2.1.1; range 0.0–100.0          |
-| reportDate           | DateTime    | No       | No     | Report generation date                             |
-| createdAt            | DateTime    | No       | No     | Auto-set on insert                                 |
-| updatedAt            | DateTime    | No       | No     | Auto-updated on every write                        |
+| Field                | Prisma Type | Nullable | Unique | Description                               |
+| -------------------- | ----------- | -------- | ------ | ----------------------------------------- |
+| id                   | String      | No       | Yes    | PK, UUID                                  |
+| projectId            | String      | No       | No     | FK → Project.id                           |
+| totalRevenue         | Float       | No       | No     | Named verbatim in §2.1.1                  |
+| expenses             | Float       | No       | No     | Named verbatim in §2.1.1                  |
+| profit               | Float       | No       | No     | Named verbatim in §2.1.1                  |
+| completionPercentage | Float       | No       | No     | Named verbatim in §2.1.1; range 0.0–100.0 |
+| reportDate           | DateTime    | No       | No     | Report generation date                    |
+| createdAt            | DateTime    | No       | No     | Auto-set on insert                        |
+| updatedAt            | DateTime    | No       | No     | Auto-updated on every write               |
 
 ```prisma
 model AnalyticsReport {
@@ -626,36 +641,38 @@ model AnalyticsReport {
 
 ### 3.1 One-to-Many Relationships
 
-| Parent           | Child           | FK in Child                   | @relation Name        | Cardinality |
-|------------------|-----------------|-------------------------------|-----------------------|-------------|
-| Role             | User            | User.roleId                   | *(default)*           | 1 : N       |
-| User             | Lead            | Lead.assignedToId             | `"AssignedLeads"`     | 1 : N       |
-| User             | Project         | Project.projectManagerId      | `"ProjectManager"`    | 1 : N       |
-| User             | Task            | Task.assignedToId             | `"AssignedTasks"`     | 1 : N       |
-| User             | Expense         | Expense.recordedById          | `"RecordedBy"`        | 1 : N       |
-| User             | Document        | Document.uploadedById         | `"UploadedDocuments"` | 1 : N       |
-| User             | RefreshToken    | RefreshToken.userId           | *(default)*           | 1 : N       |
-| User             | AuditLog        | AuditLog.userId               | *(default)*           | 1 : N       |
-| Customer         | Quotation       | Quotation.customerId          | *(default)*           | 1 : N       |
-| Customer         | Invoice         | Invoice.customerId            | *(default)*           | 1 : N       |
-| Customer         | Payment         | Payment.customerId            | *(default)*           | 1 : N       |
-| Quotation        | QuotationItem   | QuotationItem.quotationId     | *(default)*           | 1 : N       |
-| Project          | Milestone       | Milestone.projectId           | *(default)*           | 1 : N       |
-| Project          | Task            | Task.projectId                | *(default)*           | 1 : N       |
-| Project          | Expense         | Expense.projectId             | *(default)*           | 1 : N       |
-| Project          | Invoice         | Invoice.projectId             | *(default)*           | 1 : N       |
-| Project          | Document        | Document.projectId            | *(default)*           | 1 : N       |
-| Project          | AnalyticsReport | AnalyticsReport.projectId     | *(default)*           | 1 : N       |
-| Milestone        | Task            | Task.milestoneId              | *(default)*           | 1 : N       |
-| Invoice          | Payment         | Payment.invoiceId             | *(default)*           | 1 : N       |
-| DocumentCategory | Document        | Document.categoryId           | *(default)*           | 1 : N       |
+| Parent           | Child           | FK in Child               | @relation Name        | Cardinality |
+| ---------------- | --------------- | ------------------------- | --------------------- | ----------- |
+| Role             | User            | User.roleId               | _(default)_           | 1 : N       |
+| User             | Lead            | Lead.assignedToId         | `"AssignedLeads"`     | 1 : N       |
+| User             | Project         | Project.projectManagerId  | `"ProjectManager"`    | 1 : N       |
+| User             | Task            | Task.assignedToId         | `"AssignedTasks"`     | 1 : N       |
+| User             | Expense         | Expense.recordedById      | `"RecordedBy"`        | 1 : N       |
+| User             | Document        | Document.uploadedById     | `"UploadedDocuments"` | 1 : N       |
+| User             | RefreshToken    | RefreshToken.userId       | _(default)_           | 1 : N       |
+| User             | AuditLog        | AuditLog.userId           | _(default)_           | 1 : N       |
+| Lead             | Quotation       | Quotation.leadId          | _(default)_           | 1 : N       |
+| Customer         | Invoice         | Invoice.customerId        | _(default)_           | 1 : N       |
+| Customer         | Payment         | Payment.customerId        | _(default)_           | 1 : N       |
+| Quotation        | QuotationItem   | QuotationItem.quotationId | _(default)_           | 1 : N       |
+| Project          | Milestone       | Milestone.projectId       | _(default)_           | 1 : N       |
+| Project          | Task            | Task.projectId            | _(default)_           | 1 : N       |
+| Project          | Expense         | Expense.projectId         | _(default)_           | 1 : N       |
+| Project          | Invoice         | Invoice.projectId         | _(default)_           | 1 : N       |
+| Project          | Document        | Document.projectId        | _(default)_           | 1 : N       |
+| Project          | AnalyticsReport | AnalyticsReport.projectId | _(default)_           | 1 : N       |
+| Milestone        | Task            | Task.milestoneId          | _(default)_           | 1 : N       |
+| Invoice          | Payment         | Payment.invoiceId         | _(default)_           | 1 : N       |
+| DocumentCategory | Document        | Document.categoryId       | _(default)_           | 1 : N       |
+| Project          | Quotation       | Quotation.projectId       | _(default)_           | 1 : N       |
+
+> **Project–Quotation traceability:** SDS §2.2.3 Tables 11–12 originally show `quotation_id` on Project, representing the initial design baseline. The current `Project 1:N Quotation` relationship is a deliberate implementation refinement based on the later client-confirmed requirement that one construction Project can contain multiple Quotations for separate scopes. It does not change the core SRS requirement that Quotations must be approved before they can initiate active Project work (SRS §10.2 and UC-04 §14.4).
 
 ### 3.2 One-to-One Relationships
 
-| Parent    | Child    | FK in Child        | Constraint    | Notes                                           |
-|-----------|----------|--------------------|---------------|-------------------------------------------------|
-| Lead      | Customer | Customer.leadId    | `@unique`     | A lead is converted into exactly one Customer  |
-| Quotation | Project  | Project.quotationId | `@unique`    | An approved Quotation becomes exactly one Project |
+| Parent | Child    | FK in Child     | Constraint | Notes                                         |
+| ------ | -------- | --------------- | ---------- | --------------------------------------------- |
+| Lead   | Customer | Customer.leadId | `@unique`  | A lead is converted into exactly one Customer |
 
 > **No many-to-many junction tables** exist in the SDS ER diagram. All inter-entity relationships are one-to-many or one-to-one.
 
@@ -679,20 +696,35 @@ model Lead     { customer Customer? }
 model Customer { lead   Lead?   @relation(fields: [leadId], references: [id])
                  leadId String? @unique }
 
-// ── Customer ↔ Quotation ─────────────────────────────────────────────────────
-model Customer  { quotations Quotation[] }
-model Quotation { customer   Customer @relation(fields: [customerId], references: [id])
-                  customerId String }
+// ── Lead ↔ Quotation ─────────────────────────────────────────────────────────
+model Lead {
+  quotations Quotation[]
+}
+
+model Quotation {
+  leadId String
+  lead   Lead @relation(fields: [leadId], references: [id])
+}
 
 // ── Quotation ↔ QuotationItem ────────────────────────────────────────────────
 model Quotation     { items QuotationItem[] }
 model QuotationItem { quotation   Quotation @relation(fields: [quotationId], references: [id])
                       quotationId String }
 
-// ── Quotation ↔ Project (approval-to-project, 1:1) ──────────────────────────
-model Quotation { project Project? }
-model Project   { quotation   Quotation? @relation(fields: [quotationId], references: [id])
-                  quotationId String?    @unique }
+// Project ↔ Quotation
+// Implemented cardinality refinement:
+// one Project may have many Quotations;
+// each Quotation may reference at most one Project.
+model Project {
+  quotations Quotation[]
+}
+
+model Quotation {
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+
+  @@index([projectId])
+}
 
 // ── User ↔ Project (project manager) ────────────────────────────────────────
 model User    { managedProjects Project[] @relation("ProjectManager") }
@@ -792,14 +824,14 @@ The following two models are **required for a production system** but are **abse
 
 **Reason:** SDS §6.1 specifies JWT-based authentication. Secure JWT implementations require server-side refresh token storage to enable token rotation and explicit token revocation on logout. Without this model, compromised refresh tokens cannot be invalidated and re-login cannot be forced when a user's account is deactivated.
 
-| Field     | Prisma Type | Nullable | Unique | Description                            |
-|-----------|-------------|----------|--------|----------------------------------------|
-| id        | String      | No       | Yes    | PK, UUID                              |
-| userId    | String      | No       | No     | FK → User.id                          |
-| token     | String      | No       | Yes    | SHA-256 hashed refresh token          |
-| expiresAt | DateTime    | No       | No     | Token expiry timestamp                |
-| createdAt | DateTime    | No       | No     | Auto-set on insert                    |
-| updatedAt | DateTime    | No       | No     | Auto-updated on every write           |
+| Field     | Prisma Type | Nullable | Unique | Description                  |
+| --------- | ----------- | -------- | ------ | ---------------------------- |
+| id        | String      | No       | Yes    | PK, UUID                     |
+| userId    | String      | No       | No     | FK → User.id                 |
+| token     | String      | No       | Yes    | SHA-256 hashed refresh token |
+| expiresAt | DateTime    | No       | No     | Token expiry timestamp       |
+| createdAt | DateTime    | No       | No     | Auto-set on insert           |
+| updatedAt | DateTime    | No       | No     | Auto-updated on every write  |
 
 ```prisma
 model RefreshToken {
@@ -820,18 +852,18 @@ model RefreshToken {
 
 **Reason:** SDS §6.2 defines Role-Based Access Control (RBAC) and §6.3 describes a data protection approach. An AuditLog table records who performed which action on which record, with before/after snapshots. This is required for security incident investigation, compliance, and the SENG 34213 data layer standards. It also supports the Analytics & AI Risk Prediction module described in §5.1.7 by providing a traceable history of data changes.
 
-| Field     | Prisma Type | Nullable | Unique | Description                                          |
-|-----------|-------------|----------|--------|------------------------------------------------------|
-| id        | String      | No       | Yes    | PK, UUID                                            |
-| userId    | String      | Yes      | No     | FK → User.id; nullable if action was system-triggered|
-| action    | String      | No       | No     | e.g. `CREATE`, `UPDATE`, `DELETE`                   |
-| entity    | String      | No       | No     | Prisma model name, e.g. `"Project"`                 |
-| entityId  | String      | No       | No     | UUID of the affected record                         |
-| oldValues | String      | Yes      | No     | JSON string: field snapshot before mutation         |
-| newValues | String      | Yes      | No     | JSON string: field snapshot after mutation          |
-| ipAddress | String      | Yes      | No     | Request originating IP address                      |
-| createdAt | DateTime    | No       | No     | Auto-set on insert                                  |
-| updatedAt | DateTime    | No       | No     | Auto-updated on every write                         |
+| Field     | Prisma Type | Nullable | Unique | Description                                           |
+| --------- | ----------- | -------- | ------ | ----------------------------------------------------- |
+| id        | String      | No       | Yes    | PK, UUID                                              |
+| userId    | String      | Yes      | No     | FK → User.id; nullable if action was system-triggered |
+| action    | String      | No       | No     | e.g. `CREATE`, `UPDATE`, `DELETE`                     |
+| entity    | String      | No       | No     | Prisma model name, e.g. `"Project"`                   |
+| entityId  | String      | No       | No     | UUID of the affected record                           |
+| oldValues | String      | Yes      | No     | JSON string: field snapshot before mutation           |
+| newValues | String      | Yes      | No     | JSON string: field snapshot after mutation            |
+| ipAddress | String      | Yes      | No     | Request originating IP address                        |
+| createdAt | DateTime    | No       | No     | Auto-set on insert                                    |
+| updatedAt | DateTime    | No       | No     | Auto-updated on every write                           |
 
 ```prisma
 model AuditLog {
@@ -854,19 +886,20 @@ model AuditLog {
 
 ## 5. Deviations from ER Diagram
 
-| # | Area                                           | Deviation                                                                                                     | Justification                                                                                                                          |
-|---|------------------------------------------------|---------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | **User.password**                              | Added `password` field to User model                                                                          | Not present in normalization tables (Tables 2/7) but explicitly defined in Class Diagram §3.1 as "Authentication credential." Required for JWT auth described in §6.1. |
-| 2 | **User.status — Enum instead of plain value**  | `status` typed as `UserStatus` enum (`ACTIVE` \| `INACTIVE`) rather than a plain String                      | SDS §2.1.1 defines exactly two states: "active or inactive." Using an enum enforces valid values at the database constraint level.     |
-| 3 | **Lead.status — new enum field**               | Added `status` (LeadStatus enum) to Lead                                                                      | CRM lead lifecycle tracking is central to the system described in §2.1.1. The normalization tables are abbreviated examples; the SDS ER diagram figure (not extractable as text) likely includes this field. |
-| 4 | **Project — additional fields beyond Table 11**| Added `projectName`, `location`, `startDate`, `endDate`, `budget`, `projectManagerId`, `status`               | SDS §2.1.1 explicitly states: "Projects store details such as project name, location, start date, end date, and budget information" and "managed by a Project Manager, who is a user in the system." Table 11 is an abbreviated normalization example. |
-| 5 | **Milestone — additional fields beyond Table 13** | Added `milestoneName`, `dueDate`, `status`                                                                 | SDS Table 13 shows only `milestone_id` and `project_id` as a normalization illustration. A functional milestone entity needs a name and status to "track the progress of the work" as stated in §2.1.1. |
-| 6 | **Quotation.customerId — new FK**              | Added `customerId` FK to Quotation                                                                            | §2.1.1 states quotations contain "pricing information for services or products offered to the client." A client (Customer) reference is logically necessary to satisfy 3NF without duplicating customer data. |
-| 7 | **Invoice, Payment, Document, DocumentCategory, AnalyticsReport — inferred fields** | All fields for these five models are inferred from the §2.1.1 textual description | No normalization tables were provided for these models in the SDS text. The ER diagram figure (Figure 2) contains their definitions but cannot be extracted as text from the PDF. The four AnalyticsReport metric fields (`totalRevenue`, `expenses`, `profit`, `completionPercentage`) are named verbatim in §2.1.1. |
-| 8 | **RefreshToken — new model**                   | New model not present in SDS ER diagram                                                                       | Required for secure JWT refresh token rotation and revocation as described in §6.1. See §4.1 for full justification. |
-| 9 | **AuditLog — new model**                       | New model not present in SDS ER diagram                                                                       | Required for security auditing aligned with the RBAC and data protection design described in §6.2–§6.3. See §4.2 for full justification. |
-| 10 | **camelCase field names**                     | SDS uses `snake_case` column names (e.g. `role_name`, `full_name`) but Prisma models use `camelCase` (e.g. `roleName`, `fullName`) | Prisma convention mandates camelCase model field names. Add `@map("snake_case_name")` decorators and `@@map("table_name")` at the model level if the PostgreSQL schema must match the SDS naming exactly. The semantic meaning of every field is preserved. |
+| #   | Area                                                                                | Deviation                                                                                                                                              | Justification                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| --- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **User.password**                                                                   | Added `password` field to User model                                                                                                                   | Not present in normalization tables (Tables 2/7) but explicitly defined in Class Diagram §3.1 as "Authentication credential." Required for JWT auth described in §6.1.                                                                                                                                                                                                                                                                                                                                                     |
+| 2   | **User.status — Enum instead of plain value**                                       | `status` typed as `UserStatus` enum (`ACTIVE` \| `INACTIVE`) rather than a plain String                                                                | SDS §2.1.1 defines exactly two states: "active or inactive." Using an enum enforces valid values at the database constraint level.                                                                                                                                                                                                                                                                                                                                                                                         |
+| 3   | **Lead.status — new enum field**                                                    | Added `status` (LeadStatus enum) to Lead                                                                                                               | CRM lead lifecycle tracking is central to the system described in §2.1.1. The normalization tables are abbreviated examples; the SDS ER diagram figure (not extractable as text) likely includes this field.                                                                                                                                                                                                                                                                                                               |
+| 4   | **Project — additional fields beyond Table 11**                                     | Added `projectName`, `location`, `startDate`, `endDate`, `budget`, `projectManagerId`, `status`                                                        | SDS §2.1.1 explicitly states: "Projects store details such as project name, location, start date, end date, and budget information" and "managed by a Project Manager, who is a user in the system." Table 11 is an abbreviated normalization example.                                                                                                                                                                                                                                                                     |
+| 5   | **Milestone — additional fields beyond Table 13**                                   | Added `milestoneName`, `dueDate`, `status`                                                                                                             | SDS Table 13 shows only `milestone_id` and `project_id` as a normalization illustration. A functional milestone entity needs a name and status to "track the progress of the work" as stated in §2.1.1.                                                                                                                                                                                                                                                                                                                    |
+| 6   | **Quotation linked to Lead**                                                        | Replaced the earlier `customerId` association with required `leadId`                                                                                   | Aligns the implementation with SRS UC-03 (§14.3), where a Quotation is generated from a Lead, and SDS §5.2.2, which models the end-to-end lead → quotation → project workflow.                                                                                                                                                                                                                                                                                                                                             |
+| 7   | **Invoice, Payment, Document, DocumentCategory, AnalyticsReport — inferred fields** | All fields for these five models are inferred from the §2.1.1 textual description                                                                      | No normalization tables were provided for these models in the SDS text. The ER diagram figure (Figure 2) contains their definitions but cannot be extracted as text from the PDF. The four AnalyticsReport metric fields (`totalRevenue`, `expenses`, `profit`, `completionPercentage`) are named verbatim in §2.1.1.                                                                                                                                                                                                      |
+| 8   | **RefreshToken — new model**                                                        | New model not present in SDS ER diagram                                                                                                                | Required for secure JWT refresh token rotation and revocation as described in §6.1. See §4.1 for full justification.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| 9   | **AuditLog — new model**                                                            | New model not present in SDS ER diagram                                                                                                                | Required for security auditing aligned with the RBAC and data protection design described in §6.2–§6.3. See §4.2 for full justification.                                                                                                                                                                                                                                                                                                                                                                                   |
+| 10  | **camelCase field names**                                                           | SDS uses `snake_case` column names (e.g. `role_name`, `full_name`) but Prisma models use `camelCase` (e.g. `roleName`, `fullName`)                     | Prisma convention mandates camelCase model field names. Add `@map("snake_case_name")` decorators and `@@map("table_name")` at the model level if the PostgreSQL schema must match the SDS naming exactly. The semantic meaning of every field is preserved.                                                                                                                                                                                                                                                                |
+| 11  | **Project ↔ Quotation cardinality**                                                 | Changed the original SDS design from Project holding a single `quotationId` to `Quotation.projectId`, allowing one Project to have multiple Quotations | SDS §2.2.3 Tables 11–12 represent the original single-quotation baseline. The later client-confirmed workflow requires multiple Quotations for different scopes to belong to the same construction Project. The refinement preserves SRS FR-004, §10.2, and UC-04 (§14.4): approved Quotations still initiate/associate with active Project work. Because this changes the approved SDS baseline, it must be recorded as an approved design/requirements refinement in accordance with the SRS change-control requirement. |
 
 ---
 
-*End of Document*
+_End of Document_

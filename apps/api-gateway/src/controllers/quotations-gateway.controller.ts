@@ -17,6 +17,7 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 import { Roles } from '../decorators/roles.decorator';
+import { ApproveQuotationDto } from '../../../quotation-service/src/dto/approve-quotation.dto';
 
 const QUOTATION_SERVICE_URL =
   process.env.QUOTATION_SERVICE_URL ?? 'http://localhost:4009';
@@ -41,7 +42,7 @@ export class QuotationsGatewayController {
 
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Sales Manager', 'Admin')
+  @Roles('SALES_MANAGER', 'ADMIN')
   async create(@Body() body: unknown, @Req() req: Request): Promise<unknown> {
     return this.forward(() =>
       this.httpService.post(`${QUOTATION_SERVICE_URL}/quotations`, body, {
@@ -52,7 +53,7 @@ export class QuotationsGatewayController {
 
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Sales Manager', 'Admin', 'Project Manager', 'Accountant')
+  @Roles('SALES_MANAGER', 'ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT')
   async findOne(
     @Param('id') id: string,
     @Req() req: Request,
@@ -66,15 +67,16 @@ export class QuotationsGatewayController {
 
   @Patch(':id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('Admin', 'Management')
+  @Roles('ADMIN')
   async approveAndConvert(
     @Param('id') id: string,
+    @Body() body: ApproveQuotationDto,
     @Req() req: Request,
   ): Promise<unknown> {
     return this.forward(() =>
       this.httpService.patch(
         `${QUOTATION_SERVICE_URL}/quotations/${id}/approve`,
-        {},
+        body,
         { headers: { authorization: req.headers.authorization } },
       ),
     );

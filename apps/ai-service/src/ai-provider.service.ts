@@ -17,18 +17,16 @@ export class AiProviderService {
   constructor(private readonly configService: ConfigService) {}
 
   isConfigured() {
-    return Boolean(
-      this.configService.get<string>('AI_PROVIDER') &&
-      this.configService.get<string>('AI_API_KEY'),
-    );
+    return Boolean(this.configService.get<string>('AI_API_KEY'));
   }
 
   async predictViaProvider(args: {
     systemPrompt: string;
     userPrompt: string;
   }): Promise<AiProviderPredictionResponseDto | null> {
-    const provider = this.configService.get<string>('AI_PROVIDER');
-    if (!provider || provider.toLowerCase() !== 'openrouter') {
+    const provider =
+      this.configService.get<string>('AI_PROVIDER') ?? 'openrouter';
+    if (provider.toLowerCase() !== 'openrouter') {
       return null;
     }
 
@@ -51,7 +49,8 @@ export class AiProviderService {
         },
         body: JSON.stringify({
           model:
-            this.configService.get<string>('AI_MODEL') ?? 'openrouter/free',
+            this.configService.get<string>('AI_MODEL') ??
+            'nvidia/nemotron-3-ultra-550b-a55b:free',
           temperature: 0.2,
           response_format: { type: 'json_object' },
           messages: [

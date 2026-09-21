@@ -12,7 +12,9 @@ type IndexedChunk = {
 };
 
 const OPENROUTER_EMBEDDING_MODEL = 'nvidia/llama-nemotron-embed-vl-1b-v2:free';
-const EMBEDDING_DIMENSIONS = 2048;
+// OpenRouter supports requesting a shorter Matryoshka vector from this model.
+// Keep the output at 1536 dimensions to fit the existing pgvector column.
+const EMBEDDING_DIMENSIONS = 1536;
 
 @Injectable()
 export class RagService {

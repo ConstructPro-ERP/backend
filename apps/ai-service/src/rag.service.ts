@@ -11,6 +11,10 @@ type IndexedChunk = {
   metadata: Prisma.InputJsonValue;
 };
 
+const OPENROUTER_EMBEDDING_MODEL =
+  'nvidia/llama-nemotron-embed-vl-1b-v2:free';
+const EMBEDDING_DIMENSIONS = 2048;
+
 @Injectable()
 export class RagService {
   constructor(
@@ -43,7 +47,10 @@ export class RagService {
     }
 
     for (const chunk of chunks) {
-      const embedding = await this.generateEmbedding(chunk.chunkText);
+      const embedding = await this.generateEmbedding(
+        chunk.chunkText,
+        'search_document',
+      );
       const row = await this.aiRepository.upsertKnowledgeChunk({
         projectId: project.id,
         sourceType: chunk.sourceType,
@@ -52,7 +59,9 @@ export class RagService {
         metadata: chunk.metadata,
         embeddingModel:
           this.configService.get<string>('EMBEDDING_MODEL') ??
-          (providerEmbeddings ? 'provider-default' : 'deterministic-fallback'),
+          (providerEmbeddings
+            ? OPENROUTER_EMBEDDING_MODEL
+            : 'deterministic-fallback'),
         embeddingDim: embedding.length,
       });
       await this.aiRepository.setKnowledgeChunkEmbedding(row.id, embedding);
@@ -111,7 +120,7 @@ export class RagService {
     }
 
     const queryEmbedding = providerEmbeddings
-      ? await this.generateEmbedding(effectiveQuery)
+      ? await this.generateEmbedding(effectiveQuery, 'search_query')
       : null;
 
     const threshold = Number.parseFloat(
@@ -165,44 +174,48 @@ export class RagService {
 
   private hasProviderEmbeddings() {
     return Boolean(
-      this.configService.get<string>('EMBEDDING_PROVIDER') &&
-      this.configService.get<string>('EMBEDDING_API_KEY'),
+      (this.configService.get<string>('EMBEDDING_PROVIDER') ?? 'openrouter')
+        .toLowerCase() === 'openrouter' &&
+        (this.configService.get<string>('EMBEDDING_API_KEY') ??
+          this.configService.get<string>('AI_API_KEY')),
     );
   }
 
-  private async generateEmbedding(input: string): Promise<number[]> {
+  private async generateEmbedding(
+    input: string,
+    inputType: 'search_document' | 'search_query',
+  ): Promise<number[]> {
     if (!this.hasProviderEmbeddings()) {
-      return deterministicEmbedding(input);
+      return deterministicEmbedding(input, EMBEDDING_DIMENSIONS);
     }
 
-    const provider = this.configService.get<string>('EMBEDDING_PROVIDER');
-    if (provider?.toLowerCase() !== 'openai') {
-      return deterministicEmbedding(input);
-    }
-
-    const response = await fetch('https://api.openai.com/v1/embeddings', {
+    const response = await fetch('https://openrouter.ai/api/v1/embeddings', {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${this.configService.get<string>('EMBEDDING_API_KEY')}`,
+        authorization: `Bearer ${this.configService.get<string>('EMBEDDING_API_KEY') ?? this.configService.get<string>('AI_API_KEY')}`,
       },
       body: JSON.stringify({
         model:
           this.configService.get<string>('EMBEDDING_MODEL') ??
-          'text-embedding-3-small',
+          OPENROUTER_EMBEDDING_MODEL,
         input,
+        input_type: inputType,
+        dimensions: EMBEDDING_DIMENSIONS,
       }),
     });
 
     if (!response.ok) {
-      return deterministicEmbedding(input);
+      return deterministicEmbedding(input, EMBEDDING_DIMENSIONS);
     }
 
     const payload = (await response.json()) as {
       data?: Array<{ embedding?: number[] }>;
     };
     const embedding = payload.data?.[0]?.embedding;
-    return embedding?.length ? embedding : deterministicEmbedding(input);
+    return embedding?.length === EMBEDDING_DIMENSIONS
+      ? embedding
+      : deterministicEmbedding(input, EMBEDDING_DIMENSIONS);
   }
 }
 

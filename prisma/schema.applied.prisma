@@ -415,7 +415,7 @@ model AiKnowledgeChunk {
   metadata       Json?
   embeddingModel String?                      @db.VarChar(100)
   embeddingDim   Int?
-  embedding      Unsupported("vector(2048)")?
+  embedding      Unsupported("vector(1536)")?
   createdAt      DateTime                     @default(now())
   updatedAt      DateTime                     @default(now()) @updatedAt
 

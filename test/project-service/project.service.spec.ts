@@ -25,7 +25,7 @@ const mockProjectRepository = {
   update: jest.fn(),
   delete: jest.fn(),
   getDependencyCounts: jest.fn(),
-  findProjectManager: jest.fn(),
+  findProjectManagerCandidate: jest.fn(),
   findApprovedQuotation: jest.fn(),
   transaction: jest.fn(),
   lockQuotation: jest.fn(),
@@ -34,7 +34,7 @@ const mockProjectRepository = {
   createInTransaction: jest.fn(),
   updateInTransaction: jest.fn(),
   linkQuotation: jest.fn(),
-  findProjectManagerInTransaction: jest.fn(),
+  findProjectManagerCandidateInTransaction: jest.fn(),
 };
 
 const mockProjectAccessService = {
@@ -174,9 +174,11 @@ describe('ProjectService', () => {
       { id: 'quotation-1' },
     ]);
 
-    mockProjectRepository.findProjectManager.mockResolvedValue(activeManager);
+    mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+      activeManager,
+    );
 
-    mockProjectRepository.findProjectManagerInTransaction.mockResolvedValue(
+    mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
       activeManager,
     );
 
@@ -210,7 +212,9 @@ describe('ProjectService', () => {
     });
 
     it('rejects project creation with a non-Project-Manager user', async () => {
-      mockProjectRepository.findProjectManager.mockResolvedValue(adminUser);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        adminUser,
+      );
 
       await expect(
         service.create({
@@ -386,7 +390,9 @@ describe('ProjectService', () => {
   describe('assignManager', () => {
     it('assigns an active PROJECT_MANAGER user', async () => {
       mockProjectRepository.findById.mockResolvedValue(planningProject);
-      mockProjectRepository.findProjectManager.mockResolvedValue(activeManager);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        activeManager,
+      );
       mockProjectRepository.update.mockResolvedValue(planningProject);
 
       await service.assignManager(
@@ -404,7 +410,7 @@ describe('ProjectService', () => {
 
     it('rejects a missing project manager user', async () => {
       mockProjectRepository.findById.mockResolvedValue(planningProject);
-      mockProjectRepository.findProjectManager.mockResolvedValue(null);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(null);
 
       await expect(
         service.assignManager(
@@ -425,7 +431,7 @@ describe('ProjectService', () => {
 
     it('rejects an inactive project manager', async () => {
       mockProjectRepository.findById.mockResolvedValue(planningProject);
-      mockProjectRepository.findProjectManager.mockResolvedValue(
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
         inactiveManager,
       );
 
@@ -450,7 +456,7 @@ describe('ProjectService', () => {
       'rejects user with %s role as Project Manager',
       async (roleName) => {
         mockProjectRepository.findById.mockResolvedValue(planningProject);
-        mockProjectRepository.findProjectManager.mockResolvedValue({
+        mockProjectRepository.findProjectManagerCandidate.mockResolvedValue({
           ...adminUser,
           role: {
             roleName,
@@ -983,12 +989,14 @@ describe('ProjectService', () => {
       projectId: null,
     });
 
-    mockProjectRepository.findProjectManagerInTransaction.mockResolvedValue({
-      ...adminUser,
-      role: {
-        roleName: 'ADMIN',
+    mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
+      {
+        ...adminUser,
+        role: {
+          roleName: 'ADMIN',
+        },
       },
-    });
+    );
 
     await expect(
       service.createFromQuotation({

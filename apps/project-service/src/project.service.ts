@@ -10,6 +10,8 @@ import {
   QuotationStatus,
   UserStatus,
 } from '@prisma/client';
+import { ErrorCode } from '../../../shared/error-codes';
+import { ProjectAccessService } from './project-access.service';
 import { AssignProjectManagerDto } from './dto/assign-project-manager.dto';
 import { CreateProjectFromQuotationDto } from './dto/create-project-from-quotation.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -27,7 +29,10 @@ import {
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly projects: ProjectRepository) {}
+  constructor(
+    private readonly projects: ProjectRepository,
+    private readonly projectAccess: ProjectAccessService,
+  ) {}
 
   getHealth() {
     return {
@@ -36,7 +41,11 @@ export class ProjectService {
     };
   }
 
-  async create(dto: CreateProjectDto) {
+  async create(dto: CreateProjectDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanCreateProject(actor);
+
     await this.ensureActiveManager(dto.projectManagerId);
 
     const startDate = new Date(dto.startDate);
@@ -61,15 +70,20 @@ export class ProjectService {
     );
   }
 
-  async findAll(query: ProjectQueryDto) {
+  async findAll(query: ProjectQueryDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
     const where: Prisma.ProjectWhereInput = {};
+
+    // Project Managers can only query their own Projects.
+    if (actor.role === 'PROJECT_MANAGER') {
+      where.projectManagerId = actor.id;
+    } else if (query.projectManagerId) {
+      where.projectManagerId = query.projectManagerId;
+    }
 
     if (query.status) {
       where.status = query.status;
-    }
-
-    if (query.projectManagerId) {
-      where.projectManagerId = query.projectManagerId;
     }
 
     if (query.search) {
@@ -114,20 +128,24 @@ export class ProjectService {
     };
   }
 
-  async findOne(id: string) {
-    const project = await this.projects.findById(id);
+  async findOne(id: string, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const project = await this.getProjectOrThrow(id);
 
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
+    this.projectAccess.assertCanReadProject(actor, project);
 
     return project;
   }
 
-  async update(id: string, dto: UpdateProjectDto) {
-    const existingProject = await this.findOne(id);
+  async update(id: string, dto: UpdateProjectDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const existingProject = await this.getProjectOrThrow(id);
 
+    this.projectAccess.assertCanModifyProject(actor, existingProject);
+
+    // Manager reassignment stays Admin-only until removed from UpdateProjectDto.
     if (dto.projectManagerId) {
+      this.projectAccess.assertCanAssignProjectManager(actor);
       await this.ensureActiveManager(dto.projectManagerId);
     }
 
@@ -154,8 +172,15 @@ export class ProjectService {
     });
   }
 
-  async updateStatus(id: string, dto: UpdateProjectStatusDto) {
-    await this.findOne(id);
+  async updateStatus(
+    id: string,
+    dto: UpdateProjectStatusDto,
+    actorId?: string,
+  ) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const project = await this.getProjectOrThrow(id);
+
+    this.projectAccess.assertCanModifyProject(actor, project);
 
     const approvedQuotation = await this.projects.findApprovedQuotation(id);
 
@@ -176,8 +201,16 @@ export class ProjectService {
     });
   }
 
-  async assignManager(id: string, dto: AssignProjectManagerDto) {
-    await this.findOne(id);
+  async assignManager(
+    id: string,
+    dto: AssignProjectManagerDto,
+    actorId?: string,
+  ) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanAssignProjectManager(actor);
+
+    await this.getProjectOrThrow(id);
     await this.ensureActiveManager(dto.projectManagerId);
 
     return this.projects.update(id, {
@@ -208,6 +241,19 @@ export class ProjectService {
     return {
       message: 'Project deleted successfully',
     };
+  }
+
+  private async getProjectOrThrow(id: string) {
+    const project = await this.projects.findById(id);
+
+    if (!project) {
+      throw new NotFoundException({
+        code: ErrorCode.PROJECT_NOT_FOUND,
+        message: 'Project not found.',
+      });
+    }
+
+    return project;
   }
 
   private async convertFromQuotation(

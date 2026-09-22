@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Headers,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -42,8 +43,11 @@ export class ProjectController {
   @ApiOperation({ summary: 'Create a project' })
   @ApiCreatedResponse({ description: 'Project created successfully' })
   @ApiBadRequestResponse({ description: 'Invalid project data' })
-  create(@Body() dto: CreateProjectDto) {
-    return this.projectService.create(dto);
+  create(
+    @Body() dto: CreateProjectDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.projectService.create(dto, actorId);
   }
 
   @Post('from-quotation')
@@ -70,16 +74,22 @@ export class ProjectController {
   @Get()
   @ApiOperation({ summary: 'List projects' })
   @ApiOkResponse({ description: 'Paginated list of projects' })
-  findAll(@Query() query: ProjectQueryDto) {
-    return this.projectService.findAll(query);
+  findAll(
+    @Query() query: ProjectQueryDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.projectService.findAll(query, actorId);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get a project by ID' })
   @ApiOkResponse({ description: 'Project details' })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.projectService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.projectService.findOne(id, actorId);
   }
 
   @Patch(':id')
@@ -90,8 +100,9 @@ export class ProjectController {
   update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProjectDto,
+    @Headers('x-user-id') actorId?: string,
   ) {
-    return this.projectService.update(id, dto);
+    return this.projectService.update(id, dto, actorId);
   }
 
   @Patch(':id/status')
@@ -105,8 +116,9 @@ export class ProjectController {
   updateStatus(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateProjectStatusDto,
+    @Headers('x-user-id') actorId?: string,
   ) {
-    return this.projectService.updateStatus(id, dto);
+    return this.projectService.updateStatus(id, dto, actorId);
   }
 
   @Patch(':id/manager')
@@ -117,8 +129,9 @@ export class ProjectController {
   assignManager(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AssignProjectManagerDto,
+    @Headers('x-user-id') actorId?: string,
   ) {
-    return this.projectService.assignManager(id, dto);
+    return this.projectService.assignManager(id, dto, actorId);
   }
 
   @Delete(':id')

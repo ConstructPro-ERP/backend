@@ -33,12 +33,9 @@ import { RolesGuard } from '../guards/roles.guard';
 
 const PROJECT_READ_ROLES = ['ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'];
 
-/*
- * Assigned-Project-Manager ownership checks are not implemented in
- * project-service yet. Keep project mutations Admin-only until that
- * authorization rule is implemented in the service layer.
- */
-const PROJECT_WRITE_ROLES = ['ADMIN'];
+// Project Service enforces assigned-Project ownership.
+const PROJECT_CREATE_ROLES = ['ADMIN'];
+const PROJECT_OPERATION_ROLES = ['ADMIN', 'PROJECT_MANAGER'];
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -69,7 +66,7 @@ export class ProjectsGatewayController {
   constructor(private readonly httpService: HttpService) {}
 
   @Post()
-  @Roles(...PROJECT_WRITE_ROLES)
+  @Roles(...PROJECT_CREATE_ROLES)
   @ApiOperation({ summary: 'Create a standalone project' })
   @ApiCreatedResponse({ description: 'Project created successfully' })
   create(@Body() body: CreateProjectDto, @Req() req: AuthenticatedRequest) {
@@ -104,7 +101,7 @@ export class ProjectsGatewayController {
   }
 
   @Patch(':id')
-  @Roles(...PROJECT_WRITE_ROLES)
+  @Roles(...PROJECT_OPERATION_ROLES)
   @ApiOperation({ summary: 'Update a project' })
   @ApiOkResponse({ description: 'Project updated successfully' })
   update(
@@ -120,7 +117,7 @@ export class ProjectsGatewayController {
   }
 
   @Patch(':id/status')
-  @Roles(...PROJECT_WRITE_ROLES)
+  @Roles(...PROJECT_OPERATION_ROLES)
   @ApiOperation({ summary: 'Update project status' })
   @ApiOkResponse({ description: 'Project status updated successfully' })
   updateStatus(

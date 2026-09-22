@@ -15,6 +15,7 @@ import {
   ProjectRepository,
   ProjectTransaction,
 } from '../../apps/project-service/src/repositories/project.repository';
+import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -33,6 +34,14 @@ const mockProjectRepository = {
   updateInTransaction: jest.fn(),
   linkQuotation: jest.fn(),
   findProjectManagerInTransaction: jest.fn(),
+};
+
+const mockProjectAccessService = {
+  resolveActor: jest.fn(),
+  assertCanReadProject: jest.fn(),
+  assertCanModifyProject: jest.fn(),
+  assertCanCreateProject: jest.fn(),
+  assertCanAssignProjectManager: jest.fn(),
 };
 
 const fakeTransaction = {} as ProjectTransaction;
@@ -126,10 +135,19 @@ describe('ProjectService', () => {
           provide: ProjectRepository,
           useValue: mockProjectRepository,
         },
+        {
+          provide: ProjectAccessService,
+          useValue: mockProjectAccessService,
+        },
       ],
     }).compile();
 
     service = module.get<ProjectService>(ProjectService);
+
+    mockProjectAccessService.resolveActor.mockResolvedValue({
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
     mockProjectRepository.transaction.mockImplementation(
       (work: (tx: ProjectTransaction) => Promise<unknown>) =>
@@ -244,6 +262,113 @@ describe('ProjectService', () => {
       ).rejects.toBeInstanceOf(BadRequestException);
 
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('project access and ownership', () => {
+    it('scopes Project Manager list to assigned projects', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({}, 'manager-1');
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-1',
+          },
+        }),
+      );
+    });
+
+    it('ignores another manager ID supplied by Project Manager', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          projectManagerId: 'manager-2',
+        },
+        'manager-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-1',
+          },
+        }),
+      );
+    });
+
+    it('checks read access for project details', async () => {
+      const actor = {
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER' as const,
+      };
+
+      mockProjectAccessService.resolveActor.mockResolvedValue(actor);
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      await service.findOne('project-1', 'manager-1');
+
+      expect(
+        mockProjectAccessService.assertCanReadProject,
+      ).toHaveBeenCalledWith(actor, planningProject);
+    });
+
+    it('checks write access before updating project', async () => {
+      const actor = {
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER' as const,
+      };
+
+      mockProjectAccessService.resolveActor.mockResolvedValue(actor);
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.update.mockResolvedValue(planningProject);
+
+      await service.update(
+        'project-1',
+        {
+          location: 'Kandy',
+        },
+        'manager-1',
+      );
+
+      expect(
+        mockProjectAccessService.assertCanModifyProject,
+      ).toHaveBeenCalledWith(actor, planningProject);
+    });
+
+    it('requires manager assignment permission when projectManagerId changes', async () => {
+      const actor = {
+        id: 'admin-1',
+        role: 'ADMIN' as const,
+      };
+
+      mockProjectAccessService.resolveActor.mockResolvedValue(actor);
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.update.mockResolvedValue(planningProject);
+
+      await service.update(
+        'project-1',
+        {
+          projectManagerId: 'manager-2',
+        },
+        'admin-1',
+      );
+
+      expect(
+        mockProjectAccessService.assertCanAssignProjectManager,
+      ).toHaveBeenCalledWith(actor);
     });
   });
 

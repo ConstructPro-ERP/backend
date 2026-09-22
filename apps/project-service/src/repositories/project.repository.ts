@@ -200,6 +200,23 @@ export class ProjectRepository {
     });
   }
 
+  findUserWithRole(userId: string) {
+    return this.prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        id: true,
+        status: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
+      },
+    });
+  }
+
   findProjectManager(userId: string) {
     return this.prisma.user.findUnique({
       where: { id: userId },

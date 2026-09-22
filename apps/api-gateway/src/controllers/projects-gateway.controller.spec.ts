@@ -94,9 +94,19 @@ describe('ProjectsGatewayController roles', () => {
     expect(guard.canActivate(contextFor('ADMIN', 'updateStatus'))).toBe(true);
   });
 
-  it('rejects Project Manager from write routes until assigned-project authorization is implemented', () => {
+  it('allows Project Manager through project operation routes', () => {
+    expect(guard.canActivate(contextFor('PROJECT_MANAGER', 'update'))).toBe(
+      true,
+    );
+
+    expect(
+      guard.canActivate(contextFor('PROJECT_MANAGER', 'updateStatus')),
+    ).toBe(true);
+  });
+
+  it('rejects Project Manager from standalone project creation', () => {
     expect(() =>
-      guard.canActivate(contextFor('PROJECT_MANAGER', 'update')),
+      guard.canActivate(contextFor('PROJECT_MANAGER', 'create')),
     ).toThrow(ForbiddenException);
   });
 

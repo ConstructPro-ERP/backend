@@ -217,28 +217,35 @@ export class ProjectRepository {
     });
   }
 
-  findProjectManager(userId: string) {
+  findProjectManagerCandidate(userId: string) {
     return this.prisma.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
-        fullName: true,
-        email: true,
         status: true,
-        roleId: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
       },
     });
   }
 
-  findProjectManagerInTransaction(tx: ProjectTransaction, userId: string) {
+  findProjectManagerCandidateInTransaction(
+    tx: ProjectTransaction,
+    userId: string,
+  ) {
     return tx.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
-        fullName: true,
-        email: true,
         status: true,
-        roleId: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
       },
     });
   }

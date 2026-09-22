@@ -26,6 +26,7 @@ import {
   ProjectRepository,
   ProjectTransaction,
 } from './repositories/project.repository';
+import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
 
 @Injectable()
 export class ProjectService {
@@ -46,7 +47,7 @@ export class ProjectService {
 
     this.projectAccess.assertCanCreateProject(actor);
 
-    await this.ensureActiveManager(dto.projectManagerId);
+    await this.ensureValidProjectManager(dto.projectManagerId);
 
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : undefined;
@@ -64,6 +65,7 @@ export class ProjectService {
     });
   }
 
+  // Internal Quotation Service flow.
   async createFromQuotation(dto: CreateProjectFromQuotationDto) {
     return this.withTransactionRetry((tx) =>
       this.convertFromQuotation(tx, dto),
@@ -75,10 +77,11 @@ export class ProjectService {
 
     const where: Prisma.ProjectWhereInput = {};
 
-    // Project Managers can only query their own Projects.
+    // Project Managers always see only their assigned projects.
     if (actor.role === 'PROJECT_MANAGER') {
       where.projectManagerId = actor.id;
     } else if (query.projectManagerId) {
+      // Admins and Accountants may filter by Project Manager.
       where.projectManagerId = query.projectManagerId;
     }
 
@@ -143,12 +146,6 @@ export class ProjectService {
 
     this.projectAccess.assertCanModifyProject(actor, existingProject);
 
-    // Manager reassignment stays Admin-only until removed from UpdateProjectDto.
-    if (dto.projectManagerId) {
-      this.projectAccess.assertCanAssignProjectManager(actor);
-      await this.ensureActiveManager(dto.projectManagerId);
-    }
-
     const startDate = dto.startDate
       ? new Date(dto.startDate)
       : existingProject.startDate;
@@ -168,7 +165,6 @@ export class ProjectService {
       startDate: dto.startDate ? startDate : undefined,
       endDate: dto.endDate === undefined ? undefined : endDate,
       budget: dto.budget,
-      projectManagerId: dto.projectManagerId,
     });
   }
 
@@ -211,7 +207,7 @@ export class ProjectService {
     this.projectAccess.assertCanAssignProjectManager(actor);
 
     await this.getProjectOrThrow(id);
-    await this.ensureActiveManager(dto.projectManagerId);
+    await this.ensureValidProjectManager(dto.projectManagerId);
 
     return this.projects.update(id, {
       projectManagerId: dto.projectManagerId,
@@ -362,7 +358,7 @@ export class ProjectService {
       });
     }
 
-    await this.ensureActiveManagerInTransaction(tx, dto.projectManagerId);
+    await this.ensureValidProjectManagerInTransaction(tx, dto.projectManagerId);
 
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : undefined;
@@ -387,33 +383,44 @@ export class ProjectService {
     };
   }
 
-  private async ensureActiveManager(userId: string) {
-    const manager = await this.projects.findProjectManager(userId);
+  private async ensureValidProjectManager(userId: string) {
+    const manager = await this.projects.findProjectManagerCandidate(userId);
 
-    if (!manager) {
-      throw new BadRequestException('Project manager not found');
-    }
-
-    if (manager.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('Project manager must be an active user');
-    }
+    this.validateProjectManager(manager);
   }
 
-  private async ensureActiveManagerInTransaction(
+  private async ensureValidProjectManagerInTransaction(
     tx: ProjectTransaction,
     userId: string,
   ) {
-    const manager = await this.projects.findProjectManagerInTransaction(
-      tx,
-      userId,
-    );
+    const manager =
+      await this.projects.findProjectManagerCandidateInTransaction(tx, userId);
 
+    this.validateProjectManager(manager);
+  }
+
+  private validateProjectManager(
+    manager: ProjectManagerCandidate | null,
+  ): void {
     if (!manager) {
-      throw new BadRequestException('Project manager not found');
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_MANAGER_NOT_FOUND,
+        message: 'Project manager not found.',
+      });
     }
 
     if (manager.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('Project manager must be an active user');
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_MANAGER_INACTIVE,
+        message: 'Project manager must be an active user.',
+      });
+    }
+
+    if (manager.role?.roleName !== 'PROJECT_MANAGER') {
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_PROJECT_MANAGER_ROLE,
+        message: 'Selected user must have the PROJECT_MANAGER role.',
+      });
     }
   }
 

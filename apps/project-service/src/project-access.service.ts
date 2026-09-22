@@ -41,28 +41,35 @@ export class ProjectAccessService {
 
     const roleName = user.role?.roleName;
 
-    if (!roleName || !this.isProjectAccessRole(roleName)) {
-      throw new ForbiddenException({
-        code: ErrorCode.PROJECT_ACCESS_DENIED,
-        message: 'You do not have permission to access project operations.',
-      });
-    }
+    switch (roleName) {
+      case 'ADMIN':
+      case 'PROJECT_MANAGER':
+      case 'ACCOUNTANT':
+        return {
+          id: user.id,
+          role: roleName,
+        };
 
-    return {
-      id: user.id,
-      role: roleName,
-    };
+      default:
+        throw new ForbiddenException({
+          code: ErrorCode.PROJECT_ACCESS_DENIED,
+          message: 'You do not have permission to access project operations.',
+        });
+    }
   }
 
   assertCanReadProject(
     actor: ProjectAccessActor,
     project: ProjectAccessResource,
   ): void {
-    if (actor.role !== 'PROJECT_MANAGER') {
+    if (actor.role === 'ADMIN' || actor.role === 'ACCOUNTANT') {
       return;
     }
 
-    if (project.projectManagerId === actor.id) {
+    if (
+      actor.role === 'PROJECT_MANAGER' &&
+      project.projectManagerId === actor.id
+    ) {
       return;
     }
 
@@ -107,16 +114,6 @@ export class ProjectAccessService {
       code: ErrorCode.PROJECT_MANAGER_ASSIGNMENT_FORBIDDEN,
       message: 'Only an administrator can assign a project manager.',
     });
-  }
-
-  private isProjectAccessRole(
-    roleName: string,
-  ): roleName is ProjectAccessActor['role'] {
-    return (
-      roleName === 'ADMIN' ||
-      roleName === 'PROJECT_MANAGER' ||
-      roleName === 'ACCOUNTANT'
-    );
   }
 
   private throwProjectAccessDenied(projectId: string): never {

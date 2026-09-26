@@ -1,59 +1,12 @@
-name: Backend CI Pipeline
+name: Backend CI
 
 on:
-  push:
-    branches:
-      - develop
-      - main
-      - "feature/**"
-      - "fix/**"
-
   pull_request:
-    branches:
-      - develop
-      - main
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
 
 jobs:
   backend-ci:
-    name: Generate, Format, Build, Test, and Audit
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout backend repository
-        uses: actions/checkout@v4
-
-      - name: Set up Node.js 22
-        uses: actions/setup-node@v4
-        with:
-          node-version: "22"
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Check formatting
-        run: npm run format:check
-
-      - name: Generate Prisma client
-        run: npx prisma generate
-
-      - name: Normalize formatting
-        run: npm run format
-
-      - name: Run lint checks
-        run: npm run lint
-
-      - name: Build NestJS backend
-        run: npm run build:all
-
-      - name: Run unit test suite
-        run: npm run test:unit
-
-      - name: Run integration test suite
-        run: npm run test:e2e
-        env:
-          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
-
-      - name: Run dependency security scan
-        continue-on-error: true
-        run: npm audit --audit-level=high
+    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@develop
+    secrets: inherit

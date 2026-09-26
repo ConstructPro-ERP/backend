@@ -8,5 +8,5 @@ on:
 
 jobs:
   backend-ci:
-    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@develop
+    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v1
     secrets: inherit

@@ -13,6 +13,14 @@ interface ProjectConversionResponseBody {
   status: string;
 }
 
+interface ProjectLifecycleErrorResponseBody {
+  code: string;
+  details: {
+    currentStatus: ProjectStatus;
+    requestedStatus: ProjectStatus;
+  };
+}
+
 function parseProjectConversionResponse(
   value: unknown,
 ): ProjectConversionResponseBody {
@@ -32,6 +40,34 @@ function parseProjectConversionResponse(
   return {
     projectId: value.projectId,
     status: value.status,
+  };
+}
+
+function parseProjectLifecycleErrorResponse(
+  value: unknown,
+): ProjectLifecycleErrorResponseBody {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('code' in value) ||
+    typeof value.code !== 'string' ||
+    !('details' in value) ||
+    typeof value.details !== 'object' ||
+    value.details === null ||
+    !('currentStatus' in value.details) ||
+    !('requestedStatus' in value.details)
+  ) {
+    throw new Error(
+      'Project lifecycle error response does not match the expected shape',
+    );
+  }
+
+  return {
+    code: value.code,
+    details: {
+      currentStatus: value.details.currentStatus as ProjectStatus,
+      requestedStatus: value.details.requestedStatus as ProjectStatus,
+    },
   };
 }
 
@@ -251,10 +287,14 @@ describe('ProjectService — integration', () => {
       })
       .expect(400);
 
-    // Assert
-    expect(response.body.code).toBe('INVALID_PROJECT_STATUS_TRANSITION');
+    const responseBody = parseProjectLifecycleErrorResponse(
+      response.body as unknown,
+    );
 
-    expect(response.body.details).toEqual({
+    // Assert
+    expect(responseBody.code).toBe('INVALID_PROJECT_STATUS_TRANSITION');
+
+    expect(responseBody.details).toEqual({
       currentStatus: ProjectStatus.PLANNING,
       requestedStatus: ProjectStatus.COMPLETED,
     });

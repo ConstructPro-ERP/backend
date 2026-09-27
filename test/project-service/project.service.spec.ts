@@ -979,39 +979,39 @@ describe('ProjectService', () => {
 
       expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
     });
-  });
 
-  it('rejects new project conversion when assigned user is not a Project Manager', async () => {
-    mockProjectRepository.findQuotation.mockResolvedValue({
-      id: 'quotation-1',
-      leadId: 'lead-1',
-      status: QuotationStatus.APPROVED,
-      projectId: null,
-    });
-
-    mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
-      {
-        ...adminUser,
-        role: {
-          roleName: 'ADMIN',
-        },
-      },
-    );
-
-    await expect(
-      service.createFromQuotation({
-        quotationId: 'quotation-1',
+    it('rejects new project conversion when assigned user is not a Project Manager', async () => {
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
         leadId: 'lead-1',
-        projectName: 'House Project',
-        startDate: '2026-10-01T00:00:00.000Z',
-        projectManagerId: 'admin-1',
-      }),
-    ).rejects.toMatchObject({
-      response: {
-        code: 'INVALID_PROJECT_MANAGER_ROLE',
-      },
-    });
+        status: QuotationStatus.APPROVED,
+        projectId: null,
+      });
 
-    expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+      mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
+        {
+          ...adminUser,
+          role: {
+            roleName: 'ADMIN',
+          },
+        },
+      );
+
+      await expect(
+        service.createFromQuotation({
+          quotationId: 'quotation-1',
+          leadId: 'lead-1',
+          projectName: 'House Project',
+          startDate: '2026-10-01T00:00:00.000Z',
+          projectManagerId: 'admin-1',
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'INVALID_PROJECT_MANAGER_ROLE',
+        },
+      });
+
+      expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+    });
   });
 });

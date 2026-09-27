@@ -95,11 +95,22 @@ describe('ProjectService — integration', () => {
   }
 
   async function createManager(label: string) {
+    const projectManagerRole = await prisma.role.upsert({
+      where: {
+        roleName: 'PROJECT_MANAGER',
+      },
+      update: {},
+      create: {
+        roleName: 'PROJECT_MANAGER',
+      },
+    });
+
     return prisma.user.create({
       data: {
         fullName: `${prefix} Manager ${label}`,
         email: `project-integration-${runId}-${label}@test.com`,
         password: 'hashed',
+        roleId: projectManagerRole.id,
       },
     });
   }
@@ -146,6 +157,41 @@ describe('ProjectService — integration', () => {
   afterAll(async () => {
     await cleanup();
     await app.close();
+  });
+
+  it('rejects project manager changes through the general project update endpoint', async () => {
+    // Arrange
+    const currentManager = await createManager('update-current');
+    const newManager = await createManager('update-new');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Update Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: currentManager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}`)
+      .set('x-user-id', currentManager.id)
+      .send({
+        projectManagerId: newManager.id,
+      })
+      .expect(400);
+
+    // Assert
+    const updatedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(updatedProject).not.toBeNull();
+    expect(updatedProject!.projectManagerId).toBe(currentManager.id);
   });
 
   it('creates an ACTIVE project from an approved quotation', async () => {

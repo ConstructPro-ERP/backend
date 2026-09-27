@@ -145,11 +145,22 @@ describe('Quotation → Project cross-service integration', () => {
   }
 
   async function createManager(label: string) {
+    const projectManagerRole = await prisma.role.upsert({
+      where: {
+        roleName: 'PROJECT_MANAGER',
+      },
+      update: {},
+      create: {
+        roleName: 'PROJECT_MANAGER',
+      },
+    });
+
     return prisma.user.create({
       data: {
         fullName: `${prefix} Manager ${label}`,
         email: `quotation-project-${runId}-${label}@test.com`,
         password: 'hashed',
+        roleId: projectManagerRole.id,
       },
     });
   }

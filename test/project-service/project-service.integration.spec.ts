@@ -194,6 +194,81 @@ describe('ProjectService — integration', () => {
     expect(updatedProject!.projectManagerId).toBe(currentManager.id);
   });
 
+  it('allows ACTIVE to ON_HOLD for the assigned Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('status-on-hold');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} On Hold Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ON_HOLD,
+      })
+      .expect(200);
+
+    // Assert
+    const updatedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(updatedProject).not.toBeNull();
+    expect(updatedProject!.status).toBe(ProjectStatus.ON_HOLD);
+  });
+
+  it('rejects PLANNING to COMPLETED with a stable lifecycle error', async () => {
+    // Arrange
+    const manager = await createManager('status-invalid');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Invalid Transition Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.COMPLETED,
+      })
+      .expect(400);
+
+    // Assert
+    expect(response.body.code).toBe('INVALID_PROJECT_STATUS_TRANSITION');
+
+    expect(response.body.details).toEqual({
+      currentStatus: ProjectStatus.PLANNING,
+      requestedStatus: ProjectStatus.COMPLETED,
+    });
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+  });
+
   it('creates an ACTIVE project from an approved quotation', async () => {
     // Arrange
     const manager = await createManager('create');

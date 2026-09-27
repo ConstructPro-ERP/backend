@@ -17,6 +17,7 @@ import {
 } from '../../apps/project-service/src/repositories/project.repository';
 import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
 import { ProjectAccessActor } from '../../apps/project-service/src/interfaces/project-access.interface';
+import { ProjectLifecycleService } from '../../apps/project-service/src/lifecycle/project-lifecycle.service';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -43,6 +44,10 @@ const mockProjectAccessService = {
   assertCanModifyProject: jest.fn(),
   assertCanCreateProject: jest.fn(),
   assertCanAssignProjectManager: jest.fn(),
+};
+
+const mockProjectLifecycleService = {
+  assertTransitionAllowed: jest.fn(),
 };
 
 const fakeTransaction = {} as ProjectTransaction;
@@ -155,6 +160,10 @@ describe('ProjectService', () => {
           provide: ProjectAccessService,
           useValue: mockProjectAccessService,
         },
+        {
+          provide: ProjectLifecycleService,
+          useValue: mockProjectLifecycleService,
+        },
       ],
     }).compile();
 
@@ -265,6 +274,10 @@ describe('ProjectService', () => {
         status: ProjectStatus.ACTIVE,
       });
 
+      expect(
+        mockProjectLifecycleService.assertTransitionAllowed,
+      ).toHaveBeenCalledWith(ProjectStatus.PLANNING, ProjectStatus.ACTIVE);
+
       expect(result.status).toBe(ProjectStatus.ACTIVE);
     });
 
@@ -285,21 +298,32 @@ describe('ProjectService', () => {
       expect(result.status).toBe(ProjectStatus.ACTIVE);
     });
 
-    it('rejects PLANNING when an approved quotation already exists', async () => {
-      mockProjectRepository.findById.mockResolvedValue(activeProject);
+    it('updates an allowed non-ACTIVE transition without checking quotations', async () => {
+      const onHoldProject = {
+        ...activeProject,
+        status: ProjectStatus.ON_HOLD,
+      };
 
-      mockProjectRepository.findApprovedQuotation.mockResolvedValue({
-        id: 'quotation-1',
-        status: QuotationStatus.APPROVED,
+      mockProjectRepository.findById.mockResolvedValue(activeProject);
+      mockProjectRepository.update.mockResolvedValue(onHoldProject);
+
+      const result = await service.updateStatus('project-1', {
+        status: ProjectStatus.ON_HOLD,
       });
 
-      await expect(
-        service.updateStatus('project-1', {
-          status: ProjectStatus.PLANNING,
-        }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(
+        mockProjectLifecycleService.assertTransitionAllowed,
+      ).toHaveBeenCalledWith(ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD);
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(
+        mockProjectRepository.findApprovedQuotation,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
+        status: ProjectStatus.ON_HOLD,
+      });
+
+      expect(result.status).toBe(ProjectStatus.ON_HOLD);
     });
   });
 

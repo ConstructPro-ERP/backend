@@ -27,12 +27,14 @@ import {
   ProjectTransaction,
 } from './repositories/project.repository';
 import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
+import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 
 @Injectable()
 export class ProjectService {
   constructor(
     private readonly projects: ProjectRepository,
     private readonly projectAccess: ProjectAccessService,
+    private readonly projectLifecycle: ProjectLifecycleService,
   ) {}
 
   getHealth() {
@@ -178,18 +180,16 @@ export class ProjectService {
 
     this.projectAccess.assertCanModifyProject(actor, project);
 
-    const approvedQuotation = await this.projects.findApprovedQuotation(id);
+    this.projectLifecycle.assertTransitionAllowed(project.status, dto.status);
 
-    if (dto.status === ProjectStatus.ACTIVE && !approvedQuotation) {
-      throw new BadRequestException(
-        'Project cannot become ACTIVE until at least one quotation is approved',
-      );
-    }
+    if (dto.status === ProjectStatus.ACTIVE) {
+      const approvedQuotation = await this.projects.findApprovedQuotation(id);
 
-    if (dto.status === ProjectStatus.PLANNING && approvedQuotation) {
-      throw new BadRequestException(
-        'Project cannot return to PLANNING after an approved quotation is associated',
-      );
+      if (!approvedQuotation) {
+        throw new BadRequestException(
+          'Project cannot become ACTIVE until at least one quotation is approved',
+        );
+      }
     }
 
     return this.projects.update(id, {

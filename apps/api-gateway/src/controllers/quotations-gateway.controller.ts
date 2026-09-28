@@ -97,6 +97,47 @@ export class QuotationsGatewayController {
     );
   }
 
+  @Get(':id/pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT')
+  async getPdf(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.get(`${QUOTATION_SERVICE_URL}/quotations/${id}/pdf`, {
+        headers: { authorization: req.headers.authorization },
+      }),
+    );
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async reject(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/reject`,
+        body,
+        { headers: { authorization: req.headers.authorization } },
+      ),
+    );
+  }
+
+  @Patch(':id/revise')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async revise(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/revise`,
+        {},
+        { headers: { authorization: req.headers.authorization } },
+      ),
+    );
+  }
+
   @Patch(':id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN')

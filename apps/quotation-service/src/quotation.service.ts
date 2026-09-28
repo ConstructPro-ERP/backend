@@ -3,6 +3,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  BadGatewayException,
   Logger,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -308,6 +309,73 @@ export class QuotationService {
       projectId: projectResult.projectId,
       projectStatus: projectResult.status,
     };
+  }
+
+  async reject(id: string, reason: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot reject quotation with status ${quotation.status}. Only PENDING_APPROVAL quotations can be rejected.`,
+      });
+    }
+
+    const notes = quotation.notes
+      ? `${quotation.notes}\n[Rejection Reason]: ${reason}`
+      : `[Rejection Reason]: ${reason}`;
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: {
+        status: 'REJECTED',
+        notes,
+      },
+      include: { items: true },
+    });
+  }
+
+  async revise(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status !== 'REJECTED') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot revise quotation with status ${quotation.status}. Only REJECTED quotations can be moved to revision.`,
+      });
+    }
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: {
+        status: 'DRAFT',
+      },
+      include: { items: true },
+    });
+  }
+
+  async getPdf(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.pdfUrl) {
+      return { pdfUrl: quotation.pdfUrl };
+    }
+
+    const pdfUrl = await this.documentClient.generatePdf(id);
+    if (!pdfUrl) {
+      throw new BadGatewayException({
+        code: 'PDF_GENERATION_FAILED',
+        message:
+          'Quotation PDF generation failed or document service is unavailable.',
+      });
+    }
+
+    await this.prisma.quotation.update({
+      where: { id },
+      data: { pdfUrl },
+    });
+
+    return { pdfUrl };
   }
 }
 

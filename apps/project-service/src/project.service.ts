@@ -185,6 +185,8 @@ export class ProjectService {
 
     if (dto.status === ProjectStatus.ACTIVE) {
       await this.validateActivationRequirements(project);
+    } else if (dto.status === ProjectStatus.COMPLETED) {
+      this.validateCompletionRequirements();
     }
 
     return this.projects.update(id, {
@@ -449,6 +451,11 @@ export class ProjectService {
     }
 
     // Milestone and weight checks are added when Issue 03 provides those fields.
+  }
+
+  private validateCompletionRequirements(): void {
+    // Issue 03 will enforce 100% canonical progress
+    // and required milestone completion here.
   }
 
   private validateDateRange(startDate: Date, endDate?: Date | null) {

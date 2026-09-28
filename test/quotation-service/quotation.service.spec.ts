@@ -4,7 +4,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { QuotationService } from '../../apps/quotation-service/src/quotation.service';
+import {
+  QuotationService,
+  round2,
+} from '../../apps/quotation-service/src/quotation.service';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentClient } from '../../apps/quotation-service/src/document.client';
 import { ProjectClient } from '../../apps/quotation-service/src/project.client';
@@ -12,7 +15,16 @@ import { NotificationClient } from '../../apps/quotation-service/src/notificatio
 
 const mockPrisma = {
   lead: { findUnique: jest.fn() },
-  quotation: { create: jest.fn(), update: jest.fn(), findUnique: jest.fn() },
+  quotation: {
+    create: jest.fn(),
+    update: jest.fn(),
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    count: jest.fn(),
+  },
+  quotationItem: {
+    deleteMany: jest.fn(),
+  },
   $transaction: jest.fn(),
 };
 
@@ -559,5 +571,170 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     // second update (CONVERTED + projectId) must NOT have been called
     expect(mockPrisma.quotation.update).toHaveBeenCalledTimes(1);
     expect(mockNotificationClient.notifyProjectCreated).not.toHaveBeenCalled();
+  });
+});
+
+// ─── findAll ─────────────────────────────────────────────────────────────────
+
+describe('QuotationService.findAll', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('returns paginated quotations with default page and limit', async () => {
+    const quotations = [
+      { id: 'q-1', leadId: 'lead-1', totalAmount: 1000, items: [] },
+      { id: 'q-2', leadId: 'lead-2', totalAmount: 2000, items: [] },
+    ];
+    mockPrisma.quotation.count.mockResolvedValue(2);
+    mockPrisma.quotation.findMany.mockResolvedValue(quotations);
+
+    const result = await service.findAll();
+
+    expect(result.items).toEqual(quotations);
+    expect(result.total).toBe(2);
+    expect(result.page).toBe(1);
+    expect(result.limit).toBe(20);
+    expect(result.totalPages).toBe(1);
+    expect(mockPrisma.quotation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 0,
+        take: 20,
+        orderBy: { createdAt: 'desc' },
+      }),
+    );
+  });
+
+  it('filters by leadId and status when provided', async () => {
+    mockPrisma.quotation.count.mockResolvedValue(1);
+    mockPrisma.quotation.findMany.mockResolvedValue([
+      { id: 'q-1', status: 'PENDING_APPROVAL' },
+    ]);
+
+    await service.findAll({
+      leadId: 'lead-uuid-1',
+      status: 'PENDING_APPROVAL',
+      page: 2,
+      limit: 10,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const findManyArg = mockPrisma.quotation.findMany.mock.calls[0][0] as {
+      skip: number;
+      take: number;
+      where: { leadId?: string; status?: string };
+    };
+    expect(findManyArg.skip).toBe(10);
+    expect(findManyArg.take).toBe(10);
+    expect(findManyArg.where.leadId).toBe('lead-uuid-1');
+    expect(findManyArg.where.status).toBe('PENDING_APPROVAL');
+  });
+});
+
+// ─── update ──────────────────────────────────────────────────────────────────
+
+describe('QuotationService.update', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('updates notes and recalculates line items using round2', async () => {
+    const existing = {
+      id: 'q-1',
+      status: 'PENDING_APPROVAL',
+      notes: 'Initial notes',
+      totalAmount: 100,
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(existing);
+    mockPrisma.$transaction.mockImplementation(
+      (fn: (tx: typeof mockPrisma) => Promise<unknown>) => fn(mockPrisma),
+    );
+    mockPrisma.quotationItem.deleteMany.mockResolvedValue({ count: 1 });
+    mockPrisma.quotation.update.mockResolvedValue({
+      id: 'q-1',
+      status: 'PENDING_APPROVAL',
+      notes: 'Updated notes',
+      totalAmount: 750,
+      items: [{ itemName: 'Item 1', quantity: 3, unitPrice: 250, amount: 750 }],
+    });
+
+    const result = await service.update('q-1', {
+      notes: 'Updated notes',
+      items: [{ itemName: 'Item 1', quantity: 3, unitPrice: 250 }],
+    });
+
+    expect(result.totalAmount).toBe(750);
+    expect(mockPrisma.quotationItem.deleteMany).toHaveBeenCalledWith({
+      where: { quotationId: 'q-1' },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    const updateArg = mockPrisma.quotation.update.mock.calls[0][0] as {
+      where: { id: string };
+      data: { notes: string; totalAmount: number };
+    };
+    expect(updateArg.where.id).toBe('q-1');
+    expect(updateArg.data.notes).toBe('Updated notes');
+    expect(updateArg.data.totalAmount).toBe(750);
+  });
+
+  it('throws NotFoundException when quotation does not exist', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.update('non-existent', { notes: 'test' }),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('throws BadRequestException with QUOTATION_LOCKED when status is APPROVED or CONVERTED', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'q-1',
+      status: 'APPROVED',
+    });
+
+    await expect(
+      service.update('q-1', { notes: 'test' }),
+    ).rejects.toMatchObject({
+      response: { code: 'QUOTATION_LOCKED' },
+    });
+  });
+});
+
+// ─── round2 calculation utility ──────────────────────────────────────────────
+
+describe('round2 precision calculation', () => {
+  it('correctly rounds to 2 decimal places without floating point drift', () => {
+    expect(round2(0.1 + 0.2)).toBe(0.3);
+    expect(round2(10.555)).toBe(10.56);
+    expect(round2(1.005)).toBe(1.01);
+    expect(round2(3 * 33.33)).toBe(99.99);
   });
 });

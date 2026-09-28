@@ -360,4 +360,3 @@ Go to GitHub &rarr; click **Compare & pull request**:
 | :--------------------- | :----------------------------------------------- | :-------------------------------------------- | :----------- | :--------------------- |
 | **PR 1 (Week 9)**      | Quotation List, Create, Edit & Calculations      | `feature/84-quotation-list-edit-calculations` | `Closes #84` | **In Review / Merged** |
 | **PR 2 (Weeks 10–12)** | Rejection, Revision, PDF, Conversion & Demo Data | `feature/86-quotation-workflow-completion`    | `Closes #86` | **Completed**          |
-

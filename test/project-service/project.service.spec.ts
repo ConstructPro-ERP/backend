@@ -270,6 +270,10 @@ describe('ProjectService', () => {
         status: ProjectStatus.ACTIVE,
       });
 
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).toHaveBeenCalledWith('manager-1');
+
       expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
         status: ProjectStatus.ACTIVE,
       });
@@ -296,6 +300,86 @@ describe('ProjectService', () => {
       });
 
       expect(result.status).toBe(ProjectStatus.ACTIVE);
+    });
+
+    it('rejects activation when no Project Manager is assigned', async () => {
+      const projectWithoutManager = {
+        ...planningProject,
+        projectManagerId: null,
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(projectWithoutManager);
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the Project start date is missing', async () => {
+      const projectWithoutStartDate = {
+        ...planningProject,
+        startDate: null,
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(projectWithoutStartDate);
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the assigned Project Manager is inactive', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        inactiveManager,
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'PROJECT_MANAGER_INACTIVE',
+        },
+      });
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the stored Project date range is invalid', async () => {
+      const projectWithInvalidDates = {
+        ...planningProject,
+        startDate: new Date('2026-10-10T00:00:00.000Z'),
+        endDate: new Date('2026-10-01T00:00:00.000Z'),
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(projectWithInvalidDates);
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
     });
 
     it('updates an allowed non-ACTIVE transition without checking quotations', async () => {

@@ -160,6 +160,32 @@ describe('ProjectService — integration', () => {
     });
   }
 
+  async function createApprovedQuotationForProject(
+    projectId: string,
+    label: string,
+  ) {
+    const lead = await createLead(label);
+
+    return prisma.quotation.create({
+      data: {
+        leadId: lead.id,
+        projectId,
+        totalAmount: 250000,
+        status: 'APPROVED',
+        items: {
+          create: [
+            {
+              itemName: 'Activation Work',
+              quantity: 1,
+              unitPrice: 250000,
+              amount: 250000,
+            },
+          ],
+        },
+      },
+    });
+  }
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [ProjectModule],
@@ -299,6 +325,149 @@ describe('ProjectService — integration', () => {
       requestedStatus: ProjectStatus.COMPLETED,
     });
 
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+  });
+
+  it.each([ProjectStatus.PLANNING, ProjectStatus.ON_HOLD])(
+    'activates a %s Project when activation requirements are met',
+    async (initialStatus) => {
+      // Arrange
+      const manager = await createManager(
+        `activation-${initialStatus.toLowerCase()}`,
+      );
+
+      const project = await prisma.project.create({
+        data: {
+          projectName: `${prefix} ${initialStatus} Activation Project`,
+          location: 'Colombo',
+          startDate: new Date('2026-10-01T00:00:00.000Z'),
+          endDate: new Date('2027-04-30T00:00:00.000Z'),
+          projectManagerId: manager.id,
+          status: initialStatus,
+        },
+      });
+
+      await createApprovedQuotationForProject(
+        project.id,
+        `activation-${initialStatus.toLowerCase()}`,
+      );
+
+      // Act
+      await request(httpServer)
+        .patch(`/projects/${project.id}/status`)
+        .set('x-user-id', manager.id)
+        .send({
+          status: ProjectStatus.ACTIVE,
+        })
+        .expect(200);
+
+      // Assert
+      const updatedProject = await prisma.project.findUnique({
+        where: {
+          id: project.id,
+        },
+      });
+
+      expect(updatedProject).not.toBeNull();
+      expect(updatedProject!.status).toBe(ProjectStatus.ACTIVE);
+    },
+  );
+
+  it('rejects activation when the assigned user is no longer a Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('activation-role-change');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Manager Role Change Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    await createApprovedQuotationForProject(
+      project.id,
+      'activation-role-change',
+    );
+
+    const adminRole = await prisma.role.upsert({
+      where: {
+        roleName: 'ADMIN',
+      },
+      update: {},
+      create: {
+        roleName: 'ADMIN',
+      },
+    });
+
+    await prisma.user.update({
+      where: {
+        id: manager.id,
+      },
+      data: {
+        roleId: adminRole.id,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ACTIVE,
+      })
+      .expect(400);
+
+    // Assert
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+  });
+
+  it('rejects activation when the stored Project date range is invalid', async () => {
+    // Arrange
+    const manager = await createManager('activation-invalid-dates');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Invalid Date Activation Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-10T00:00:00.000Z'),
+        endDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    await createApprovedQuotationForProject(
+      project.id,
+      'activation-invalid-dates',
+    );
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ACTIVE,
+      })
+      .expect(400);
+
+    // Assert
     const unchangedProject = await prisma.project.findUnique({
       where: {
         id: project.id,

@@ -25,6 +25,7 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import {
   ProjectRepository,
   ProjectTransaction,
+  ProjectWithDetails,
 } from './repositories/project.repository';
 import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
@@ -183,13 +184,7 @@ export class ProjectService {
     this.projectLifecycle.assertTransitionAllowed(project.status, dto.status);
 
     if (dto.status === ProjectStatus.ACTIVE) {
-      const approvedQuotation = await this.projects.findApprovedQuotation(id);
-
-      if (!approvedQuotation) {
-        throw new BadRequestException(
-          'Project cannot become ACTIVE until at least one quotation is approved',
-        );
-      }
+      await this.validateActivationRequirements(project);
     }
 
     return this.projects.update(id, {
@@ -422,6 +417,38 @@ export class ProjectService {
         message: 'Selected user must have the PROJECT_MANAGER role.',
       });
     }
+  }
+
+  private async validateActivationRequirements(
+    project: ProjectWithDetails,
+  ): Promise<void> {
+    if (!project.projectManagerId) {
+      throw new BadRequestException(
+        'Project manager must be assigned before activation',
+      );
+    }
+
+    if (!project.startDate) {
+      throw new BadRequestException(
+        'Project start date must be set before activation',
+      );
+    }
+
+    await this.ensureValidProjectManager(project.projectManagerId);
+
+    this.validateDateRange(project.startDate, project.endDate);
+
+    const approvedQuotation = await this.projects.findApprovedQuotation(
+      project.id,
+    );
+
+    if (!approvedQuotation) {
+      throw new BadRequestException(
+        'Project cannot become ACTIVE until at least one quotation is approved',
+      );
+    }
+
+    // Milestone and weight checks are added when Issue 03 provides those fields.
   }
 
   private validateDateRange(startDate: Date, endDate?: Date | null) {

@@ -2,6 +2,7 @@ import {
   NotFoundException,
   ConflictException,
   BadRequestException,
+  BadGatewayException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import {
@@ -736,5 +737,265 @@ describe('round2 precision calculation', () => {
     expect(round2(10.555)).toBe(10.56);
     expect(round2(1.005)).toBe(1.01);
     expect(round2(3 * 33.33)).toBe(99.99);
+  });
+});
+
+// ─── reject ──────────────────────────────────────────────────────────────────
+
+describe('QuotationService.reject', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('rejects a PENDING_APPROVAL quotation, updates status to REJECTED and appends reason', async () => {
+    const quotation = {
+      id: 'quot-1',
+      status: 'PENDING_APPROVAL',
+      notes: 'Initial client notes',
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      status: 'REJECTED',
+      notes: 'Initial client notes\n[Rejection Reason]: Budget exceeded',
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const result = await service.reject('quot-1', 'Budget exceeded');
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-1' },
+      data: {
+        status: 'REJECTED',
+        notes: 'Initial client notes\n[Rejection Reason]: Budget exceeded',
+      },
+      include: { items: true },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    expect(result.status).toBe('REJECTED');
+  });
+
+  it('sets rejection reason as notes when quotation had no notes', async () => {
+    const quotation = {
+      id: 'quot-2',
+      status: 'PENDING_APPROVAL',
+      notes: null,
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      status: 'REJECTED',
+      notes: '[Rejection Reason]: Specifications unclear',
+    });
+
+    await service.reject('quot-2', 'Specifications unclear');
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-2' },
+      data: {
+        status: 'REJECTED',
+        notes: '[Rejection Reason]: Specifications unclear',
+      },
+      include: { items: true },
+    });
+  });
+
+  it('throws BadRequestException with INVALID_STATUS_TRANSITION when quotation is not PENDING_APPROVAL', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-3',
+      status: 'DRAFT',
+      notes: null,
+      items: [],
+    });
+
+    await expect(
+      service.reject('quot-3', 'Not interested anymore'),
+    ).rejects.toMatchObject({
+      response: { code: 'INVALID_STATUS_TRANSITION' },
+    });
+
+    expect(mockPrisma.quotation.update).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException when quotation does not exist', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+    await expect(
+      service.reject('non-existent', 'Rejected'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+});
+
+// ─── revise ──────────────────────────────────────────────────────────────────
+
+describe('QuotationService.revise', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('transitions a REJECTED quotation back to DRAFT', async () => {
+    const quotation = {
+      id: 'quot-1',
+      status: 'REJECTED',
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      status: 'DRAFT',
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const result = await service.revise('quot-1');
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-1' },
+      data: { status: 'DRAFT' },
+      include: { items: true },
+    });
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+    expect(result.status).toBe('DRAFT');
+  });
+
+  it('throws BadRequestException with INVALID_STATUS_TRANSITION when quotation is not REJECTED', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-1',
+      status: 'PENDING_APPROVAL',
+      items: [],
+    });
+
+    await expect(service.revise('quot-1')).rejects.toMatchObject({
+      response: { code: 'INVALID_STATUS_TRANSITION' },
+    });
+
+    expect(mockPrisma.quotation.update).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFoundException when quotation does not exist', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+    await expect(service.revise('non-existent')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+});
+
+// ─── getPdf ──────────────────────────────────────────────────────────────────
+
+describe('QuotationService.getPdf', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('returns existing pdfUrl if quotation already has one without calling DocumentClient', async () => {
+    const quotation = {
+      id: 'quot-1',
+      pdfUrl: 'https://storage.example.com/quotations/quot-1.pdf',
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+
+    const result = await service.getPdf('quot-1');
+
+    expect(result).toEqual({
+      pdfUrl: 'https://storage.example.com/quotations/quot-1.pdf',
+    });
+    expect(mockDocumentClient.generatePdf).not.toHaveBeenCalled();
+  });
+
+  it('generates PDF via DocumentClient and updates record when pdfUrl is missing', async () => {
+    const quotation = {
+      id: 'quot-2',
+      pdfUrl: null,
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockDocumentClient.generatePdf.mockResolvedValue(
+      'https://storage.example.com/quotations/quot-2.pdf',
+    );
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      pdfUrl: 'https://storage.example.com/quotations/quot-2.pdf',
+    });
+
+    const result = await service.getPdf('quot-2');
+
+    expect(mockDocumentClient.generatePdf).toHaveBeenCalledWith('quot-2');
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-2' },
+      data: { pdfUrl: 'https://storage.example.com/quotations/quot-2.pdf' },
+    });
+    expect(result).toEqual({
+      pdfUrl: 'https://storage.example.com/quotations/quot-2.pdf',
+    });
+  });
+
+  it('throws BadGatewayException with PDF_GENERATION_FAILED when DocumentClient returns null', async () => {
+    const quotation = {
+      id: 'quot-3',
+      pdfUrl: null,
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockDocumentClient.generatePdf.mockResolvedValue(null);
+
+    await expect(service.getPdf('quot-3')).rejects.toBeInstanceOf(
+      BadGatewayException,
+    );
+    await expect(service.getPdf('quot-3')).rejects.toMatchObject({
+      response: { code: 'PDF_GENERATION_FAILED' },
+    });
+  });
+
+  it('throws NotFoundException when quotation does not exist', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue(null);
+
+    await expect(service.getPdf('non-existent')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
   });
 });

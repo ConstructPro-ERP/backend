@@ -15,6 +15,7 @@ import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { ApproveQuotationDto } from './dto/approve-quotation.dto';
 import { GetQuotationsQueryDto } from './dto/get-quotations-query.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
+import { RejectQuotationDto } from './dto/reject-quotation.dto';
 
 @Controller('quotations')
 export class QuotationController {
@@ -36,9 +37,24 @@ export class QuotationController {
     return this.quotationService.findOne(id);
   }
 
+  @Get(':id/pdf')
+  getPdf(@Param('id') id: string) {
+    return this.quotationService.getPdf(id);
+  }
+
   @Put(':id')
   update(@Param('id') id: string, @Body() dto: UpdateQuotationDto) {
     return this.quotationService.update(id, dto);
+  }
+
+  @Patch(':id/reject')
+  reject(@Param('id') id: string, @Body() dto: RejectQuotationDto) {
+    return this.quotationService.reject(id, dto.reason);
+  }
+
+  @Patch(':id/revise')
+  revise(@Param('id') id: string) {
+    return this.quotationService.revise(id);
   }
 
   @Patch(':id/approve')

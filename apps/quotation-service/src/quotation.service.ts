@@ -5,12 +5,15 @@ import {
   BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { DocumentClient } from './document.client';
 import { ProjectClient } from './project.client';
 import { NotificationClient } from './notification.client';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { ApproveQuotationDto } from './dto/approve-quotation.dto';
+import { GetQuotationsQueryDto } from './dto/get-quotations-query.dto';
+import { UpdateQuotationDto } from './dto/update-quotation.dto';
 
 @Injectable()
 export class QuotationService {
@@ -74,6 +77,56 @@ export class QuotationService {
     return quotation;
   }
 
+  async findAll(query?: GetQuotationsQueryDto) {
+    const page = Math.max(1, query?.page ?? 1);
+    const limit = Math.max(1, Math.min(100, query?.limit ?? 20));
+    const skip = (page - 1) * limit;
+
+    const where: Prisma.QuotationWhereInput = {
+      ...(query?.leadId ? { leadId: query.leadId } : {}),
+      ...(query?.status ? { status: query.status } : {}),
+      ...(query?.search
+        ? {
+            OR: [
+              {
+                lead: {
+                  customerName: {
+                    contains: query.search,
+                    mode: 'insensitive',
+                  },
+                },
+              },
+              {
+                notes: {
+                  contains: query.search,
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          }
+        : {}),
+    };
+
+    const [total, items] = await Promise.all([
+      this.prisma.quotation.count({ where }),
+      this.prisma.quotation.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: { items: true },
+      }),
+    ]);
+
+    return {
+      items,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    };
+  }
+
   async findOne(id: string) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
@@ -85,6 +138,71 @@ export class QuotationService {
         message: 'Quotation not found.',
       });
     }
+    return quotation;
+  }
+
+  async update(id: string, dto: UpdateQuotationDto) {
+    const quotation = await this.prisma.quotation.findUnique({
+      where: { id },
+      include: { items: true },
+    });
+
+    if (!quotation) {
+      throw new NotFoundException({
+        code: 'QUOTATION_NOT_FOUND',
+        message: 'Quotation not found.',
+      });
+    }
+
+    if (quotation.status === 'CONVERTED' || quotation.status === 'APPROVED') {
+      throw new BadRequestException({
+        code: 'QUOTATION_LOCKED',
+        message: 'Approved or converted quotations cannot be edited.',
+      });
+    }
+
+    if (dto.items && dto.items.length > 0) {
+      const itemsWithAmounts = dto.items.map((item) => {
+        const amount = round2(item.quantity * item.unitPrice);
+        return { ...item, amount };
+      });
+
+      const totalAmount = round2(
+        itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
+      );
+
+      return this.prisma.$transaction(async (tx) => {
+        await tx.quotationItem.deleteMany({
+          where: { quotationId: id },
+        });
+
+        return tx.quotation.update({
+          where: { id },
+          data: {
+            notes: dto.notes !== undefined ? dto.notes : quotation.notes,
+            totalAmount,
+            items: {
+              create: itemsWithAmounts.map((i) => ({
+                itemName: i.itemName,
+                quantity: i.quantity,
+                unitPrice: i.unitPrice,
+                amount: i.amount,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+      });
+    }
+
+    if (dto.notes !== undefined) {
+      return this.prisma.quotation.update({
+        where: { id },
+        data: { notes: dto.notes },
+        include: { items: true },
+      });
+    }
+
     return quotation;
   }
 
@@ -193,6 +311,6 @@ export class QuotationService {
   }
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+export function round2(n: number): number {
+  return Math.round((n + Number.EPSILON) * 100) / 100;
 }

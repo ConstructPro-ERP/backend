@@ -645,6 +645,56 @@ describe('ProjectService', () => {
       });
     });
 
+    it.each([
+      ProjectStatus.ON_HOLD,
+      ProjectStatus.COMPLETED,
+      ProjectStatus.CANCELLED,
+    ])(
+      'preserves %s status when attaching an approved quotation',
+      async (status) => {
+        const existingProject = {
+          ...activeProject,
+          status,
+        };
+
+        mockProjectRepository.findQuotation.mockResolvedValue({
+          id: 'quotation-2',
+          leadId: 'lead-1',
+          status: QuotationStatus.APPROVED,
+          projectId: null,
+        });
+
+        mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+          existingProject,
+        );
+
+        const result = await service.createFromQuotation({
+          quotationId: 'quotation-2',
+          leadId: 'lead-1',
+          targetProjectId: 'project-1',
+        });
+
+        expect(mockProjectRepository.linkQuotation).toHaveBeenCalledWith(
+          fakeTransaction,
+          'quotation-2',
+          'project-1',
+        );
+
+        expect(
+          mockProjectRepository.updateInTransaction,
+        ).not.toHaveBeenCalled();
+
+        expect(
+          mockProjectRepository.createInTransaction,
+        ).not.toHaveBeenCalled();
+
+        expect(result).toEqual({
+          projectId: 'project-1',
+          status,
+        });
+      },
+    );
+
     it('reuses the existing project when the quotation already has projectId', async () => {
       mockProjectRepository.findQuotation.mockResolvedValue({
         id: 'quotation-1',

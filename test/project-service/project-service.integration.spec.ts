@@ -473,6 +473,83 @@ describe('ProjectService — integration', () => {
     expect(approved!.status).toBe('APPROVED');
   });
 
+  it.each([
+    ProjectStatus.ON_HOLD,
+    ProjectStatus.COMPLETED,
+    ProjectStatus.CANCELLED,
+  ])(
+    'preserves %s status when attaching an approved quotation',
+    async (status) => {
+      // Arrange
+      const manager = await createManager(`quotation-${status.toLowerCase()}`);
+      const lead = await createLead(`quotation-${status.toLowerCase()}`);
+
+      const project = await prisma.project.create({
+        data: {
+          projectName: `${prefix} ${status} Project`,
+          location: 'Colombo',
+          startDate: new Date('2026-10-01T00:00:00.000Z'),
+          projectManagerId: manager.id,
+          status,
+        },
+      });
+
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId: lead.id,
+          totalAmount: 250000,
+          status: 'APPROVED',
+          items: {
+            create: [
+              {
+                itemName: 'House Design',
+                quantity: 1,
+                unitPrice: 250000,
+                amount: 250000,
+              },
+            ],
+          },
+        },
+      });
+
+      // Act
+      const response = await request(httpServer)
+        .post('/projects/from-quotation')
+        .send({
+          quotationId: quotation.id,
+          leadId: lead.id,
+          targetProjectId: project.id,
+        })
+        .expect(201);
+
+      const responseBody = parseProjectConversionResponse(
+        response.body as unknown,
+      );
+
+      // Assert
+      expect(responseBody.projectId).toBe(project.id);
+      expect(responseBody.status).toBe(status);
+
+      const updatedProject = await prisma.project.findUnique({
+        where: {
+          id: project.id,
+        },
+      });
+
+      expect(updatedProject).not.toBeNull();
+      expect(updatedProject!.status).toBe(status);
+
+      const updatedQuotation = await prisma.quotation.findUnique({
+        where: {
+          id: quotation.id,
+        },
+      });
+
+      expect(updatedQuotation).not.toBeNull();
+      expect(updatedQuotation!.projectId).toBe(project.id);
+    },
+  );
+
   it('returns the same project for concurrent conversion requests', async () => {
     // Arrange
     const manager = await createManager('concurrent');

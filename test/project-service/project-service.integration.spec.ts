@@ -75,6 +75,8 @@ describe('ProjectService — integration', () => {
   let app: INestApplication;
   let httpServer: Server;
   let prisma: PrismaService;
+  let projectManagerRoleId: string;
+  let adminRoleId: string;
 
   const runId = Date.now().toString();
   const prefix = `Project Integration ${runId}`;
@@ -131,43 +133,23 @@ describe('ProjectService — integration', () => {
   }
 
   async function createManager(label: string) {
-    const projectManagerRole = await prisma.role.upsert({
-      where: {
-        roleName: 'PROJECT_MANAGER',
-      },
-      update: {},
-      create: {
-        roleName: 'PROJECT_MANAGER',
-      },
-    });
-
     return prisma.user.create({
       data: {
         fullName: `${prefix} Manager ${label}`,
         email: `project-integration-${runId}-${label}@test.com`,
         password: 'hashed',
-        roleId: projectManagerRole.id,
+        roleId: projectManagerRoleId,
       },
     });
   }
 
   async function createAdmin(label: string) {
-    const adminRole = await prisma.role.upsert({
-      where: {
-        roleName: 'ADMIN',
-      },
-      update: {},
-      create: {
-        roleName: 'ADMIN',
-      },
-    });
-
     return prisma.user.create({
       data: {
         fullName: `${prefix} Admin ${label}`,
         email: `project-integration-${runId}-admin-${label}@test.com`,
         password: 'hashed',
-        roleId: adminRole.id,
+        roleId: adminRoleId,
       },
     });
   }
@@ -214,6 +196,29 @@ describe('ProjectService — integration', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
+    const projectManagerRole = await prisma.role.upsert({
+      where: {
+        roleName: 'PROJECT_MANAGER',
+      },
+      update: {},
+      create: {
+        roleName: 'PROJECT_MANAGER',
+      },
+    });
+
+    const adminRole = await prisma.role.upsert({
+      where: {
+        roleName: 'ADMIN',
+      },
+      update: {},
+      create: {
+        roleName: 'ADMIN',
+      },
+    });
+
+    projectManagerRoleId = projectManagerRole.id;
+    adminRoleId = adminRole.id;
+
     app = module.createNestApplication();
 
     app.useGlobalPipes(
@@ -227,10 +232,6 @@ describe('ProjectService — integration', () => {
     await app.init();
 
     httpServer = app.getHttpServer() as Server;
-  });
-
-  beforeEach(async () => {
-    await cleanup();
   });
 
   afterEach(async () => {

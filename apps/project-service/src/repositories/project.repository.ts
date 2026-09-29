@@ -180,10 +180,11 @@ export class ProjectRepository {
     });
   }
 
-  getDependencyCounts(id: string) {
+  findDeletionDetails(id: string) {
     return this.prisma.project.findUnique({
       where: { id },
       select: {
+        status: true,
         _count: {
           select: {
             quotations: true,

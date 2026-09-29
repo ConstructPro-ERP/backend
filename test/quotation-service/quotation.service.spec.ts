@@ -775,7 +775,6 @@ describe('QuotationService.reject', () => {
       notes: 'Initial client notes\n[Rejection Reason]: Budget exceeded',
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const result = await service.reject('quot-1', 'Budget exceeded');
 
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
@@ -786,7 +785,7 @@ describe('QuotationService.reject', () => {
       },
       include: { items: true },
     });
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+
     expect(result.status).toBe('REJECTED');
   });
 
@@ -875,7 +874,6 @@ describe('QuotationService.revise', () => {
       status: 'DRAFT',
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const result = await service.revise('quot-1');
 
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
@@ -883,7 +881,7 @@ describe('QuotationService.revise', () => {
       data: { status: 'DRAFT' },
       include: { items: true },
     });
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+
     expect(result.status).toBe('DRAFT');
   });
 

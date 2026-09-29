@@ -25,7 +25,7 @@ const mockProjectRepository = {
   findById: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
-  getDependencyCounts: jest.fn(),
+  findDeletionDetails: jest.fn(),
   findProjectManagerCandidate: jest.fn(),
   findApprovedQuotation: jest.fn(),
   transaction: jest.fn(),
@@ -44,6 +44,7 @@ const mockProjectAccessService = {
   assertCanModifyProject: jest.fn(),
   assertCanCreateProject: jest.fn(),
   assertCanAssignProjectManager: jest.fn(),
+  assertCanDeleteProject: jest.fn(),
 };
 
 const mockProjectLifecycleService = {
@@ -588,6 +589,86 @@ describe('ProjectService', () => {
         expect(mockProjectRepository.update).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('remove', () => {
+    const noDependencies = {
+      quotations: 0,
+      milestones: 0,
+      tasks: 0,
+      expenses: 0,
+      invoices: 0,
+      documents: 0,
+      reports: 0,
+      aiKnowledgeChunks: 0,
+    };
+
+    it('deletes an unused PLANNING project for Admin', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.PLANNING,
+        _count: noDependencies,
+      });
+
+      mockProjectRepository.delete.mockResolvedValue(planningProject);
+
+      const result = await service.remove('project-1', 'admin-1');
+
+      expect(mockProjectAccessService.resolveActor).toHaveBeenCalledWith(
+        'admin-1',
+      );
+
+      expect(
+        mockProjectAccessService.assertCanDeleteProject,
+      ).toHaveBeenCalledWith({
+        id: 'admin-1',
+        role: 'ADMIN',
+      });
+
+      expect(mockProjectRepository.delete).toHaveBeenCalledWith('project-1');
+
+      expect(result).toEqual({
+        message: 'Project deleted successfully',
+      });
+    });
+
+    it('rejects permanent deletion when Project is not PLANNING', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.ACTIVE,
+        _count: noDependencies,
+      });
+
+      await expect(
+        service.remove('project-1', 'admin-1'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects permanent deletion when related records exist', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.PLANNING,
+        _count: {
+          ...noDependencies,
+          quotations: 1,
+        },
+      });
+
+      await expect(
+        service.remove('project-1', 'admin-1'),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects permanent deletion when Project does not exist', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue(null);
+
+      await expect(
+        service.remove('missing-project', 'admin-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
+    });
   });
 
   describe('createFromQuotation', () => {

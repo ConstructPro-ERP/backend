@@ -116,6 +116,17 @@ export class ProjectAccessService {
     });
   }
 
+  assertCanDeleteProject(actor: ProjectAccessActor): void {
+    if (actor.role === 'ADMIN') {
+      return;
+    }
+
+    throw new ForbiddenException({
+      code: ErrorCode.PROJECT_DELETION_FORBIDDEN,
+      message: 'Only an administrator can permanently delete a project.',
+    });
+  }
+
   private throwProjectAccessDenied(projectId: string): never {
     throw new ForbiddenException({
       code: ErrorCode.PROJECT_ACCESS_DENIED,

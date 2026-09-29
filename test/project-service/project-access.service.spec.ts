@@ -290,5 +290,32 @@ describe('ProjectAccessService', () => {
         }),
       ).toThrow(ForbiddenException);
     });
+
+    it('allows ADMIN to permanently delete a project', () => {
+      expect(() =>
+        service.assertCanDeleteProject({
+          id: 'admin-1',
+          role: 'ADMIN',
+        }),
+      ).not.toThrow();
+    });
+
+    it('rejects PROJECT_MANAGER from permanent project deletion', () => {
+      expect(() =>
+        service.assertCanDeleteProject({
+          id: 'manager-1',
+          role: 'PROJECT_MANAGER',
+        }),
+      ).toThrow(ForbiddenException);
+    });
+
+    it('rejects ACCOUNTANT from permanent project deletion', () => {
+      expect(() =>
+        service.assertCanDeleteProject({
+          id: 'accountant-1',
+          role: 'ACCOUNTANT',
+        }),
+      ).toThrow(ForbiddenException);
+    });
   });
 });

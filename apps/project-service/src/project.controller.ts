@@ -135,13 +135,17 @@ export class ProjectController {
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a project' })
+  @ApiOperation({ summary: 'Permanently delete an unused PLANNING project' })
   @ApiOkResponse({ description: 'Project deleted successfully' })
   @ApiConflictResponse({
-    description: 'Project has related records and cannot be deleted',
+    description:
+      'Project is not in PLANNING status or already has related records',
   })
   @ApiNotFoundResponse({ description: 'Project not found' })
-  remove(@Param('id', ParseUUIDPipe) id: string) {
-    return this.projectService.remove(id);
+  remove(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.projectService.remove(id, actorId);
   }
 }

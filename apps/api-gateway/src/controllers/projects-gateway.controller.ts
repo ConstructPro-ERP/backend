@@ -2,6 +2,7 @@ import { HttpService } from '@nestjs/axios';
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpException,
   HttpStatus,
@@ -143,6 +144,18 @@ export class ProjectsGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.patch(this.url(`/projects/${id}/manager`), body, {
+        headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
+  @Delete(':id')
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Permanently delete an unused PLANNING project' })
+  @ApiOkResponse({ description: 'Project deleted successfully' })
+  remove(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
+    return this.forward(() =>
+      this.httpService.delete(this.url(`/projects/${id}`), {
         headers: this.forwardHeaders(req),
       }),
     );

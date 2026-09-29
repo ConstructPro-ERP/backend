@@ -151,6 +151,27 @@ describe('ProjectService — integration', () => {
     });
   }
 
+  async function createAdmin(label: string) {
+    const adminRole = await prisma.role.upsert({
+      where: {
+        roleName: 'ADMIN',
+      },
+      update: {},
+      create: {
+        roleName: 'ADMIN',
+      },
+    });
+
+    return prisma.user.create({
+      data: {
+        fullName: `${prefix} Admin ${label}`,
+        email: `project-integration-${runId}-admin-${label}@test.com`,
+        password: 'hashed',
+        roleId: adminRole.id,
+      },
+    });
+  }
+
   async function createLead(label: string) {
     return prisma.lead.create({
       data: {
@@ -254,6 +275,159 @@ describe('ProjectService — integration', () => {
 
     expect(updatedProject).not.toBeNull();
     expect(updatedProject!.projectManagerId).toBe(currentManager.id);
+  });
+
+  it('allows Admin to permanently delete an unused PLANNING Project', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-unused');
+    const manager = await createManager('delete-unused');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Unused Planning Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(200);
+
+    // Assert
+    const deletedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(deletedProject).toBeNull();
+  });
+
+  it('rejects permanent deletion when Project is not PLANNING', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-active');
+    const manager = await createManager('delete-active');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Active Delete Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(409);
+
+    // Assert
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
+    expect(existingProject!.status).toBe(ProjectStatus.ACTIVE);
+  });
+
+  it('rejects permanent deletion when a PLANNING Project has related records', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-related');
+    const manager = await createManager('delete-related');
+    const lead = await createLead('delete-related');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Related Planning Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    const quotation = await prisma.quotation.create({
+      data: {
+        leadId: lead.id,
+        projectId: project.id,
+        totalAmount: 250000,
+        status: 'PENDING_APPROVAL',
+        items: {
+          create: [
+            {
+              itemName: 'Initial Design',
+              quantity: 1,
+              unitPrice: 250000,
+              amount: 250000,
+            },
+          ],
+        },
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(409);
+
+    // Assert
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
+
+    const existingQuotation = await prisma.quotation.findUnique({
+      where: {
+        id: quotation.id,
+      },
+    });
+
+    expect(existingQuotation).not.toBeNull();
+    expect(existingQuotation!.projectId).toBe(project.id);
+  });
+
+  it('rejects permanent deletion by Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('delete-manager');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Manager Delete Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', manager.id)
+      .expect(403);
+
+    // Assert
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
   });
 
   it('allows ACTIVE to ON_HOLD for the assigned Project Manager', async () => {

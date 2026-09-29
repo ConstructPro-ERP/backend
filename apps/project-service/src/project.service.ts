@@ -211,11 +211,24 @@ export class ProjectService {
     });
   }
 
-  async remove(id: string) {
-    const project = await this.projects.getDependencyCounts(id);
+  async remove(id: string, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanDeleteProject(actor);
+
+    const project = await this.projects.findDeletionDetails(id);
 
     if (!project) {
-      throw new NotFoundException('Project not found');
+      throw new NotFoundException({
+        code: ErrorCode.PROJECT_NOT_FOUND,
+        message: 'Project not found.',
+      });
+    }
+
+    if (project.status !== ProjectStatus.PLANNING) {
+      throw new ConflictException(
+        'Only PLANNING projects can be permanently deleted. Cancel the project instead.',
+      );
     }
 
     const hasDependencies = Object.values(project._count).some(
@@ -223,9 +236,8 @@ export class ProjectService {
     );
 
     if (hasDependencies) {
-      // Preserve project history when other domain records already depend on it.
       throw new ConflictException(
-        `Project cannot be deleted because related records exist. Set its status to ${ProjectStatus.CANCELLED} instead.`,
+        'Project cannot be permanently deleted because related records already exist. Cancel the project instead.',
       );
     }
 

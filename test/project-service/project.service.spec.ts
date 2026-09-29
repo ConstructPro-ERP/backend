@@ -14,6 +14,10 @@ import {
 import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
 import { ProjectAccessActor } from '../../apps/project-service/src/interfaces/project-access.interface';
 import { ProjectLifecycleService } from '../../apps/project-service/src/lifecycle/project-lifecycle.service';
+import {
+  ProjectSortField,
+  SortOrder,
+} from '../../apps/project-service/src/dto/project-query.dto';
 import { ErrorCode } from '../../shared/error-codes';
 
 const mockProjectRepository = {
@@ -422,6 +426,149 @@ describe('ProjectService', () => {
       });
 
       expect(result.status).toBe(ProjectStatus.ON_HOLD);
+    });
+  });
+
+  describe('findAll', () => {
+    it('uses default pagination and sorting', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([
+        [planningProject],
+        1,
+      ]);
+
+      const result = await service.findAll({}, 'admin-1');
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith({
+        where: {},
+        skip: 0,
+        take: 10,
+        orderBy: {
+          createdAt: SortOrder.DESC,
+        },
+      });
+
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1,
+      });
+    });
+
+    it('applies search, status, and manager filters for Admin', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          search: 'Kandy',
+          status: ProjectStatus.ACTIVE,
+          projectManagerId: 'manager-2',
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-2',
+            status: ProjectStatus.ACTIVE,
+            OR: [
+              {
+                projectName: {
+                  contains: 'Kandy',
+                  mode: 'insensitive',
+                },
+              },
+              {
+                location: {
+                  contains: 'Kandy',
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('allows Accountant to filter by Project Manager', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'accountant-1',
+        role: 'ACCOUNTANT',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          projectManagerId: 'manager-2',
+        },
+        'accountant-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-2',
+          },
+        }),
+      );
+    });
+
+    it('applies custom pagination and sorting', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 45]);
+
+      const result = await service.findAll(
+        {
+          page: 3,
+          limit: 20,
+          sortBy: ProjectSortField.PROJECT_NAME,
+          sortOrder: SortOrder.ASC,
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith({
+        where: {},
+        skip: 40,
+        take: 20,
+        orderBy: {
+          projectName: SortOrder.ASC,
+        },
+      });
+
+      expect(result.meta).toEqual({
+        page: 3,
+        limit: 20,
+        total: 45,
+        totalPages: 3,
+      });
+    });
+
+    const supportedSortFields: ProjectSortField[] = [
+      ProjectSortField.CREATED_AT,
+      ProjectSortField.PROJECT_NAME,
+      ProjectSortField.START_DATE,
+    ];
+
+    it.each(supportedSortFields)('supports sorting by %s', async (sortBy) => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          sortBy,
+          sortOrder: SortOrder.ASC,
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            [sortBy]: SortOrder.ASC,
+          },
+        }),
+      );
     });
   });
 

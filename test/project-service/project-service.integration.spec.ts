@@ -271,6 +271,16 @@ describe('ProjectService — integration', () => {
     await app.close();
   });
 
+  it.each([
+    '/projects?page=0',
+    '/projects?limit=0',
+    '/projects?limit=101',
+    '/projects?sortBy=budget',
+    '/projects?sortOrder=sideways',
+  ])('rejects invalid Project list query: %s', async (url) => {
+    await request(httpServer).get(url).expect(400);
+  });
+
   it('rejects project manager changes through the general project update endpoint', async () => {
     // Arrange
     const currentManager = await createManager('update-current');
@@ -503,6 +513,54 @@ describe('ProjectService — integration', () => {
 
     expect(updatedProject).not.toBeNull();
     expect(updatedProject!.status).toBe(ProjectStatus.ON_HOLD);
+  });
+
+  it('cancels a Project without deleting its related quotation', async () => {
+    // Arrange
+    const manager = await createManager('cancel-preserve');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Cancellation Preservation Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    const quotation = await createApprovedQuotationForProject(
+      project.id,
+      'cancel-preserve',
+    );
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.CANCELLED,
+      })
+      .expect(200);
+
+    // Assert
+    const cancelledProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(cancelledProject).not.toBeNull();
+    expect(cancelledProject!.status).toBe(ProjectStatus.CANCELLED);
+
+    const preservedQuotation = await prisma.quotation.findUnique({
+      where: {
+        id: quotation.id,
+      },
+    });
+
+    expect(preservedQuotation).not.toBeNull();
+    expect(preservedQuotation!.projectId).toBe(project.id);
   });
 
   it('rejects PLANNING to COMPLETED with a stable lifecycle error', async () => {

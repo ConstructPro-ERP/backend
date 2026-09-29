@@ -124,17 +124,87 @@ describe('RolesGuard — quotations endpoint access', () => {
       guard.canActivate(makeContext(['MANAGEMENT'], approveHandler)),
     ).toThrow(ForbiddenException);
   });
+
+  const updateHandler = handlerWithRoles('SALES_MANAGER', 'ADMIN');
+
+  it('allows SALES_MANAGER to PUT /quotations/:id', () => {
+    expect(
+      guard.canActivate(makeContext(['SALES_MANAGER'], updateHandler)),
+    ).toBe(true);
+  });
+
+  it('allows ADMIN to PUT /quotations/:id', () => {
+    expect(guard.canActivate(makeContext(['ADMIN'], updateHandler))).toBe(true);
+  });
+
+  it('throws 403 when ACCOUNTANT tries to PUT /quotations/:id', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['ACCOUNTANT'], updateHandler)),
+    ).toThrow(ForbiddenException);
+  });
+
+  const rejectHandler = handlerWithRoles('SALES_MANAGER', 'ADMIN');
+
+  it('allows SALES_MANAGER to PATCH /quotations/:id/reject', () => {
+    expect(
+      guard.canActivate(makeContext(['SALES_MANAGER'], rejectHandler)),
+    ).toBe(true);
+  });
+
+  it('allows ADMIN to PATCH /quotations/:id/reject', () => {
+    expect(guard.canActivate(makeContext(['ADMIN'], rejectHandler))).toBe(true);
+  });
+
+  it('throws 403 when ACCOUNTANT tries to PATCH /quotations/:id/reject', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['ACCOUNTANT'], rejectHandler)),
+    ).toThrow(ForbiddenException);
+  });
+
+  const reviseHandler = handlerWithRoles('SALES_MANAGER', 'ADMIN');
+
+  it('allows SALES_MANAGER to PATCH /quotations/:id/revise', () => {
+    expect(
+      guard.canActivate(makeContext(['SALES_MANAGER'], reviseHandler)),
+    ).toBe(true);
+  });
+
+  it('allows ADMIN to PATCH /quotations/:id/revise', () => {
+    expect(guard.canActivate(makeContext(['ADMIN'], reviseHandler))).toBe(true);
+  });
+
+  it('throws 403 when ACCOUNTANT tries to PATCH /quotations/:id/revise', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['ACCOUNTANT'], reviseHandler)),
+    ).toThrow(ForbiddenException);
+  });
+
+  it('allows ACCOUNTANT to GET /quotations/:id/pdf', () => {
+    expect(guard.canActivate(makeContext(['ACCOUNTANT'], readHandler))).toBe(
+      true,
+    );
+  });
+
+  it('throws 403 when CLIENT_PORTAL_USER tries to GET /quotations/:id/pdf', () => {
+    expect(() =>
+      guard.canActivate(makeContext(['CLIENT_PORTAL_USER'], readHandler)),
+    ).toThrow(ForbiddenException);
+  });
 });
 
 describe('QuotationsGatewayController', () => {
   let controller: QuotationsGatewayController;
   let httpService: {
     patch: jest.Mock;
+    get: jest.Mock;
+    put: jest.Mock;
   };
 
   beforeEach(async () => {
     httpService = {
       patch: jest.fn(),
+      get: jest.fn(),
+      put: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -145,6 +215,139 @@ describe('QuotationsGatewayController', () => {
     controller = module.get<QuotationsGatewayController>(
       QuotationsGatewayController,
     );
+  });
+
+  it('forwards findAll() query to GET /quotations', async () => {
+    httpService.get.mockReturnValue(
+      of({
+        data: {
+          items: [{ id: 'q-1' }],
+          total: 1,
+        },
+      }),
+    );
+
+    const query = { page: 1, limit: 10, status: 'PENDING_APPROVAL' };
+    const req = {
+      headers: { authorization: 'Bearer test-token' },
+    } as unknown as Request;
+
+    const result = await controller.findAll(query, req);
+
+    expect(httpService.get).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations'),
+      {
+        headers: { authorization: 'Bearer test-token' },
+        params: query,
+      },
+    );
+    expect(result).toEqual({ items: [{ id: 'q-1' }], total: 1 });
+  });
+
+  it('forwards update() body to PUT /quotations/:id', async () => {
+    httpService.put.mockReturnValue(
+      of({
+        data: {
+          id: 'q-1',
+          notes: 'Updated',
+        },
+      }),
+    );
+
+    const body = { notes: 'Updated' };
+    const req = {
+      headers: { authorization: 'Bearer test-token' },
+    } as unknown as Request;
+
+    const result = await controller.update('q-1', body, req);
+
+    expect(httpService.put).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/q-1'),
+      body,
+      {
+        headers: { authorization: 'Bearer test-token' },
+      },
+    );
+    expect(result).toEqual({ id: 'q-1', notes: 'Updated' });
+  });
+
+  it('forwards getPdf() to GET /quotations/:id/pdf', async () => {
+    httpService.get.mockReturnValue(
+      of({
+        data: {
+          pdfUrl: 'https://cdn.example.com/quotations/q-1.pdf',
+        },
+      }),
+    );
+
+    const req = {
+      headers: { authorization: 'Bearer test-token' },
+    } as unknown as Request;
+
+    const result = await controller.getPdf('q-1', req);
+
+    expect(httpService.get).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/q-1/pdf'),
+      {
+        headers: { authorization: 'Bearer test-token' },
+      },
+    );
+    expect(result).toEqual({
+      pdfUrl: 'https://cdn.example.com/quotations/q-1.pdf',
+    });
+  });
+
+  it('forwards reject() body to PATCH /quotations/:id/reject', async () => {
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          id: 'q-1',
+          status: 'REJECTED',
+        },
+      }),
+    );
+
+    const body = { reason: 'Client found a cheaper offer' };
+    const req = {
+      headers: { authorization: 'Bearer test-token' },
+    } as unknown as Request;
+
+    const result = await controller.reject('q-1', body, req);
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/q-1/reject'),
+      body,
+      {
+        headers: { authorization: 'Bearer test-token' },
+      },
+    );
+    expect(result).toEqual({ id: 'q-1', status: 'REJECTED' });
+  });
+
+  it('forwards revise() to PATCH /quotations/:id/revise', async () => {
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          id: 'q-1',
+          status: 'DRAFT',
+        },
+      }),
+    );
+
+    const req = {
+      headers: { authorization: 'Bearer test-token' },
+    } as unknown as Request;
+
+    const result = await controller.revise('q-1', req);
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/q-1/revise'),
+      {},
+      {
+        headers: { authorization: 'Bearer test-token' },
+      },
+    );
+    expect(result).toEqual({ id: 'q-1', status: 'DRAFT' });
   });
 
   it('forwards approveAndConvert() body to PATCH /quotations/:id/approve', async () => {

@@ -3,8 +3,10 @@ import {
   Post,
   Get,
   Patch,
+  Put,
   Body,
   Param,
+  Query,
   Req,
   UseGuards,
   HttpException,
@@ -51,6 +53,21 @@ export class QuotationsGatewayController {
     );
   }
 
+  @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT')
+  async findAll(
+    @Query() query: unknown,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.get(`${QUOTATION_SERVICE_URL}/quotations`, {
+        headers: { authorization: req.headers.authorization },
+        params: query,
+      }),
+    );
+  }
+
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('SALES_MANAGER', 'ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT')
@@ -62,6 +79,62 @@ export class QuotationsGatewayController {
       this.httpService.get(`${QUOTATION_SERVICE_URL}/quotations/${id}`, {
         headers: { authorization: req.headers.authorization },
       }),
+    );
+  }
+
+  @Put(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async update(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.put(`${QUOTATION_SERVICE_URL}/quotations/${id}`, body, {
+        headers: { authorization: req.headers.authorization },
+      }),
+    );
+  }
+
+  @Get(':id/pdf')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT')
+  async getPdf(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.get(`${QUOTATION_SERVICE_URL}/quotations/${id}/pdf`, {
+        headers: { authorization: req.headers.authorization },
+      }),
+    );
+  }
+
+  @Patch(':id/reject')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async reject(
+    @Param('id') id: string,
+    @Body() body: unknown,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/reject`,
+        body,
+        { headers: { authorization: req.headers.authorization } },
+      ),
+    );
+  }
+
+  @Patch(':id/revise')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async revise(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/revise`,
+        {},
+        { headers: { authorization: req.headers.authorization } },
+      ),
     );
   }
 

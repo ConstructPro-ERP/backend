@@ -15,6 +15,10 @@ const mockProjectClient = {
   createFromQuotation: jest.fn(),
 };
 
+const mockDocumentClient = {
+  generatePdf: jest.fn().mockResolvedValue(null),
+};
+
 describe('Quotation E2E', () => {
   let app: INestApplication;
   let prisma: PrismaService;
@@ -71,7 +75,7 @@ describe('Quotation E2E', () => {
       imports: [QuotationModule],
     })
       .overrideProvider(DocumentClient)
-      .useValue({ generatePdf: jest.fn().mockResolvedValue(null) })
+      .useValue(mockDocumentClient)
       .overrideProvider(ProjectClient)
       .useValue(mockProjectClient)
       .overrideProvider(NotificationClient)
@@ -437,6 +441,100 @@ describe('Quotation E2E', () => {
 
       expect(db!.status).toBe('PENDING_APPROVAL');
       expect(db!.projectId).toBeNull();
+    });
+  });
+
+  describe('PATCH /quotations/:id/reject', () => {
+    it('TC-E2E-013: rejects a PENDING_APPROVAL quotation with reason', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 15000,
+          status: 'PENDING_APPROVAL',
+          notes: 'Customer looking for discounts',
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/reject`)
+        .send({ reason: 'Discounts cannot be accommodated at this stage' })
+        .expect(200);
+
+      expect(res.body.status).toBe('REJECTED');
+      expect(res.body.notes).toContain(
+        '[Rejection Reason]: Discounts cannot be accommodated',
+      );
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+      expect(db!.status).toBe('REJECTED');
+    });
+
+    it('TC-E2E-014: returns 400 when rejection reason is too short', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 5000,
+          status: 'PENDING_APPROVAL',
+        },
+      });
+
+      await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/reject`)
+        .send({ reason: 'No' })
+        .expect(400);
+    });
+  });
+
+  describe('PATCH /quotations/:id/revise', () => {
+    it('TC-E2E-015: resets a REJECTED quotation to DRAFT', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 8000,
+          status: 'REJECTED',
+          notes: 'Rejected due to cost',
+        },
+      });
+
+      const res = await request(app.getHttpServer())
+        .patch(`/quotations/${quotation.id}/revise`)
+        .expect(200);
+
+      expect(res.body.status).toBe('DRAFT');
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+      expect(db!.status).toBe('DRAFT');
+    });
+  });
+
+  describe('GET /quotations/:id/pdf', () => {
+    it('TC-E2E-016: generates and returns pdfUrl for quotation', async () => {
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId,
+          totalAmount: 20000,
+          status: 'PENDING_APPROVAL',
+        },
+      });
+
+      mockDocumentClient.generatePdf.mockResolvedValue(
+        'https://cdn.example.com/quotation-e2e.pdf',
+      );
+
+      const res = await request(app.getHttpServer())
+        .get(`/quotations/${quotation.id}/pdf`)
+        .expect(200);
+
+      expect(res.body.pdfUrl).toBe('https://cdn.example.com/quotation-e2e.pdf');
+
+      const db = await prisma.quotation.findUnique({
+        where: { id: quotation.id },
+      });
+      expect(db!.pdfUrl).toBe('https://cdn.example.com/quotation-e2e.pdf');
     });
   });
 });

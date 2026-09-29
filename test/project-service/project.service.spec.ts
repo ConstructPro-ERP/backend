@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   Prisma,
   ProjectStatus,
@@ -18,6 +14,7 @@ import {
 import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
 import { ProjectAccessActor } from '../../apps/project-service/src/interfaces/project-access.interface';
 import { ProjectLifecycleService } from '../../apps/project-service/src/lifecycle/project-lifecycle.service';
+import { ErrorCode } from '../../shared/error-codes';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -252,7 +249,11 @@ describe('ProjectService', () => {
         service.updateStatus('project-1', {
           status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
 
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
     });
@@ -315,7 +316,11 @@ describe('ProjectService', () => {
         service.updateStatus('project-1', {
           status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
 
       expect(
         mockProjectRepository.findProjectManagerCandidate,
@@ -336,7 +341,11 @@ describe('ProjectService', () => {
         service.updateStatus('project-1', {
           status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
 
       expect(
         mockProjectRepository.findProjectManagerCandidate,
@@ -378,7 +387,11 @@ describe('ProjectService', () => {
         service.updateStatus('project-1', {
           status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.INVALID_PROJECT_DATE_RANGE,
+        },
+      });
 
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
     });
@@ -639,7 +652,11 @@ describe('ProjectService', () => {
 
       await expect(
         service.remove('project-1', 'admin-1'),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        },
+      });
 
       expect(mockProjectRepository.delete).not.toHaveBeenCalled();
     });
@@ -655,7 +672,11 @@ describe('ProjectService', () => {
 
       await expect(
         service.remove('project-1', 'admin-1'),
-      ).rejects.toBeInstanceOf(ConflictException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        },
+      });
 
       expect(mockProjectRepository.delete).not.toHaveBeenCalled();
     });
@@ -665,7 +686,11 @@ describe('ProjectService', () => {
 
       await expect(
         service.remove('missing-project', 'admin-1'),
-      ).rejects.toBeInstanceOf(NotFoundException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_NOT_FOUND,
+        },
+      });
 
       expect(mockProjectRepository.delete).not.toHaveBeenCalled();
     });

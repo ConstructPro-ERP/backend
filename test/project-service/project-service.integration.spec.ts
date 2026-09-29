@@ -5,12 +5,18 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { ProjectModule } from '../../apps/project-service/src/project.module';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ErrorCode } from '../../shared/error-codes';
 
 jest.setTimeout(30000);
 
 interface ProjectConversionResponseBody {
   projectId: string;
   status: string;
+}
+
+interface ProjectDomainErrorResponseBody {
+  code: string;
+  message: string;
 }
 
 interface ProjectLifecycleErrorResponseBody {
@@ -40,6 +46,28 @@ function parseProjectConversionResponse(
   return {
     projectId: value.projectId,
     status: value.status,
+  };
+}
+
+function parseProjectDomainErrorResponse(
+  value: unknown,
+): ProjectDomainErrorResponseBody {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('code' in value) ||
+    typeof value.code !== 'string' ||
+    !('message' in value) ||
+    typeof value.message !== 'string'
+  ) {
+    throw new Error(
+      'Project domain error response does not match the expected shape',
+    );
+  }
+
+  return {
+    code: value.code,
+    message: value.message,
   };
 }
 
@@ -325,12 +353,18 @@ describe('ProjectService — integration', () => {
     });
 
     // Act
-    await request(httpServer)
+    const response = await request(httpServer)
       .delete(`/projects/${project.id}`)
       .set('x-user-id', admin.id)
       .expect(409);
 
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
     // Assert
+    expect(responseBody.code).toBe(ErrorCode.PROJECT_DELETION_NOT_ALLOWED);
+
     const existingProject = await prisma.project.findUnique({
       where: {
         id: project.id,
@@ -377,12 +411,18 @@ describe('ProjectService — integration', () => {
     });
 
     // Act
-    await request(httpServer)
+    const response = await request(httpServer)
       .delete(`/projects/${project.id}`)
       .set('x-user-id', admin.id)
       .expect(409);
 
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
     // Assert
+    expect(responseBody.code).toBe(ErrorCode.PROJECT_DELETION_NOT_ALLOWED);
+
     const existingProject = await prisma.project.findUnique({
       where: {
         id: project.id,
@@ -493,7 +533,7 @@ describe('ProjectService — integration', () => {
     );
 
     // Assert
-    expect(responseBody.code).toBe('INVALID_PROJECT_STATUS_TRANSITION');
+    expect(responseBody.code).toBe(ErrorCode.INVALID_PROJECT_STATUS_TRANSITION);
 
     expect(responseBody.details).toEqual({
       currentStatus: ProjectStatus.PLANNING,
@@ -634,7 +674,7 @@ describe('ProjectService — integration', () => {
     );
 
     // Act
-    await request(httpServer)
+    const response = await request(httpServer)
       .patch(`/projects/${project.id}/status`)
       .set('x-user-id', manager.id)
       .send({
@@ -642,7 +682,13 @@ describe('ProjectService — integration', () => {
       })
       .expect(400);
 
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
     // Assert
+    expect(responseBody.code).toBe(ErrorCode.INVALID_PROJECT_DATE_RANGE);
+
     const unchangedProject = await prisma.project.findUnique({
       where: {
         id: project.id,

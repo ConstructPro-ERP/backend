@@ -226,9 +226,11 @@ export class ProjectService {
     }
 
     if (project.status !== ProjectStatus.PLANNING) {
-      throw new ConflictException(
-        'Only PLANNING projects can be permanently deleted. Cancel the project instead.',
-      );
+      throw new ConflictException({
+        code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        message:
+          'Only PLANNING projects can be permanently deleted. Cancel the project instead.',
+      });
     }
 
     const hasDependencies = Object.values(project._count).some(
@@ -236,9 +238,11 @@ export class ProjectService {
     );
 
     if (hasDependencies) {
-      throw new ConflictException(
-        'Project cannot be permanently deleted because related records already exist. Cancel the project instead.',
-      );
+      throw new ConflictException({
+        code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        message:
+          'Project cannot be permanently deleted because related records already exist. Cancel the project instead.',
+      });
     }
 
     await this.projects.delete(id);
@@ -437,15 +441,17 @@ export class ProjectService {
     project: ProjectWithDetails,
   ): Promise<void> {
     if (!project.projectManagerId) {
-      throw new BadRequestException(
-        'Project manager must be assigned before activation',
-      );
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message: 'Project manager must be assigned before activation.',
+      });
     }
 
     if (!project.startDate) {
-      throw new BadRequestException(
-        'Project start date must be set before activation',
-      );
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message: 'Project start date must be set before activation.',
+      });
     }
 
     await this.ensureValidProjectManager(project.projectManagerId);
@@ -457,9 +463,11 @@ export class ProjectService {
     );
 
     if (!approvedQuotation) {
-      throw new BadRequestException(
-        'Project cannot become ACTIVE until at least one quotation is approved',
-      );
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message:
+          'Project cannot become ACTIVE until at least one quotation is approved.',
+      });
     }
 
     // Milestone and weight checks are added when Issue 03 provides those fields.
@@ -472,9 +480,10 @@ export class ProjectService {
 
   private validateDateRange(startDate: Date, endDate?: Date | null) {
     if (endDate && endDate < startDate) {
-      throw new BadRequestException(
-        'Project end date cannot be before the start date',
-      );
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_PROJECT_DATE_RANGE,
+        message: 'Project end date cannot be before the start date.',
+      });
     }
   }
 

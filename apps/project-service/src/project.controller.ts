@@ -110,7 +110,7 @@ export class ProjectController {
   @ApiOkResponse({ description: 'Project status updated successfully' })
   @ApiBadRequestResponse({
     description:
-      'Project cannot enter ACTIVE/PLANNING because of quotation state',
+      'Invalid status transition or Project activation requirements not met',
   })
   @ApiNotFoundResponse({ description: 'Project not found' })
   updateStatus(

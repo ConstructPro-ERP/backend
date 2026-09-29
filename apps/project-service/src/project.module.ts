@@ -5,6 +5,8 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { ProjectController } from './project.controller';
 import { ProjectRepository } from './repositories/project.repository';
 import { ProjectService } from './project.service';
+import { ProjectAccessService } from './project-access.service';
+import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 
 @Module({
   imports: [
@@ -14,6 +16,12 @@ import { ProjectService } from './project.service';
     }),
   ],
   controllers: [ProjectController],
-  providers: [ProjectService, ProjectRepository, PrismaService],
+  providers: [
+    ProjectService,
+    ProjectAccessService,
+    ProjectLifecycleService,
+    ProjectRepository,
+    PrismaService,
+  ],
 })
 export class ProjectModule {}

@@ -94,9 +94,19 @@ describe('ProjectsGatewayController roles', () => {
     expect(guard.canActivate(contextFor('ADMIN', 'updateStatus'))).toBe(true);
   });
 
-  it('rejects Project Manager from write routes until assigned-project authorization is implemented', () => {
+  it('allows Project Manager through project operation routes', () => {
+    expect(guard.canActivate(contextFor('PROJECT_MANAGER', 'update'))).toBe(
+      true,
+    );
+
+    expect(
+      guard.canActivate(contextFor('PROJECT_MANAGER', 'updateStatus')),
+    ).toBe(true);
+  });
+
+  it('rejects Project Manager from standalone project creation', () => {
     expect(() =>
-      guard.canActivate(contextFor('PROJECT_MANAGER', 'update')),
+      guard.canActivate(contextFor('PROJECT_MANAGER', 'create')),
     ).toThrow(ForbiddenException);
   });
 
@@ -106,6 +116,18 @@ describe('ProjectsGatewayController roles', () => {
     expect(() =>
       guard.canActivate(contextFor('PROJECT_MANAGER', 'assignManager')),
     ).toThrow(ForbiddenException);
+  });
+
+  it('allows only Admin to permanently delete a project', () => {
+    expect(guard.canActivate(contextFor('ADMIN', 'remove'))).toBe(true);
+
+    expect(() =>
+      guard.canActivate(contextFor('PROJECT_MANAGER', 'remove')),
+    ).toThrow(ForbiddenException);
+
+    expect(() => guard.canActivate(contextFor('ACCOUNTANT', 'remove'))).toThrow(
+      ForbiddenException,
+    );
   });
 
   it('rejects a request with no authenticated user', () => {
@@ -122,6 +144,7 @@ describe('ProjectsGatewayController', () => {
     get: jest.Mock;
     post: jest.Mock;
     patch: jest.Mock;
+    delete: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -129,6 +152,7 @@ describe('ProjectsGatewayController', () => {
       get: jest.fn(),
       post: jest.fn(),
       patch: jest.fn(),
+      delete: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -333,6 +357,34 @@ describe('ProjectsGatewayController', () => {
         },
       },
     );
+  });
+
+  it('forwards remove() to DELETE /projects/:id', async () => {
+    httpService.delete.mockReturnValue(
+      of({
+        data: {
+          message: 'Project deleted successfully',
+        },
+      }),
+    );
+
+    const req = reqWith();
+
+    const result = await controller.remove('project-1', req);
+
+    expect(httpService.delete).toHaveBeenCalledWith(
+      'http://project-service.test/projects/project-1',
+      {
+        headers: {
+          authorization: 'Bearer test-token',
+          'x-user-id': 'user-1',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      message: 'Project deleted successfully',
+    });
   });
 
   it('preserves downstream project-service errors', async () => {

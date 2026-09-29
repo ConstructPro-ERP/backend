@@ -46,7 +46,7 @@ export class ProjectQueryDto {
   @IsInt()
   @Min(1)
   @IsOptional()
-  page: number = 1;
+  page?: number = 1;
 
   @ApiPropertyOptional({ default: 10, minimum: 1, maximum: 100 })
   @Type(() => Number)
@@ -54,7 +54,7 @@ export class ProjectQueryDto {
   @Min(1)
   @Max(100)
   @IsOptional()
-  limit: number = 10;
+  limit?: number = 10;
 
   @ApiPropertyOptional({
     enum: ProjectSortField,
@@ -62,7 +62,7 @@ export class ProjectQueryDto {
   })
   @IsOptional()
   @IsIn(Object.values(ProjectSortField))
-  sortBy: ProjectSortField = ProjectSortField.CREATED_AT;
+  sortBy?: ProjectSortField = ProjectSortField.CREATED_AT;
 
   @ApiPropertyOptional({
     enum: SortOrder,
@@ -70,5 +70,5 @@ export class ProjectQueryDto {
   })
   @IsOptional()
   @IsIn(Object.values(SortOrder))
-  sortOrder: SortOrder = SortOrder.DESC;
+  sortOrder?: SortOrder = SortOrder.DESC;
 }

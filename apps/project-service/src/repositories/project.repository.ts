@@ -180,10 +180,11 @@ export class ProjectRepository {
     });
   }
 
-  getDependencyCounts(id: string) {
+  findDeletionDetails(id: string) {
     return this.prisma.project.findUnique({
       where: { id },
       select: {
+        status: true,
         _count: {
           select: {
             quotations: true,
@@ -200,28 +201,52 @@ export class ProjectRepository {
     });
   }
 
-  findProjectManager(userId: string) {
+  findUserWithRole(userId: string) {
     return this.prisma.user.findUnique({
-      where: { id: userId },
+      where: {
+        id: userId,
+      },
       select: {
         id: true,
-        fullName: true,
-        email: true,
         status: true,
-        roleId: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
       },
     });
   }
 
-  findProjectManagerInTransaction(tx: ProjectTransaction, userId: string) {
+  findProjectManagerCandidate(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        status: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
+      },
+    });
+  }
+
+  findProjectManagerCandidateInTransaction(
+    tx: ProjectTransaction,
+    userId: string,
+  ) {
     return tx.user.findUnique({
       where: { id: userId },
       select: {
         id: true,
-        fullName: true,
-        email: true,
         status: true,
-        roleId: true,
+        role: {
+          select: {
+            roleName: true,
+          },
+        },
       },
     });
   }

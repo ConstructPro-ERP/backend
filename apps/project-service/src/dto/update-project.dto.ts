@@ -4,7 +4,6 @@ import {
   IsNumber,
   IsOptional,
   IsString,
-  IsUUID,
   Min,
 } from 'class-validator';
 
@@ -43,11 +42,4 @@ export class UpdateProjectDto {
   @IsNumber()
   @Min(0)
   budget?: number | null;
-
-  @ApiPropertyOptional({
-    example: 'b390c2c8-86f5-484f-ad9f-170bca22703d',
-  })
-  @IsOptional()
-  @IsUUID()
-  projectManagerId?: string;
 }

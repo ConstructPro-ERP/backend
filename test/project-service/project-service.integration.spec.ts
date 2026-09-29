@@ -5,12 +5,26 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { ProjectModule } from '../../apps/project-service/src/project.module';
 import { PrismaService } from '../../prisma/prisma.service';
+import { ErrorCode } from '../../shared/error-codes';
 
 jest.setTimeout(30000);
 
 interface ProjectConversionResponseBody {
   projectId: string;
   status: string;
+}
+
+interface ProjectDomainErrorResponseBody {
+  code: string;
+  message: string;
+}
+
+interface ProjectLifecycleErrorResponseBody {
+  code: string;
+  details: {
+    currentStatus: ProjectStatus;
+    requestedStatus: ProjectStatus;
+  };
 }
 
 function parseProjectConversionResponse(
@@ -35,10 +49,62 @@ function parseProjectConversionResponse(
   };
 }
 
+function parseProjectDomainErrorResponse(
+  value: unknown,
+): ProjectDomainErrorResponseBody {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('code' in value) ||
+    typeof value.code !== 'string' ||
+    !('message' in value) ||
+    typeof value.message !== 'string'
+  ) {
+    throw new Error(
+      'Project domain error response does not match the expected shape',
+    );
+  }
+
+  return {
+    code: value.code,
+    message: value.message,
+  };
+}
+
+function parseProjectLifecycleErrorResponse(
+  value: unknown,
+): ProjectLifecycleErrorResponseBody {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('code' in value) ||
+    typeof value.code !== 'string' ||
+    !('details' in value) ||
+    typeof value.details !== 'object' ||
+    value.details === null ||
+    !('currentStatus' in value.details) ||
+    !('requestedStatus' in value.details)
+  ) {
+    throw new Error(
+      'Project lifecycle error response does not match the expected shape',
+    );
+  }
+
+  return {
+    code: value.code,
+    details: {
+      currentStatus: value.details.currentStatus as ProjectStatus,
+      requestedStatus: value.details.requestedStatus as ProjectStatus,
+    },
+  };
+}
+
 describe('ProjectService — integration', () => {
   let app: INestApplication;
   let httpServer: Server;
   let prisma: PrismaService;
+  let projectManagerRoleId: string;
+  let adminRoleId: string;
 
   const runId = Date.now().toString();
   const prefix = `Project Integration ${runId}`;
@@ -100,6 +166,18 @@ describe('ProjectService — integration', () => {
         fullName: `${prefix} Manager ${label}`,
         email: `project-integration-${runId}-${label}@test.com`,
         password: 'hashed',
+        roleId: projectManagerRoleId,
+      },
+    });
+  }
+
+  async function createAdmin(label: string) {
+    return prisma.user.create({
+      data: {
+        fullName: `${prefix} Admin ${label}`,
+        email: `project-integration-${runId}-admin-${label}@test.com`,
+        password: 'hashed',
+        roleId: adminRoleId,
       },
     });
   }
@@ -113,12 +191,61 @@ describe('ProjectService — integration', () => {
     });
   }
 
+  async function createApprovedQuotationForProject(
+    projectId: string,
+    label: string,
+  ) {
+    const lead = await createLead(label);
+
+    return prisma.quotation.create({
+      data: {
+        leadId: lead.id,
+        projectId,
+        totalAmount: 250000,
+        status: 'APPROVED',
+        items: {
+          create: [
+            {
+              itemName: 'Activation Work',
+              quantity: 1,
+              unitPrice: 250000,
+              amount: 250000,
+            },
+          ],
+        },
+      },
+    });
+  }
+
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [ProjectModule],
     }).compile();
 
     prisma = module.get<PrismaService>(PrismaService);
+
+    const projectManagerRole = await prisma.role.upsert({
+      where: {
+        roleName: 'PROJECT_MANAGER',
+      },
+      update: {},
+      create: {
+        roleName: 'PROJECT_MANAGER',
+      },
+    });
+
+    const adminRole = await prisma.role.upsert({
+      where: {
+        roleName: 'ADMIN',
+      },
+      update: {},
+      create: {
+        roleName: 'ADMIN',
+      },
+    });
+
+    projectManagerRoleId = projectManagerRole.id;
+    adminRoleId = adminRole.id;
 
     app = module.createNestApplication();
 
@@ -135,10 +262,6 @@ describe('ProjectService — integration', () => {
     httpServer = app.getHttpServer() as Server;
   });
 
-  beforeEach(async () => {
-    await cleanup();
-  });
-
   afterEach(async () => {
     await cleanup();
   });
@@ -146,6 +269,492 @@ describe('ProjectService — integration', () => {
   afterAll(async () => {
     await cleanup();
     await app.close();
+  });
+
+  it.each([
+    '/projects?page=0',
+    '/projects?limit=0',
+    '/projects?limit=101',
+    '/projects?sortBy=budget',
+    '/projects?sortOrder=sideways',
+  ])('rejects invalid Project list query: %s', async (url) => {
+    await request(httpServer).get(url).expect(400);
+  });
+
+  it('rejects project manager changes through the general project update endpoint', async () => {
+    // Arrange
+    const currentManager = await createManager('update-current');
+    const newManager = await createManager('update-new');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Update Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: currentManager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}`)
+      .set('x-user-id', currentManager.id)
+      .send({
+        projectManagerId: newManager.id,
+      })
+      .expect(400);
+
+    // Assert
+    const updatedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(updatedProject).not.toBeNull();
+    expect(updatedProject!.projectManagerId).toBe(currentManager.id);
+  });
+
+  it('allows Admin to permanently delete an unused PLANNING Project', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-unused');
+    const manager = await createManager('delete-unused');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Unused Planning Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(200);
+
+    // Assert
+    const deletedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(deletedProject).toBeNull();
+  });
+
+  it('rejects permanent deletion when Project is not PLANNING', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-active');
+    const manager = await createManager('delete-active');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Active Delete Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(409);
+
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
+    // Assert
+    expect(responseBody.code).toBe(ErrorCode.PROJECT_DELETION_NOT_ALLOWED);
+
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
+    expect(existingProject!.status).toBe(ProjectStatus.ACTIVE);
+  });
+
+  it('rejects permanent deletion when a PLANNING Project has related records', async () => {
+    // Arrange
+    const admin = await createAdmin('delete-related');
+    const manager = await createManager('delete-related');
+    const lead = await createLead('delete-related');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Related Planning Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    const quotation = await prisma.quotation.create({
+      data: {
+        leadId: lead.id,
+        projectId: project.id,
+        totalAmount: 250000,
+        status: 'PENDING_APPROVAL',
+        items: {
+          create: [
+            {
+              itemName: 'Initial Design',
+              quantity: 1,
+              unitPrice: 250000,
+              amount: 250000,
+            },
+          ],
+        },
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', admin.id)
+      .expect(409);
+
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
+    // Assert
+    expect(responseBody.code).toBe(ErrorCode.PROJECT_DELETION_NOT_ALLOWED);
+
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
+
+    const existingQuotation = await prisma.quotation.findUnique({
+      where: {
+        id: quotation.id,
+      },
+    });
+
+    expect(existingQuotation).not.toBeNull();
+    expect(existingQuotation!.projectId).toBe(project.id);
+  });
+
+  it('rejects permanent deletion by Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('delete-manager');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Manager Delete Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .delete(`/projects/${project.id}`)
+      .set('x-user-id', manager.id)
+      .expect(403);
+
+    // Assert
+    const existingProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(existingProject).not.toBeNull();
+  });
+
+  it('allows ACTIVE to ON_HOLD for the assigned Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('status-on-hold');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} On Hold Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ON_HOLD,
+      })
+      .expect(200);
+
+    // Assert
+    const updatedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(updatedProject).not.toBeNull();
+    expect(updatedProject!.status).toBe(ProjectStatus.ON_HOLD);
+  });
+
+  it('cancels a Project without deleting its related quotation', async () => {
+    // Arrange
+    const manager = await createManager('cancel-preserve');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Cancellation Preservation Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+      },
+    });
+
+    const quotation = await createApprovedQuotationForProject(
+      project.id,
+      'cancel-preserve',
+    );
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.CANCELLED,
+      })
+      .expect(200);
+
+    // Assert
+    const cancelledProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(cancelledProject).not.toBeNull();
+    expect(cancelledProject!.status).toBe(ProjectStatus.CANCELLED);
+
+    const preservedQuotation = await prisma.quotation.findUnique({
+      where: {
+        id: quotation.id,
+      },
+    });
+
+    expect(preservedQuotation).not.toBeNull();
+    expect(preservedQuotation!.projectId).toBe(project.id);
+  });
+
+  it('rejects PLANNING to COMPLETED with a stable lifecycle error', async () => {
+    // Arrange
+    const manager = await createManager('status-invalid');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Invalid Transition Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.COMPLETED,
+      })
+      .expect(400);
+
+    const responseBody = parseProjectLifecycleErrorResponse(
+      response.body as unknown,
+    );
+
+    // Assert
+    expect(responseBody.code).toBe(ErrorCode.INVALID_PROJECT_STATUS_TRANSITION);
+
+    expect(responseBody.details).toEqual({
+      currentStatus: ProjectStatus.PLANNING,
+      requestedStatus: ProjectStatus.COMPLETED,
+    });
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+  });
+
+  it.each([ProjectStatus.PLANNING, ProjectStatus.ON_HOLD])(
+    'activates a %s Project when activation requirements are met',
+    async (initialStatus) => {
+      // Arrange
+      const manager = await createManager(
+        `activation-${initialStatus.toLowerCase()}`,
+      );
+
+      const project = await prisma.project.create({
+        data: {
+          projectName: `${prefix} ${initialStatus} Activation Project`,
+          location: 'Colombo',
+          startDate: new Date('2026-10-01T00:00:00.000Z'),
+          endDate: new Date('2027-04-30T00:00:00.000Z'),
+          projectManagerId: manager.id,
+          status: initialStatus,
+        },
+      });
+
+      await createApprovedQuotationForProject(
+        project.id,
+        `activation-${initialStatus.toLowerCase()}`,
+      );
+
+      // Act
+      await request(httpServer)
+        .patch(`/projects/${project.id}/status`)
+        .set('x-user-id', manager.id)
+        .send({
+          status: ProjectStatus.ACTIVE,
+        })
+        .expect(200);
+
+      // Assert
+      const updatedProject = await prisma.project.findUnique({
+        where: {
+          id: project.id,
+        },
+      });
+
+      expect(updatedProject).not.toBeNull();
+      expect(updatedProject!.status).toBe(ProjectStatus.ACTIVE);
+    },
+  );
+
+  it('rejects activation when the assigned user is no longer a Project Manager', async () => {
+    // Arrange
+    const manager = await createManager('activation-role-change');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Manager Role Change Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    await createApprovedQuotationForProject(
+      project.id,
+      'activation-role-change',
+    );
+
+    const adminRole = await prisma.role.upsert({
+      where: {
+        roleName: 'ADMIN',
+      },
+      update: {},
+      create: {
+        roleName: 'ADMIN',
+      },
+    });
+
+    await prisma.user.update({
+      where: {
+        id: manager.id,
+      },
+      data: {
+        roleId: adminRole.id,
+      },
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ACTIVE,
+      })
+      .expect(400);
+
+    // Assert
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+  });
+
+  it('rejects activation when the stored Project date range is invalid', async () => {
+    // Arrange
+    const manager = await createManager('activation-invalid-dates');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Invalid Date Activation Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-10T00:00:00.000Z'),
+        endDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.PLANNING,
+      },
+    });
+
+    await createApprovedQuotationForProject(
+      project.id,
+      'activation-invalid-dates',
+    );
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.ACTIVE,
+      })
+      .expect(400);
+
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
+    // Assert
+    expect(responseBody.code).toBe(ErrorCode.INVALID_PROJECT_DATE_RANGE);
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
   });
 
   it('creates an ACTIVE project from an approved quotation', async () => {
@@ -311,6 +920,83 @@ describe('ProjectService — integration', () => {
 
     expect(approved!.status).toBe('APPROVED');
   });
+
+  it.each([
+    ProjectStatus.ON_HOLD,
+    ProjectStatus.COMPLETED,
+    ProjectStatus.CANCELLED,
+  ])(
+    'preserves %s status when attaching an approved quotation',
+    async (status) => {
+      // Arrange
+      const manager = await createManager(`quotation-${status.toLowerCase()}`);
+      const lead = await createLead(`quotation-${status.toLowerCase()}`);
+
+      const project = await prisma.project.create({
+        data: {
+          projectName: `${prefix} ${status} Project`,
+          location: 'Colombo',
+          startDate: new Date('2026-10-01T00:00:00.000Z'),
+          projectManagerId: manager.id,
+          status,
+        },
+      });
+
+      const quotation = await prisma.quotation.create({
+        data: {
+          leadId: lead.id,
+          totalAmount: 250000,
+          status: 'APPROVED',
+          items: {
+            create: [
+              {
+                itemName: 'House Design',
+                quantity: 1,
+                unitPrice: 250000,
+                amount: 250000,
+              },
+            ],
+          },
+        },
+      });
+
+      // Act
+      const response = await request(httpServer)
+        .post('/projects/from-quotation')
+        .send({
+          quotationId: quotation.id,
+          leadId: lead.id,
+          targetProjectId: project.id,
+        })
+        .expect(201);
+
+      const responseBody = parseProjectConversionResponse(
+        response.body as unknown,
+      );
+
+      // Assert
+      expect(responseBody.projectId).toBe(project.id);
+      expect(responseBody.status).toBe(status);
+
+      const updatedProject = await prisma.project.findUnique({
+        where: {
+          id: project.id,
+        },
+      });
+
+      expect(updatedProject).not.toBeNull();
+      expect(updatedProject!.status).toBe(status);
+
+      const updatedQuotation = await prisma.quotation.findUnique({
+        where: {
+          id: quotation.id,
+        },
+      });
+
+      expect(updatedQuotation).not.toBeNull();
+      expect(updatedQuotation!.projectId).toBe(project.id);
+    },
+  );
 
   it('returns the same project for concurrent conversion requests', async () => {
     // Arrange

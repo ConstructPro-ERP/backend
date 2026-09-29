@@ -1,8 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import {
   Prisma,
   ProjectStatus,
@@ -15,6 +11,14 @@ import {
   ProjectRepository,
   ProjectTransaction,
 } from '../../apps/project-service/src/repositories/project.repository';
+import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
+import { ProjectAccessActor } from '../../apps/project-service/src/interfaces/project-access.interface';
+import { ProjectLifecycleService } from '../../apps/project-service/src/lifecycle/project-lifecycle.service';
+import {
+  ProjectSortField,
+  SortOrder,
+} from '../../apps/project-service/src/dto/project-query.dto';
+import { ErrorCode } from '../../shared/error-codes';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -22,8 +26,8 @@ const mockProjectRepository = {
   findById: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
-  getDependencyCounts: jest.fn(),
-  findProjectManager: jest.fn(),
+  findDeletionDetails: jest.fn(),
+  findProjectManagerCandidate: jest.fn(),
   findApprovedQuotation: jest.fn(),
   transaction: jest.fn(),
   lockQuotation: jest.fn(),
@@ -32,7 +36,20 @@ const mockProjectRepository = {
   createInTransaction: jest.fn(),
   updateInTransaction: jest.fn(),
   linkQuotation: jest.fn(),
-  findProjectManagerInTransaction: jest.fn(),
+  findProjectManagerCandidateInTransaction: jest.fn(),
+};
+
+const mockProjectAccessService = {
+  resolveActor: jest.fn(),
+  assertCanReadProject: jest.fn(),
+  assertCanModifyProject: jest.fn(),
+  assertCanCreateProject: jest.fn(),
+  assertCanAssignProjectManager: jest.fn(),
+  assertCanDeleteProject: jest.fn(),
+};
+
+const mockProjectLifecycleService = {
+  assertTransitionAllowed: jest.fn(),
 };
 
 const fakeTransaction = {} as ProjectTransaction;
@@ -42,7 +59,22 @@ const activeManager = {
   fullName: 'Project Manager',
   email: 'manager@test.com',
   status: UserStatus.ACTIVE,
-  roleId: null,
+  role: {
+    roleName: 'PROJECT_MANAGER',
+  },
+};
+
+const inactiveManager = {
+  ...activeManager,
+  status: UserStatus.INACTIVE,
+};
+
+const adminUser = {
+  id: 'admin-1',
+  status: UserStatus.ACTIVE,
+  role: {
+    roleName: 'ADMIN',
+  },
 };
 
 const planningProject = {
@@ -126,10 +158,23 @@ describe('ProjectService', () => {
           provide: ProjectRepository,
           useValue: mockProjectRepository,
         },
+        {
+          provide: ProjectAccessService,
+          useValue: mockProjectAccessService,
+        },
+        {
+          provide: ProjectLifecycleService,
+          useValue: mockProjectLifecycleService,
+        },
       ],
     }).compile();
 
     service = module.get<ProjectService>(ProjectService);
+
+    mockProjectAccessService.resolveActor.mockResolvedValue({
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
 
     mockProjectRepository.transaction.mockImplementation(
       (work: (tx: ProjectTransaction) => Promise<unknown>) =>
@@ -140,9 +185,11 @@ describe('ProjectService', () => {
       { id: 'quotation-1' },
     ]);
 
-    mockProjectRepository.findProjectManager.mockResolvedValue(activeManager);
+    mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+      activeManager,
+    );
 
-    mockProjectRepository.findProjectManagerInTransaction.mockResolvedValue(
+    mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
       activeManager,
     );
 
@@ -174,6 +221,26 @@ describe('ProjectService', () => {
 
       expect(result.status).toBe(ProjectStatus.PLANNING);
     });
+
+    it('rejects project creation with a non-Project-Manager user', async () => {
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        adminUser,
+      );
+
+      await expect(
+        service.create({
+          projectName: 'House Project',
+          startDate: '2026-10-01T00:00:00.000Z',
+          projectManagerId: 'admin-1',
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'INVALID_PROJECT_MANAGER_ROLE',
+        },
+      });
+
+      expect(mockProjectRepository.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('updateStatus', () => {
@@ -186,7 +253,11 @@ describe('ProjectService', () => {
         service.updateStatus('project-1', {
           status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
 
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
     });
@@ -205,9 +276,17 @@ describe('ProjectService', () => {
         status: ProjectStatus.ACTIVE,
       });
 
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).toHaveBeenCalledWith('manager-1');
+
       expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
         status: ProjectStatus.ACTIVE,
       });
+
+      expect(
+        mockProjectLifecycleService.assertTransitionAllowed,
+      ).toHaveBeenCalledWith(ProjectStatus.PLANNING, ProjectStatus.ACTIVE);
 
       expect(result.status).toBe(ProjectStatus.ACTIVE);
     });
@@ -229,21 +308,538 @@ describe('ProjectService', () => {
       expect(result.status).toBe(ProjectStatus.ACTIVE);
     });
 
-    it('rejects PLANNING when an approved quotation already exists', async () => {
-      mockProjectRepository.findById.mockResolvedValue(activeProject);
+    it('rejects activation when no Project Manager is assigned', async () => {
+      const projectWithoutManager = {
+        ...planningProject,
+        projectManagerId: null,
+      };
 
-      mockProjectRepository.findApprovedQuotation.mockResolvedValue({
-        id: 'quotation-1',
-        status: QuotationStatus.APPROVED,
-      });
+      mockProjectRepository.findById.mockResolvedValue(projectWithoutManager);
 
       await expect(
         service.updateStatus('project-1', {
-          status: ProjectStatus.PLANNING,
+          status: ProjectStatus.ACTIVE,
         }),
-      ).rejects.toBeInstanceOf(BadRequestException);
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).not.toHaveBeenCalled();
 
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the Project start date is missing', async () => {
+      const projectWithoutStartDate = {
+        ...planningProject,
+        startDate: null,
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(projectWithoutStartDate);
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidate,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the assigned Project Manager is inactive', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        inactiveManager,
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'PROJECT_MANAGER_INACTIVE',
+        },
+      });
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation when the stored Project date range is invalid', async () => {
+      const projectWithInvalidDates = {
+        ...planningProject,
+        startDate: new Date('2026-10-10T00:00:00.000Z'),
+        endDate: new Date('2026-10-01T00:00:00.000Z'),
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(projectWithInvalidDates);
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ACTIVE,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.INVALID_PROJECT_DATE_RANGE,
+        },
+      });
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('updates an allowed non-ACTIVE transition without checking quotations', async () => {
+      const onHoldProject = {
+        ...activeProject,
+        status: ProjectStatus.ON_HOLD,
+      };
+
+      mockProjectRepository.findById.mockResolvedValue(activeProject);
+      mockProjectRepository.update.mockResolvedValue(onHoldProject);
+
+      const result = await service.updateStatus('project-1', {
+        status: ProjectStatus.ON_HOLD,
+      });
+
+      expect(
+        mockProjectLifecycleService.assertTransitionAllowed,
+      ).toHaveBeenCalledWith(ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD);
+
+      expect(
+        mockProjectRepository.findApprovedQuotation,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
+        status: ProjectStatus.ON_HOLD,
+      });
+
+      expect(result.status).toBe(ProjectStatus.ON_HOLD);
+    });
+  });
+
+  describe('findAll', () => {
+    it('uses default pagination and sorting', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([
+        [planningProject],
+        1,
+      ]);
+
+      const result = await service.findAll({}, 'admin-1');
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith({
+        where: {},
+        skip: 0,
+        take: 10,
+        orderBy: {
+          createdAt: SortOrder.DESC,
+        },
+      });
+
+      expect(result.meta).toEqual({
+        page: 1,
+        limit: 10,
+        total: 1,
+        totalPages: 1,
+      });
+    });
+
+    it('applies search, status, and manager filters for Admin', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          search: 'Kandy',
+          status: ProjectStatus.ACTIVE,
+          projectManagerId: 'manager-2',
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-2',
+            status: ProjectStatus.ACTIVE,
+            OR: [
+              {
+                projectName: {
+                  contains: 'Kandy',
+                  mode: 'insensitive',
+                },
+              },
+              {
+                location: {
+                  contains: 'Kandy',
+                  mode: 'insensitive',
+                },
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('allows Accountant to filter by Project Manager', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'accountant-1',
+        role: 'ACCOUNTANT',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          projectManagerId: 'manager-2',
+        },
+        'accountant-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-2',
+          },
+        }),
+      );
+    });
+
+    it('applies custom pagination and sorting', async () => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 45]);
+
+      const result = await service.findAll(
+        {
+          page: 3,
+          limit: 20,
+          sortBy: ProjectSortField.PROJECT_NAME,
+          sortOrder: SortOrder.ASC,
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith({
+        where: {},
+        skip: 40,
+        take: 20,
+        orderBy: {
+          projectName: SortOrder.ASC,
+        },
+      });
+
+      expect(result.meta).toEqual({
+        page: 3,
+        limit: 20,
+        total: 45,
+        totalPages: 3,
+      });
+    });
+
+    const supportedSortFields: ProjectSortField[] = [
+      ProjectSortField.CREATED_AT,
+      ProjectSortField.PROJECT_NAME,
+      ProjectSortField.START_DATE,
+    ];
+
+    it.each(supportedSortFields)('supports sorting by %s', async (sortBy) => {
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          sortBy,
+          sortOrder: SortOrder.ASC,
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          orderBy: {
+            [sortBy]: SortOrder.ASC,
+          },
+        }),
+      );
+    });
+  });
+
+  describe('project access and ownership', () => {
+    it('scopes Project Manager list to assigned projects', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll({}, 'manager-1');
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-1',
+          },
+        }),
+      );
+    });
+
+    it('ignores another manager ID supplied by Project Manager', async () => {
+      mockProjectAccessService.resolveActor.mockResolvedValue({
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      });
+
+      mockProjectRepository.findManyAndCount.mockResolvedValue([[], 0]);
+
+      await service.findAll(
+        {
+          projectManagerId: 'manager-2',
+        },
+        'manager-1',
+      );
+
+      expect(mockProjectRepository.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectManagerId: 'manager-1',
+          },
+        }),
+      );
+    });
+
+    it('checks read access for project details', async () => {
+      const actor: ProjectAccessActor = {
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      };
+
+      mockProjectAccessService.resolveActor.mockResolvedValue(actor);
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      await service.findOne('project-1', 'manager-1');
+
+      expect(
+        mockProjectAccessService.assertCanReadProject,
+      ).toHaveBeenCalledWith(actor, planningProject);
+    });
+
+    it('checks write access before updating project', async () => {
+      const actor: ProjectAccessActor = {
+        id: 'manager-1',
+        role: 'PROJECT_MANAGER',
+      };
+
+      mockProjectAccessService.resolveActor.mockResolvedValue(actor);
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.update.mockResolvedValue(planningProject);
+
+      await service.update(
+        'project-1',
+        {
+          location: 'Kandy',
+        },
+        'manager-1',
+      );
+
+      expect(
+        mockProjectAccessService.assertCanModifyProject,
+      ).toHaveBeenCalledWith(actor, planningProject);
+    });
+  });
+
+  describe('assignManager', () => {
+    it('assigns an active PROJECT_MANAGER user', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        activeManager,
+      );
+      mockProjectRepository.update.mockResolvedValue(planningProject);
+
+      await service.assignManager(
+        'project-1',
+        {
+          projectManagerId: 'manager-1',
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
+        projectManagerId: 'manager-1',
+      });
+    });
+
+    it('rejects a missing project manager user', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(null);
+
+      await expect(
+        service.assignManager(
+          'project-1',
+          {
+            projectManagerId: 'missing-manager',
+          },
+          'admin-1',
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'PROJECT_MANAGER_NOT_FOUND',
+        },
+      });
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects an inactive project manager', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        inactiveManager,
+      );
+
+      await expect(
+        service.assignManager(
+          'project-1',
+          {
+            projectManagerId: 'manager-1',
+          },
+          'admin-1',
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'PROJECT_MANAGER_INACTIVE',
+        },
+      });
+
+      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+    });
+
+    it.each(['ADMIN', 'SALES_MANAGER', 'ACCOUNTANT', 'CLIENT_PORTAL_USER'])(
+      'rejects user with %s role as Project Manager',
+      async (roleName) => {
+        mockProjectRepository.findById.mockResolvedValue(planningProject);
+        mockProjectRepository.findProjectManagerCandidate.mockResolvedValue({
+          ...adminUser,
+          role: {
+            roleName,
+          },
+        });
+
+        await expect(
+          service.assignManager(
+            'project-1',
+            {
+              projectManagerId: 'invalid-manager',
+            },
+            'admin-1',
+          ),
+        ).rejects.toMatchObject({
+          response: {
+            code: 'INVALID_PROJECT_MANAGER_ROLE',
+          },
+        });
+
+        expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  describe('remove', () => {
+    const noDependencies = {
+      quotations: 0,
+      milestones: 0,
+      tasks: 0,
+      expenses: 0,
+      invoices: 0,
+      documents: 0,
+      reports: 0,
+      aiKnowledgeChunks: 0,
+    };
+
+    it('deletes an unused PLANNING project for Admin', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.PLANNING,
+        _count: noDependencies,
+      });
+
+      mockProjectRepository.delete.mockResolvedValue(planningProject);
+
+      const result = await service.remove('project-1', 'admin-1');
+
+      expect(mockProjectAccessService.resolveActor).toHaveBeenCalledWith(
+        'admin-1',
+      );
+
+      expect(
+        mockProjectAccessService.assertCanDeleteProject,
+      ).toHaveBeenCalledWith({
+        id: 'admin-1',
+        role: 'ADMIN',
+      });
+
+      expect(mockProjectRepository.delete).toHaveBeenCalledWith('project-1');
+
+      expect(result).toEqual({
+        message: 'Project deleted successfully',
+      });
+    });
+
+    it('rejects permanent deletion when Project is not PLANNING', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.ACTIVE,
+        _count: noDependencies,
+      });
+
+      await expect(
+        service.remove('project-1', 'admin-1'),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        },
+      });
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects permanent deletion when related records exist', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue({
+        status: ProjectStatus.PLANNING,
+        _count: {
+          ...noDependencies,
+          quotations: 1,
+        },
+      });
+
+      await expect(
+        service.remove('project-1', 'admin-1'),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        },
+      });
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
+    });
+
+    it('rejects permanent deletion when Project does not exist', async () => {
+      mockProjectRepository.findDeletionDetails.mockResolvedValue(null);
+
+      await expect(
+        service.remove('missing-project', 'admin-1'),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_NOT_FOUND,
+        },
+      });
+
+      expect(mockProjectRepository.delete).not.toHaveBeenCalled();
     });
   });
 
@@ -385,6 +981,56 @@ describe('ProjectService', () => {
         status: ProjectStatus.ACTIVE,
       });
     });
+
+    it.each([
+      ProjectStatus.ON_HOLD,
+      ProjectStatus.COMPLETED,
+      ProjectStatus.CANCELLED,
+    ])(
+      'preserves %s status when attaching an approved quotation',
+      async (status) => {
+        const existingProject = {
+          ...activeProject,
+          status,
+        };
+
+        mockProjectRepository.findQuotation.mockResolvedValue({
+          id: 'quotation-2',
+          leadId: 'lead-1',
+          status: QuotationStatus.APPROVED,
+          projectId: null,
+        });
+
+        mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+          existingProject,
+        );
+
+        const result = await service.createFromQuotation({
+          quotationId: 'quotation-2',
+          leadId: 'lead-1',
+          targetProjectId: 'project-1',
+        });
+
+        expect(mockProjectRepository.linkQuotation).toHaveBeenCalledWith(
+          fakeTransaction,
+          'quotation-2',
+          'project-1',
+        );
+
+        expect(
+          mockProjectRepository.updateInTransaction,
+        ).not.toHaveBeenCalled();
+
+        expect(
+          mockProjectRepository.createInTransaction,
+        ).not.toHaveBeenCalled();
+
+        expect(result).toEqual({
+          projectId: 'project-1',
+          status,
+        });
+      },
+    );
 
     it('reuses the existing project when the quotation already has projectId', async () => {
       mockProjectRepository.findQuotation.mockResolvedValue({
@@ -739,6 +1385,40 @@ describe('ProjectService', () => {
       ).rejects.toMatchObject({
         response: {
           code: 'PROJECT_DETAILS_REQUIRED',
+        },
+      });
+
+      expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects new project conversion when assigned user is not a Project Manager', async () => {
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: null,
+      });
+
+      mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
+        {
+          ...adminUser,
+          role: {
+            roleName: 'ADMIN',
+          },
+        },
+      );
+
+      await expect(
+        service.createFromQuotation({
+          quotationId: 'quotation-1',
+          leadId: 'lead-1',
+          projectName: 'House Project',
+          startDate: '2026-10-01T00:00:00.000Z',
+          projectManagerId: 'admin-1',
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: 'INVALID_PROJECT_MANAGER_ROLE',
         },
       });
 

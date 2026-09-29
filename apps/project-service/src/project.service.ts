@@ -10,6 +10,8 @@ import {
   QuotationStatus,
   UserStatus,
 } from '@prisma/client';
+import { ErrorCode } from '../../../shared/error-codes';
+import { ProjectAccessService } from './project-access.service';
 import { AssignProjectManagerDto } from './dto/assign-project-manager.dto';
 import { CreateProjectFromQuotationDto } from './dto/create-project-from-quotation.dto';
 import { CreateProjectDto } from './dto/create-project.dto';
@@ -23,11 +25,18 @@ import { UpdateProjectDto } from './dto/update-project.dto';
 import {
   ProjectRepository,
   ProjectTransaction,
+  ProjectWithDetails,
 } from './repositories/project.repository';
+import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
+import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 
 @Injectable()
 export class ProjectService {
-  constructor(private readonly projects: ProjectRepository) {}
+  constructor(
+    private readonly projects: ProjectRepository,
+    private readonly projectAccess: ProjectAccessService,
+    private readonly projectLifecycle: ProjectLifecycleService,
+  ) {}
 
   getHealth() {
     return {
@@ -36,8 +45,12 @@ export class ProjectService {
     };
   }
 
-  async create(dto: CreateProjectDto) {
-    await this.ensureActiveManager(dto.projectManagerId);
+  async create(dto: CreateProjectDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanCreateProject(actor);
+
+    await this.ensureValidProjectManager(dto.projectManagerId);
 
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : undefined;
@@ -55,21 +68,28 @@ export class ProjectService {
     });
   }
 
+  // Internal Quotation Service flow.
   async createFromQuotation(dto: CreateProjectFromQuotationDto) {
     return this.withTransactionRetry((tx) =>
       this.convertFromQuotation(tx, dto),
     );
   }
 
-  async findAll(query: ProjectQueryDto) {
+  async findAll(query: ProjectQueryDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
     const where: Prisma.ProjectWhereInput = {};
+
+    // Project Managers always see only their assigned projects.
+    if (actor.role === 'PROJECT_MANAGER') {
+      where.projectManagerId = actor.id;
+    } else if (query.projectManagerId) {
+      // Admins and Accountants may filter by Project Manager.
+      where.projectManagerId = query.projectManagerId;
+    }
 
     if (query.status) {
       where.status = query.status;
-    }
-
-    if (query.projectManagerId) {
-      where.projectManagerId = query.projectManagerId;
     }
 
     if (query.search) {
@@ -114,22 +134,20 @@ export class ProjectService {
     };
   }
 
-  async findOne(id: string) {
-    const project = await this.projects.findById(id);
+  async findOne(id: string, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const project = await this.getProjectOrThrow(id);
 
-    if (!project) {
-      throw new NotFoundException('Project not found');
-    }
+    this.projectAccess.assertCanReadProject(actor, project);
 
     return project;
   }
 
-  async update(id: string, dto: UpdateProjectDto) {
-    const existingProject = await this.findOne(id);
+  async update(id: string, dto: UpdateProjectDto, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const existingProject = await this.getProjectOrThrow(id);
 
-    if (dto.projectManagerId) {
-      await this.ensureActiveManager(dto.projectManagerId);
-    }
+    this.projectAccess.assertCanModifyProject(actor, existingProject);
 
     const startDate = dto.startDate
       ? new Date(dto.startDate)
@@ -150,25 +168,25 @@ export class ProjectService {
       startDate: dto.startDate ? startDate : undefined,
       endDate: dto.endDate === undefined ? undefined : endDate,
       budget: dto.budget,
-      projectManagerId: dto.projectManagerId,
     });
   }
 
-  async updateStatus(id: string, dto: UpdateProjectStatusDto) {
-    await this.findOne(id);
+  async updateStatus(
+    id: string,
+    dto: UpdateProjectStatusDto,
+    actorId?: string,
+  ) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+    const project = await this.getProjectOrThrow(id);
 
-    const approvedQuotation = await this.projects.findApprovedQuotation(id);
+    this.projectAccess.assertCanModifyProject(actor, project);
 
-    if (dto.status === ProjectStatus.ACTIVE && !approvedQuotation) {
-      throw new BadRequestException(
-        'Project cannot become ACTIVE until at least one quotation is approved',
-      );
-    }
+    this.projectLifecycle.assertTransitionAllowed(project.status, dto.status);
 
-    if (dto.status === ProjectStatus.PLANNING && approvedQuotation) {
-      throw new BadRequestException(
-        'Project cannot return to PLANNING after an approved quotation is associated',
-      );
+    if (dto.status === ProjectStatus.ACTIVE) {
+      await this.validateActivationRequirements(project);
+    } else if (dto.status === ProjectStatus.COMPLETED) {
+      this.validateCompletionRequirements();
     }
 
     return this.projects.update(id, {
@@ -176,20 +194,43 @@ export class ProjectService {
     });
   }
 
-  async assignManager(id: string, dto: AssignProjectManagerDto) {
-    await this.findOne(id);
-    await this.ensureActiveManager(dto.projectManagerId);
+  async assignManager(
+    id: string,
+    dto: AssignProjectManagerDto,
+    actorId?: string,
+  ) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanAssignProjectManager(actor);
+
+    await this.getProjectOrThrow(id);
+    await this.ensureValidProjectManager(dto.projectManagerId);
 
     return this.projects.update(id, {
       projectManagerId: dto.projectManagerId,
     });
   }
 
-  async remove(id: string) {
-    const project = await this.projects.getDependencyCounts(id);
+  async remove(id: string, actorId?: string) {
+    const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.projectAccess.assertCanDeleteProject(actor);
+
+    const project = await this.projects.findDeletionDetails(id);
 
     if (!project) {
-      throw new NotFoundException('Project not found');
+      throw new NotFoundException({
+        code: ErrorCode.PROJECT_NOT_FOUND,
+        message: 'Project not found.',
+      });
+    }
+
+    if (project.status !== ProjectStatus.PLANNING) {
+      throw new ConflictException({
+        code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        message:
+          'Only PLANNING projects can be permanently deleted. Cancel the project instead.',
+      });
     }
 
     const hasDependencies = Object.values(project._count).some(
@@ -197,10 +238,11 @@ export class ProjectService {
     );
 
     if (hasDependencies) {
-      // Preserve project history when other domain records already depend on it.
-      throw new ConflictException(
-        `Project cannot be deleted because related records exist. Set its status to ${ProjectStatus.CANCELLED} instead.`,
-      );
+      throw new ConflictException({
+        code: ErrorCode.PROJECT_DELETION_NOT_ALLOWED,
+        message:
+          'Project cannot be permanently deleted because related records already exist. Cancel the project instead.',
+      });
     }
 
     await this.projects.delete(id);
@@ -208,6 +250,19 @@ export class ProjectService {
     return {
       message: 'Project deleted successfully',
     };
+  }
+
+  private async getProjectOrThrow(id: string) {
+    const project = await this.projects.findById(id);
+
+    if (!project) {
+      throw new NotFoundException({
+        code: ErrorCode.PROJECT_NOT_FOUND,
+        message: 'Project not found.',
+      });
+    }
+
+    return project;
   }
 
   private async convertFromQuotation(
@@ -316,7 +371,7 @@ export class ProjectService {
       });
     }
 
-    await this.ensureActiveManagerInTransaction(tx, dto.projectManagerId);
+    await this.ensureValidProjectManagerInTransaction(tx, dto.projectManagerId);
 
     const startDate = new Date(dto.startDate);
     const endDate = dto.endDate ? new Date(dto.endDate) : undefined;
@@ -341,41 +396,94 @@ export class ProjectService {
     };
   }
 
-  private async ensureActiveManager(userId: string) {
-    const manager = await this.projects.findProjectManager(userId);
+  private async ensureValidProjectManager(userId: string) {
+    const manager = await this.projects.findProjectManagerCandidate(userId);
 
-    if (!manager) {
-      throw new BadRequestException('Project manager not found');
-    }
-
-    if (manager.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('Project manager must be an active user');
-    }
+    this.validateProjectManager(manager);
   }
 
-  private async ensureActiveManagerInTransaction(
+  private async ensureValidProjectManagerInTransaction(
     tx: ProjectTransaction,
     userId: string,
   ) {
-    const manager = await this.projects.findProjectManagerInTransaction(
-      tx,
-      userId,
-    );
+    const manager =
+      await this.projects.findProjectManagerCandidateInTransaction(tx, userId);
 
+    this.validateProjectManager(manager);
+  }
+
+  private validateProjectManager(
+    manager: ProjectManagerCandidate | null,
+  ): void {
     if (!manager) {
-      throw new BadRequestException('Project manager not found');
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_MANAGER_NOT_FOUND,
+        message: 'Project manager not found.',
+      });
     }
 
     if (manager.status !== UserStatus.ACTIVE) {
-      throw new BadRequestException('Project manager must be an active user');
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_MANAGER_INACTIVE,
+        message: 'Project manager must be an active user.',
+      });
     }
+
+    if (manager.role?.roleName !== 'PROJECT_MANAGER') {
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_PROJECT_MANAGER_ROLE,
+        message: 'Selected user must have the PROJECT_MANAGER role.',
+      });
+    }
+  }
+
+  private async validateActivationRequirements(
+    project: ProjectWithDetails,
+  ): Promise<void> {
+    if (!project.projectManagerId) {
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message: 'Project manager must be assigned before activation.',
+      });
+    }
+
+    if (!project.startDate) {
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message: 'Project start date must be set before activation.',
+      });
+    }
+
+    await this.ensureValidProjectManager(project.projectManagerId);
+
+    this.validateDateRange(project.startDate, project.endDate);
+
+    const approvedQuotation = await this.projects.findApprovedQuotation(
+      project.id,
+    );
+
+    if (!approvedQuotation) {
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_ACTIVATION_REQUIREMENTS_NOT_MET,
+        message:
+          'Project cannot become ACTIVE until at least one quotation is approved.',
+      });
+    }
+
+    // Milestone and weight checks are added when Issue 03 provides those fields.
+  }
+
+  private validateCompletionRequirements(): void {
+    // Issue 03 will enforce 100% canonical progress
+    // and required milestone completion here.
   }
 
   private validateDateRange(startDate: Date, endDate?: Date | null) {
     if (endDate && endDate < startDate) {
-      throw new BadRequestException(
-        'Project end date cannot be before the start date',
-      );
+      throw new BadRequestException({
+        code: ErrorCode.INVALID_PROJECT_DATE_RANGE,
+        message: 'Project end date cannot be before the start date.',
+      });
     }
   }
 

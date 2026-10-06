@@ -145,8 +145,10 @@ export class AuthGatewayController {
   googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
     // auth-service handles the callback and redirects to frontend;
     // gateway just passes the request through transparently
-    res.redirect(
-      `${AUTH_SERVICE_URL}/auth/google/callback?${new URLSearchParams(req.query as any).toString()}`,
-    );
+    const queryIndex = req.originalUrl.indexOf('?');
+    const queryString =
+      queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : '';
+
+    res.redirect(`${AUTH_SERVICE_URL}/auth/google/callback${queryString}`);
   }
 }

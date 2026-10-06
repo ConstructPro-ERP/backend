@@ -27,6 +27,10 @@ interface AuthenticatedRequest extends Request {
   user: { sub: string; username: string };
 }
 
+interface GoogleAuthenticatedRequest extends Request {
+  user: Awaited<ReturnType<AuthService['findOrCreateGoogleUser']>>;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
@@ -93,10 +97,7 @@ export class AuthController {
   // Google redirects back here after the user grants consent
   @Get('google/callback')
   @UseGuards(AuthGuard('google'))
-  googleCallback(
-    @Req() req: AuthenticatedRequest & { user: any },
-    @Res() res: Response,
-  ) {
+  googleCallback(@Req() req: GoogleAuthenticatedRequest, @Res() res: Response) {
     // req.user is set by GoogleStrategy.validate()
     const { accessToken } = this.authService.issueTokenForUser(req.user);
 

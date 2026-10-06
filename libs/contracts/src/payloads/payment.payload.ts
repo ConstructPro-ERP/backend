@@ -18,5 +18,10 @@ export interface CreatePaymentPayload {
 export interface UpdateInvoiceStatusPayload {
   id: string;
   status:
-    'DRAFT' | 'ISSUED' | 'PARTIALLY_PAID' | 'PAID' | 'OVERDUE' | 'CANCELLED';
+    | 'DRAFT'
+    | 'ISSUED'
+    | 'PARTIALLY_PAID'
+    | 'PAID'
+    | 'OVERDUE'
+    | 'CANCELLED';
 }

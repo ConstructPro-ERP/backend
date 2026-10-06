@@ -32,6 +32,7 @@ Go to GitHub &rarr; **Issues** &rarr; **New Issue**, and paste the following:
   - **Milestone:** `Sprint 7`
 
 - **Issue Body:**
+
   ```markdown
   ## User Story
 
@@ -123,6 +124,7 @@ Go to GitHub &rarr; click **Compare & pull request**:
   feat(quotation): connect quotation list, create, edit and details pages (#<ISSUE_ID>)
   ```
 - **PR Description (copy-paste):**
+
   ```markdown
   ## Summary
 
@@ -196,6 +198,7 @@ Go to GitHub &rarr; **Issues** &rarr; **New Issue**, and paste the following:
   - **Milestone:** `Sprint 7`
 
 - **Issue Body:**
+
   ```markdown
   ## User Story
 
@@ -291,6 +294,7 @@ Go to GitHub &rarr; click **Compare & pull request**:
   feat(quotation): complete approval, rejection, PDF generation, conversion, and demo data (#86)
   ```
 - **PR Description (copy-paste):**
+
   ```markdown
   ## Summary
 

@@ -2,11 +2,11 @@
 
 ## 1. Prerequisites
 
-| Requirement | Version |
-|---|---|
-| Node.js | 22 or later (see `engines` in `package.json`) |
-| npm | 10 or later |
-| PostgreSQL-compatible database | Neon (recommended) or any Postgres 15+ |
+| Requirement                    | Version                                       |
+| ------------------------------ | --------------------------------------------- |
+| Node.js                        | 22 or later (see `engines` in `package.json`) |
+| npm                            | 10 or later                                   |
+| PostgreSQL-compatible database | Neon (recommended) or any Postgres 15+        |
 
 Ensure `DATABASE_URL` is present in `.env` before running any Prisma command.  
 For migrations you also need `DIRECT_URL` (a direct connection string without connection pooling) because Prisma's migration engine cannot use a pooled/serverless URL.
@@ -115,11 +115,11 @@ The seed command is configured in `package.json`:
 
 **What the seed creates:**
 
-| Entity | Count |
-|---|---|
-| Permissions | 24 (4 actions × 6 resources) |
-| Roles | 5 (ADMIN, SALES_MANAGER, PROJECT_MANAGER, ACCOUNTANT, CLIENT_PORTAL_USER) |
-| Admin user | 1 (`admin@constructpro.com` / `Admin@1234!`) |
+| Entity      | Count                                                                     |
+| ----------- | ------------------------------------------------------------------------- |
+| Permissions | 24 (4 actions × 6 resources)                                              |
+| Roles       | 5 (ADMIN, SALES_MANAGER, PROJECT_MANAGER, ACCOUNTANT, CLIENT_PORTAL_USER) |
+| Admin user  | 1 (`admin@constructpro.com` / `Admin@1234!`)                              |
 
 > **Note:** Change the admin password immediately after the first deployment.
 
@@ -262,6 +262,7 @@ Error: P1001: Can't reach database server at `<host>:5432`
 When you need to apply a new migration to the test branch, paste the migration SQL directly into the Neon console SQL Editor for that branch and run it. The SQL Editor uses Neon's HTTP API and works regardless of compute state.
 
 Steps:
+
 1. Open [console.neon.tech](https://console.neon.tech) → your project → **Branches** → **test**
 2. Click **SQL Editor**
 3. Paste the migration SQL from `prisma/migrations/<migration-folder>/migration.sql`
@@ -296,11 +297,11 @@ All migration files live in `prisma/migrations/`. Each directory name encodes a 
 
 Tightened referential integrity by upgrading three FK constraints from `RESTRICT` / `SET NULL` to `CASCADE`:
 
-| Table | Column | Old behaviour | New behaviour |
-|---|---|---|---|
-| `RefreshToken` | `userId` | `RESTRICT` | `CASCADE` — tokens are deleted when the parent `User` is deleted |
-| `Customer` | `leadId` | `SET NULL` | `CASCADE` — customer record is deleted when the parent `Lead` is deleted |
-| `QuotationItem` | `quotationId` | `RESTRICT` | `CASCADE` — line items are deleted when the parent `Quotation` is deleted |
+| Table           | Column        | Old behaviour | New behaviour                                                             |
+| --------------- | ------------- | ------------- | ------------------------------------------------------------------------- |
+| `RefreshToken`  | `userId`      | `RESTRICT`    | `CASCADE` — tokens are deleted when the parent `User` is deleted          |
+| `Customer`      | `leadId`      | `SET NULL`    | `CASCADE` — customer record is deleted when the parent `Lead` is deleted  |
+| `QuotationItem` | `quotationId` | `RESTRICT`    | `CASCADE` — line items are deleted when the parent `Quotation` is deleted |
 
 ---
 

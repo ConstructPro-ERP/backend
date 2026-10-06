@@ -2,8 +2,8 @@
 
 ![CI Status](https://img.shields.io/badge/CI-Passing-brightgreen)
 ![Coverage](https://img.shields.io/badge/Coverage-TBD-success)
-<!-- ![Coverage](https://img.shields.io/badge/Coverage-80%25+-success) -->
 
+<!-- ![Coverage](https://img.shields.io/badge/Coverage-80%25+-success) -->
 
 ## Overview
 
@@ -67,11 +67,11 @@ The backend exposes REST APIs consumed by the frontend application and coordinat
 
 Before running the backend locally, ensure the following software is installed:
 
-| Software | Version |
-|-----------|-----------|
-| Node.js | 20+ |
-| pnpm | Latest |
-| Git | Latest |
+| Software   | Version                |
+| ---------- | ---------------------- |
+| Node.js    | 20+                    |
+| pnpm       | Latest                 |
+| Git        | Latest                 |
 | PostgreSQL | 16+ (or Neon Database) |
 
 ### Verify Installation
@@ -250,13 +250,13 @@ fix/<ticket-id>-<slug>
 
 ## Related Repositories
 
-| Repository | Purpose |
-|------------|----------|
-| frontend | Next.js frontend application |
-| backend | NestJS backend API |
-| infra | Infrastructure and CI/CD configuration |
-| documents | SRS, SDS, ADRs, and project documentation |
-| test | Integration and end-to-end testing |
+| Repository | Purpose                                   |
+| ---------- | ----------------------------------------- |
+| frontend   | Next.js frontend application              |
+| backend    | NestJS backend API                        |
+| infra      | Infrastructure and CI/CD configuration    |
+| documents  | SRS, SDS, ADRs, and project documentation |
+| test       | Integration and end-to-end testing        |
 
 ---
 

@@ -1,4 +1,5 @@
 # Person 2: Quotations & Project Conversion Integration Roadmap
+
 **Role & Main Responsibility:** Deliver the end-to-end Quotation-to-Project workflow from lead selection to approved project creation for ConstructPro-ERP (Sprint 7 Demo).
 
 ---
@@ -27,14 +28,14 @@ flowchart TD
 
 ### Core Services Involved
 
-| Component | Repository Path | Responsibility |
-| :--- | :--- | :--- |
-| **Frontend Web App** | `../frontend/src/app/dashboard/quotations` | UI for Quotation list, create, edit, details, approval, PDF download, and project conversion. |
-| **API Gateway** | `apps/api-gateway/src/controllers/quotations-gateway.controller.ts` | JWT Auth, RBAC guards (`SALES_MANAGER`, `ADMIN`), and HTTP proxying to quotation service. |
-| **Quotation Service** | `apps/quotation-service/src` | Business logic, item calculations, status state machine, PDF trigger, and conversion orchestration. |
-| **Project Service** | `apps/project-service/src` | Creates project instance from approved quotation via `/projects/from-quotation`. |
-| **Document Service** | `apps/quotation-service/src/document.client.ts` | PDF document generation from quotation items and metadata. |
-| **Prisma Database** | `prisma/schema.prisma` | PostgreSQL storage (`Quotation`, `QuotationItem`, `Lead`, `Project`). |
+| Component             | Repository Path                                                     | Responsibility                                                                                      |
+| :-------------------- | :------------------------------------------------------------------ | :-------------------------------------------------------------------------------------------------- |
+| **Frontend Web App**  | `../frontend/src/app/dashboard/quotations`                          | UI for Quotation list, create, edit, details, approval, PDF download, and project conversion.       |
+| **API Gateway**       | `apps/api-gateway/src/controllers/quotations-gateway.controller.ts` | JWT Auth, RBAC guards (`SALES_MANAGER`, `ADMIN`), and HTTP proxying to quotation service.           |
+| **Quotation Service** | `apps/quotation-service/src`                                        | Business logic, item calculations, status state machine, PDF trigger, and conversion orchestration. |
+| **Project Service**   | `apps/project-service/src`                                          | Creates project instance from approved quotation via `/projects/from-quotation`.                    |
+| **Document Service**  | `apps/quotation-service/src/document.client.ts`                     | PDF document generation from quotation items and metadata.                                          |
+| **Prisma Database**   | `prisma/schema.prisma`                                              | PostgreSQL storage (`Quotation`, `QuotationItem`, `Lead`, `Project`).                               |
 
 ---
 
@@ -72,6 +73,7 @@ sequenceDiagram
 ### Step-by-Step GitHub Execution Checklist
 
 #### Phase A: Before Writing Any Code
+
 1. **Navigate to GitHub Repository Issues**:
    - Go to `https://github.com/ConstructPro-ERP/backend` (or `frontend` depending on repository).
    - Click **New Issue**.
@@ -87,6 +89,7 @@ sequenceDiagram
    - When you begin work, drag the card into **In Progress**.
 
 #### Phase B: Branch Creation & Git Commands
+
 Always branch off the latest updated `develop` branch:
 
 ```bash
@@ -106,6 +109,7 @@ git branch
 ```
 
 #### Phase C: Developing & Committing
+
 Follow the repository's **Conventional Commits** standard:
 
 - `feat(quotation): add GET /quotations list endpoint with pagination`
@@ -114,6 +118,7 @@ Follow the repository's **Conventional Commits** standard:
 - `refactor(quotation): improve quotation status transition guards`
 
 Before committing, run verification checks:
+
 ```bash
 # In backend
 npm run format:check
@@ -126,6 +131,7 @@ npm run build
 ```
 
 Commit and push:
+
 ```bash
 git add .
 git commit -m "feat(quotation): connect quotation list and edit endpoints"
@@ -133,6 +139,7 @@ git push -u origin feature/63-quotation-pages-and-calc
 ```
 
 #### Phase D: Creating the Pull Request (PR)
+
 1. Go to the repository on GitHub. A banner will appear: `"Compare & pull request"`. Click it.
 2. Ensure base branch is set to `develop` and compare branch is your feature branch.
 3. **PR Title Format:**
@@ -140,26 +147,32 @@ git push -u origin feature/63-quotation-pages-and-calc
    feat(quotation): connect quotation list, create, edit and details pages (#63)
    ```
 4. **PR Description Body:** (CRITICAL: include the magic closing keyword)
+
    ```markdown
    ## Description
+
    Implements quotation list, create, edit, and details endpoints and wires frontend forms with synchronized calculations.
 
    Closes #63
 
    ## Changes Made
+
    - Added GET /quotations and PUT /quotations/:id in quotation-service.
    - Forwarded routes in API Gateway with RBAC roles.
    - Replaced frontend preview state with live API query in QuotationsDashboardClient.
    - Fixed item calculation precision discrepancies.
 
    ## Verification Steps
+
    - [x] npm run lint passes.
    - [x] Unit tests pass: `npm test quotation`.
    - [x] Verified in browser with sample lead quotation.
    ```
+
 5. Move the Project Board card from **In Progress** to **In Review**.
 
 #### Phase E: Merging & Moving to "Completed"
+
 1. Request review from team members or Tech Lead.
 2. Ensure GitHub Actions / CI checks are all green.
 3. Select **Squash and merge** (or **Merge pull request** according to team convention).
@@ -184,11 +197,13 @@ git push -u origin feature/63-quotation-pages-and-calc
 ### Week 9: Quotation List, Create, Edit & Details Pages + Item Calculations
 
 #### Objectives
+
 - Connect quotation list, create, edit, and details pages.
 - Eliminate floating-point item calculation bugs between frontend and backend.
 - Replace prototype/mock preview list with live API communication.
 
 #### GitHub Issue Template (Week 9)
+
 ```markdown
 Title: [Quotations] Connect quotation list, create, edit & details pages with calculation sync
 
@@ -198,14 +213,16 @@ I want to view the list of quotations, create a quotation for a selected lead, e
 So that quotations accurately reflect line-item totals and match backend values without calculation discrepancies.
 
 Acceptance Criteria:
+
 - [ ] GET /quotations returns paginated quotations with lead details and line items.
 - [ ] PUT /quotations/:id allows updating notes and items for quotations in DRAFT or PENDING_APPROVAL.
 - [ ] API Gateway proxies GET /quotations, GET /quotations/:id, POST /quotations, and PUT /quotations/:id.
-- [ ] Calculations: item amount = round2(quantity * unitPrice), totalAmount = round2(sum of item amounts).
+- [ ] Calculations: item amount = round2(quantity \* unitPrice), totalAmount = round2(sum of item amounts).
 - [ ] Frontend QuotationsDashboardClient loads live backend data on initial load.
 - [ ] Quotation Details modal displays complete breakdown (items, unit prices, totals, customer name, date).
 
 Technical Tasks:
+
 1. Backend: Implement QuotationService.findAll(query) with pagination and filters.
 2. Backend: Implement QuotationService.update(id, dto) for editable quotations.
 3. Backend: Add gateway routes in QuotationsGatewayController.
@@ -216,7 +233,9 @@ Technical Tasks:
 - **Branch Name:** `feature/<issue#>-quotation-crud-and-calculations`
 
 #### Backend Implementation Details
+
 1. **Extend `QuotationService` (`apps/quotation-service/src/quotation.service.ts`):**
+
    ```typescript
    async findAll(params: { leadId?: string; status?: QuotationStatus; page?: number; limit?: number }) {
      const page = Math.max(1, params.page ?? 1);
@@ -284,11 +303,13 @@ Technical Tasks:
 
 2. **Calculation Precision Rules:**
    - Both frontend and backend must use a 2-decimal rounded float standard:
+
    ```typescript
    export function round2(value: number): number {
      return Math.round((value + Number.EPSILON) * 100) / 100;
    }
    ```
+
    - In PostgreSQL, ensure `Quotation.totalAmount`, `QuotationItem.unitPrice`, and `QuotationItem.amount` are defined as `Decimal(12, 2)`.
 
 3. **Frontend Integration (`QuotationsDashboardClient.tsx`):**
@@ -297,21 +318,34 @@ Technical Tasks:
    useEffect(() => {
      let isMounted = true;
      async function loadQuotations() {
-       setQuotationsState({ kind: "loading" });
+       setQuotationsState({ kind: 'loading' });
        try {
-         const response = await apiClient.get<{ items: Quotation[] }>("/quotations");
+         const response = await apiClient.get<{ items: Quotation[] }>(
+           '/quotations',
+         );
          if (isMounted) {
-           const list = normalizeQuotations(response.data.items ?? response.data);
-           setQuotationsState(list.length > 0 ? { kind: "ready", quotations: list } : { kind: "empty" });
+           const list = normalizeQuotations(
+             response.data.items ?? response.data,
+           );
+           setQuotationsState(
+             list.length > 0
+               ? { kind: 'ready', quotations: list }
+               : { kind: 'empty' },
+           );
          }
        } catch (error) {
          if (isMounted) {
-           setQuotationsState({ kind: "error", message: "Failed to load quotations." });
+           setQuotationsState({
+             kind: 'error',
+             message: 'Failed to load quotations.',
+           });
          }
        }
      }
      loadQuotations();
-     return () => { isMounted = false; };
+     return () => {
+       isMounted = false;
+     };
    }, []);
    ```
 
@@ -320,11 +354,13 @@ Technical Tasks:
 ### Week 10: Approval, Rejection & Revision UI + Status Transitions & Validation Errors
 
 #### Objectives
+
 - Provide clear workflow actions for Managers: Approve, Reject, and Request Revision.
 - Implement explicit backend validation error rendering on the frontend.
 - Display visual quotation status transitions and rejection reasoning.
 
 #### GitHub Issue Template (Week 10)
+
 ```markdown
 Title: [Quotations] Complete approval, rejection, and revision UI with status lifecycle
 
@@ -334,6 +370,7 @@ I want to review pending quotations, approve them, reject them with required com
 So that quotations move through an auditable status pipeline and invalid operations display clear validation errors.
 
 Acceptance Criteria:
+
 - [ ] State Machine supported: DRAFT -> PENDING_APPROVAL -> APPROVED / REJECTED.
 - [ ] PATCH /quotations/:id/reject endpoint implemented (requires non-empty rejectionReason).
 - [ ] PATCH /quotations/:id/revise moves REJECTED back to DRAFT / PENDING_APPROVAL.
@@ -343,6 +380,7 @@ Acceptance Criteria:
 - [ ] Backend validation errors (400, 403, 404, 409) appear as descriptive alerts.
 
 Technical Tasks:
+
 1. Backend: Add QuotationService.reject(id, reason) and QuotationService.revise(id).
 2. Backend: Add gateway routes with @Roles('ADMIN', 'SALES_MANAGER').
 3. Frontend: Build RejectionReasonModal and StatusHistoryTimeline.
@@ -365,7 +403,9 @@ stateDiagram-v2
 ```
 
 #### Backend Changes
+
 1. **Rejection Endpoint in `quotation.service.ts`:**
+
    ```typescript
    async reject(id: string, reason: string) {
      const quotation = await this.findOne(id);
@@ -394,14 +434,21 @@ stateDiagram-v2
    ```
 
 2. **Standardized Error Response Formatter (`apps/api-gateway/src/filters/http-exception.filter.ts`):**
+
    ```json
    {
      "statusCode": 400,
      "code": "VALIDATION_ERROR",
      "message": "Validation failed on submitted quotation items.",
      "details": [
-       { "field": "items.0.quantity", "error": "quantity must be greater than zero" },
-       { "field": "items.0.unitPrice", "error": "unitPrice must be a positive number" }
+       {
+         "field": "items.0.quantity",
+         "error": "quantity must be greater than zero"
+       },
+       {
+         "field": "items.0.unitPrice",
+         "error": "unitPrice must be a positive number"
+       }
      ]
    }
    ```
@@ -418,11 +465,13 @@ stateDiagram-v2
 ### Week 11: PDF Generation/Download & Quotation-to-Project Conversion
 
 #### Objectives
+
 - Connect PDF generation and binary/signed download.
 - Integrate Quotation-to-Project conversion with project service.
 - Handle duplicate conversion conflicts (HTTP 409 Conflict) idempotently.
 
 #### GitHub Issue Template (Week 11)
+
 ```markdown
 Title: [Quotations] Quotation PDF generation/download & project conversion integration
 
@@ -432,6 +481,7 @@ I want to generate/download a PDF copy of an approved quotation and convert the 
 So that project planning starts automatically without double-converting existing quotations.
 
 Acceptance Criteria:
+
 - [ ] GET /quotations/:id/pdf generates or returns direct URL/stream to download quotation PDF.
 - [ ] "Download PDF" button in UI triggers download with filename Quotation-<ID>.pdf.
 - [ ] PATCH /quotations/:id/approve (or convert) verifies quotation is APPROVED and not already CONVERTED.
@@ -440,6 +490,7 @@ Acceptance Criteria:
 - [ ] Upon 409 Conflict, UI smoothly shows "Already converted to Project" with clickable link.
 
 Technical Tasks:
+
 1. Backend: Implement PDF download proxy in QuotationsGatewayController and DocumentClient.
 2. Backend: Validate QuotationService.approveAndConvert idempotency and projectClient communication.
 3. Frontend: Add Download PDF action and ConvertProjectModal.
@@ -449,6 +500,7 @@ Technical Tasks:
 - **Branch Name:** `feature/<issue#>-quotation-pdf-and-project-conversion`
 
 #### Backend Project Conversion Flow
+
 Verify the conversion logic in `apps/quotation-service/src/quotation.service.ts`:
 
 ```typescript
@@ -511,31 +563,39 @@ async approveAndConvert(id: string, dto?: ApproveQuotationDto) {
 ```
 
 #### Frontend Duplicate Conversion Handling (`QuotationsDashboardClient.tsx`)
+
 ```typescript
 const handleConvertQuotation = async (quotation: Quotation) => {
   setIsSubmitting(true);
   try {
-    const res = await apiClient.patch<{ quotation: Quotation; projectId: string }>(
-      `/quotations/${quotation.id}/approve`,
-    );
+    const res = await apiClient.patch<{
+      quotation: Quotation;
+      projectId: string;
+    }>(`/quotations/${quotation.id}/approve`);
     replaceQuotationInState(res.data.quotation);
     setFeedback({
-      tone: "success",
+      tone: 'success',
       message: `Quotation converted successfully! Project ID: ${res.data.projectId}`,
     });
   } catch (error) {
     if (isAlreadyConvertedError(error)) {
       setFeedback({
-        tone: "info",
-        message: "Notice: This quotation has already been converted into an active project.",
+        tone: 'info',
+        message:
+          'Notice: This quotation has already been converted into an active project.',
       });
       // Refresh local state to update the card status to CONVERTED
-      const refreshed = await apiClient.get<Quotation>(`/quotations/${quotation.id}`);
+      const refreshed = await apiClient.get<Quotation>(
+        `/quotations/${quotation.id}`,
+      );
       replaceQuotationInState(refreshed.data);
     } else {
       setFeedback({
-        tone: "error",
-        message: error instanceof Error ? error.message : "Failed to convert quotation.",
+        tone: 'error',
+        message:
+          error instanceof Error
+            ? error.message
+            : 'Failed to convert quotation.',
       });
     }
   } finally {
@@ -549,11 +609,13 @@ const handleConvertQuotation = async (quotation: Quotation) => {
 ### Week 12: Full Workflow Testing, Bug Fixing & Sprint 7 Demo Preparation
 
 #### Objectives
+
 - Perform comprehensive end-to-end testing across backend and frontend.
 - Eliminate edge-case bugs (e.g., negative quantities, zero amounts, concurrent conversions).
 - Prepare seed scripts and sample data for the Sprint 7 live demonstration.
 
 #### GitHub Issue Template (Week 12)
+
 ```markdown
 Title: [Quotations] E2E integration testing, bug fixes & Sprint 7 demo data preparation
 
@@ -563,6 +625,7 @@ We need a verified, bug-free quotation-to-project workflow backed by realistic s
 So that the Sprint 7 demo executes flawlessly without errors or broken mock references.
 
 Acceptance Criteria:
+
 - [ ] All E2E supertest suites in test/quotation-service/quotation.e2e-spec.ts pass.
 - [ ] Unit tests cover quotation item calculations, rounding, and status transitions.
 - [ ] Sample quotation demo dataset seeded in PostgreSQL database.
@@ -570,6 +633,7 @@ Acceptance Criteria:
 - [ ] Zero unhandled frontend runtime crashes when network or API throws errors.
 
 Technical Tasks:
+
 1. Run and verify test/quotation-service/quotation.e2e-spec.ts.
 2. Create prisma/seeds/quotations-demo-seed.ts.
 3. Conduct end-to-end role walkthrough (Sales Rep -> Manager -> Project Manager).
@@ -578,6 +642,7 @@ Technical Tasks:
 - **Branch Name:** `feature/<issue#>-quotation-tests-and-demo-data`
 
 #### Demo Data Seeding Script (`prisma/seeds/quotation-demo.seed.ts`)
+
 Run this script to set up clean, realistic demo records:
 
 ```typescript
@@ -630,13 +695,29 @@ async function seedQuotationDemo() {
     data: {
       leadId: lead1.id,
       status: 'PENDING_APPROVAL',
-      notes: 'Initial quotation submitted for client site preparation and structural steel.',
-      totalAmount: 4850000.00,
+      notes:
+        'Initial quotation submitted for client site preparation and structural steel.',
+      totalAmount: 4850000.0,
       items: {
         create: [
-          { itemName: 'Site Survey & Soil Investigation', quantity: 1, unitPrice: 350000.00, amount: 350000.00 },
-          { itemName: 'Reinforced Concrete Foundation (Grade 30)', quantity: 300, unitPrice: 10000.00, amount: 3000000.00 },
-          { itemName: 'Structural Steel Framing (tons)', quantity: 10, unitPrice: 150000.00, amount: 1500000.00 },
+          {
+            itemName: 'Site Survey & Soil Investigation',
+            quantity: 1,
+            unitPrice: 350000.0,
+            amount: 350000.0,
+          },
+          {
+            itemName: 'Reinforced Concrete Foundation (Grade 30)',
+            quantity: 300,
+            unitPrice: 10000.0,
+            amount: 3000000.0,
+          },
+          {
+            itemName: 'Structural Steel Framing (tons)',
+            quantity: 10,
+            unitPrice: 150000.0,
+            amount: 1500000.0,
+          },
         ],
       },
     },
@@ -647,12 +728,23 @@ async function seedQuotationDemo() {
     data: {
       leadId: lead2.id,
       status: 'APPROVED',
-      notes: 'Approved by management. Ready for conversion into active construction project.',
-      totalAmount: 2200000.00,
+      notes:
+        'Approved by management. Ready for conversion into active construction project.',
+      totalAmount: 2200000.0,
       items: {
         create: [
-          { itemName: 'Architectural Design & Blueprint Finalization', quantity: 1, unitPrice: 700000.00, amount: 700000.00 },
-          { itemName: 'Masonry & Plastering Works', quantity: 150, unitPrice: 10000.00, amount: 1500000.00 },
+          {
+            itemName: 'Architectural Design & Blueprint Finalization',
+            quantity: 1,
+            unitPrice: 700000.0,
+            amount: 700000.0,
+          },
+          {
+            itemName: 'Masonry & Plastering Works',
+            quantity: 150,
+            unitPrice: 10000.0,
+            amount: 1500000.0,
+          },
         ],
       },
     },
@@ -661,7 +753,9 @@ async function seedQuotationDemo() {
   console.log('Sprint 7 Quotation Demo Data seeded successfully.');
 }
 
-seedQuotationDemo().catch(console.error).finally(() => prisma.$disconnect());
+seedQuotationDemo()
+  .catch(console.error)
+  .finally(() => prisma.$disconnect());
 ```
 
 ---
@@ -670,23 +764,24 @@ seedQuotationDemo().catch(console.error).finally(() => prisma.$disconnect());
 
 During the sprint demo, follow this narrative order to showcase full completion of Person 2's responsibilities:
 
-| Step | Action | Screen / UI Element | Expected Behavior |
-| :--- | :--- | :--- | :--- |
-| **1. Lead Selection** | Select Lead "Skyline Heights" | Quotations &rarr; "Create Quotation" form | Lead details auto-populate. |
-| **2. Dynamic Calculation** | Enter 3 items with quantities and unit prices | Item rows in form | Total Amount automatically sums correctly to 2 decimal places with no float drift. |
-| **3. Submission** | Click "Submit Quotation" | Form Submit Button | Quotation is created with badge `PENDING_APPROVAL`. Appears at the top of the list. |
-| **4. Manager Rejection** | Log in as Manager, select test quotation, click "Reject" | Quotation Card &rarr; Rejection Modal | Manager inputs comment; badge transitions to `REJECTED` with reason banner displayed. |
-| **5. Revision Flow** | Edit rejected quotation, modify quantity, re-submit | Quotation Edit Modal | Status changes to `PENDING_APPROVAL` with updated grand total. |
-| **6. Manager Approval** | Click "Approve" button | Quotation Card Action | Status transitions smoothly to `APPROVED`. |
-| **7. PDF Download** | Click "Download Quotation PDF" | PDF Button | PDF file downloads with quotation reference number, items, and company branding. |
-| **8. Project Conversion** | Click "Convert to Project" button | Project Conversion Dialog | Quotation status turns to `CONVERTED`. Clickable banner `[View Project #ID]` appears. |
-| **9. Idempotency Check** | Attempt to re-trigger conversion or double-click | Project Conversion Button | UI gracefully informs: "Quotation already converted to Project", preventing duplicate creation. |
+| Step                       | Action                                                   | Screen / UI Element                       | Expected Behavior                                                                               |
+| :------------------------- | :------------------------------------------------------- | :---------------------------------------- | :---------------------------------------------------------------------------------------------- |
+| **1. Lead Selection**      | Select Lead "Skyline Heights"                            | Quotations &rarr; "Create Quotation" form | Lead details auto-populate.                                                                     |
+| **2. Dynamic Calculation** | Enter 3 items with quantities and unit prices            | Item rows in form                         | Total Amount automatically sums correctly to 2 decimal places with no float drift.              |
+| **3. Submission**          | Click "Submit Quotation"                                 | Form Submit Button                        | Quotation is created with badge `PENDING_APPROVAL`. Appears at the top of the list.             |
+| **4. Manager Rejection**   | Log in as Manager, select test quotation, click "Reject" | Quotation Card &rarr; Rejection Modal     | Manager inputs comment; badge transitions to `REJECTED` with reason banner displayed.           |
+| **5. Revision Flow**       | Edit rejected quotation, modify quantity, re-submit      | Quotation Edit Modal                      | Status changes to `PENDING_APPROVAL` with updated grand total.                                  |
+| **6. Manager Approval**    | Click "Approve" button                                   | Quotation Card Action                     | Status transitions smoothly to `APPROVED`.                                                      |
+| **7. PDF Download**        | Click "Download Quotation PDF"                           | PDF Button                                | PDF file downloads with quotation reference number, items, and company branding.                |
+| **8. Project Conversion**  | Click "Convert to Project" button                        | Project Conversion Dialog                 | Quotation status turns to `CONVERTED`. Clickable banner `[View Project #ID]` appears.           |
+| **9. Idempotency Check**   | Attempt to re-trigger conversion or double-click         | Project Conversion Button                 | UI gracefully informs: "Quotation already converted to Project", preventing duplicate creation. |
 
 ---
 
 ## 5. Quick Git & Development Command Reference
 
 ### Daily Development Flow
+
 ```bash
 # Start your day: update develop
 git checkout develop
@@ -714,6 +809,7 @@ git push -u origin feature/<issue-number>-<feature-name>
 ```
 
 ### Resetting or Syncing with Upstream
+
 ```bash
 # If your local branch is behind origin
 git pull --rebase origin develop

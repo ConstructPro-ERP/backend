@@ -56,6 +56,7 @@ npx prisma migrate diff --from-schema prisma/schema.applied.prisma --to-schema p
 ```
 
 This command:
+
 1. Reads `schema.applied.prisma` — "what is currently in the database"
 2. Reads `schema.prisma` — "what you want"
 3. Calculates the **difference** between the two
@@ -87,6 +88,7 @@ At this point the database still has NOT changed. You have only generated a SQL 
 Open the file and read it. Check that it only contains what you expect.
 
 Things to look out for:
+
 - A `DROP TABLE` or `DROP COLUMN` you did not intend — this destroys data.
 - A `◇ injected env ...` line at the very top — this is not SQL, delete it.
 - An `ALTER COLUMN ... SET NOT NULL` on a column that already has data — this
@@ -108,6 +110,7 @@ your NeonDB database one by one, using the Neon serverless driver (port 443,
 not port 5432).
 
 For each statement it prints:
+
 - `✓` — applied successfully
 - `⚠ skipped (already exists)` — already there, no problem
 - `✗ FAILED` — something went wrong, the script stops
@@ -210,11 +213,11 @@ npx prisma migrate diff ... --script -o scripts/apply-schema.sql
 
 ## Summary
 
-| File | Who writes it | When |
-|---|---|---|
-| `schema.prisma` | You | When you make a schema change |
-| `apply-schema.sql` | `migrate diff` command | Automatically, every time you generate |
-| `schema.applied.prisma` | You (via Copy-Item) | After every successful migration |
+| File                    | Who writes it          | When                                   |
+| ----------------------- | ---------------------- | -------------------------------------- |
+| `schema.prisma`         | You                    | When you make a schema change          |
+| `apply-schema.sql`      | `migrate diff` command | Automatically, every time you generate |
+| `schema.applied.prisma` | You (via Copy-Item)    | After every successful migration       |
 
 The only files you ever write by hand are `schema.prisma` and the copy command
 that updates `schema.applied.prisma`. Everything else is generated or automated.

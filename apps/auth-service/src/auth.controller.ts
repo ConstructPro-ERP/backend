@@ -8,6 +8,7 @@ import {
   HttpStatus,
   NotFoundException,
   UsePipes,
+  Res,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from './auth.service';
@@ -20,9 +21,14 @@ import { ErrorCode } from '../../../shared/error-codes';
 import { UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { ZodValidationPipe } from './dto/zod-validation.pipe';
+import { AuthGuard } from '@nestjs/passport';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; username: string };
+}
+
+interface GoogleAuthenticatedRequest extends Request {
+  user: Awaited<ReturnType<AuthService['findOrCreateGoogleUser']>>;
 }
 
 @Controller('auth')
@@ -82,25 +88,22 @@ export class AuthController {
     return this.authService.getRoles();
   }
 
-  // @Get('google')
-  // @UseGuards(AuthGuard('google'))
-  // googleLogin() {
-  //   // Passport redirects to Google; this handler body never executes
-  // }
-  //
-  // // Google redirects back here after the user grants consent
-  // @Get('google/callback')
-  // @UseGuards(AuthGuard('google'))
-  // googleCallback(
-  //   @Req() req: AuthenticatedRequest & { user: any },
-  //   @Res() res: Response,
-  // ) {
-  //   // req.user is set by GoogleStrategy.validate()
-  //   const { accessToken } = this.authService.issueTokenForUser(req.user);
-  //
-  //   // Redirect the frontend to a deep-link that carries the token
-  //   // Frontend reads the hash and stores it (avoids token in server logs)
-  //   const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-  //   res.redirect(`${frontendUrl}/auth/callback#token=${accessToken}`);
-  // }
+  @Get('google')
+  @UseGuards(AuthGuard('google'))
+  googleLogin() {
+    // Passport redirects to Google; this handler body never executes
+  }
+
+  // Google redirects back here after the user grants consent
+  @Get('google/callback')
+  @UseGuards(AuthGuard('google'))
+  googleCallback(@Req() req: GoogleAuthenticatedRequest, @Res() res: Response) {
+    // req.user is set by GoogleStrategy.validate()
+    const { accessToken } = this.authService.issueTokenForUser(req.user);
+
+    // Redirect the frontend to a deep-link that carries the token
+    // Frontend reads the hash and stores it (avoids token in server logs)
+    const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
+    res.redirect(`${frontendUrl}/auth/callback#token=${accessToken}`);
+  }
 }

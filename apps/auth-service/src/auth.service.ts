@@ -7,12 +7,12 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { ErrorCode } from '../../../shared/error-codes';
 import { RoleDto } from './dto/getRoles.dto';
 
-/*interface GoogleUserPayload {
+interface GoogleUserPayload {
   googleId: string;
   email: string;
   displayName: string;
   avatar?: string;
-}*/
+}
 
 @Injectable()
 export class AuthService {
@@ -162,49 +162,49 @@ export class AuthService {
     });
   }
 
-  // async findOrCreateGoogleUser(payload: GoogleUserPayload) {
-  //   const existing = await this.prisma.user.findFirst({
-  //     where: {
-  //       OR: [{ googleId: payload.googleId }, { email: payload.email }],
-  //     },
-  //   });
-  //
-  //   if (existing) {
-  //     // Attach googleId if the user previously registered with email/password
-  //     if (!existing.googleId) {
-  //       return this.prisma.user.update({
-  //         where: { id: existing.id },
-  //         data: { googleId: payload.googleId, avatar: payload.avatar },
-  //       });
-  //     }
-  //     return existing;
-  //   }
-  //
-  //   // New user — fetch the default "user" role to avoid requiring roleId
-  //   const defaultRole = await this.prisma.role.findFirst({
-  //     where: { roleName: 'user' },
-  //   });
-  //
-  //   return this.prisma.user.create({
-  //     data: {
-  //       googleId: payload.googleId,
-  //       email: payload.email,
-  //       fullName: payload.displayName,
-  //       avatar: payload.avatar,
-  //       status: 'ACTIVE',
-  //       // Google users have no local password; null is intentional
-  //       password: null,
-  //       roleId: defaultRole?.id ?? null,
-  //     },
-  //   });
-  // }
-  //
-  // // Issues a signed JWT for a Google-authenticated user (reused in controller)
-  // issueTokenForUser(user: { id: string; fullName: string }) {
-  //   const payload = { sub: user.id, username: user.fullName };
-  //   return {
-  //     accessToken: this.jwtService.sign(payload),
-  //     user: { id: user.id, username: user.fullName },
-  //   };
-  // }
+  async findOrCreateGoogleUser(payload: GoogleUserPayload) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ googleId: payload.googleId }, { email: payload.email }],
+      },
+    });
+
+    if (existing) {
+      // Attach googleId if the user previously registered with email/password
+      if (!existing.googleId) {
+        return this.prisma.user.update({
+          where: { id: existing.id },
+          data: { googleId: payload.googleId, avatar: payload.avatar },
+        });
+      }
+      return existing;
+    }
+
+    // New user — fetch the default "user" role to avoid requiring roleId
+    const defaultRole = await this.prisma.role.findFirst({
+      where: { roleName: 'user' },
+    });
+
+    return this.prisma.user.create({
+      data: {
+        googleId: payload.googleId,
+        email: payload.email,
+        fullName: payload.displayName,
+        avatar: payload.avatar,
+        status: 'ACTIVE',
+        // Google users have no local password; null is intentional
+        password: null,
+        roleId: defaultRole?.id ?? null,
+      },
+    });
+  }
+
+  // Issues a signed JWT for a Google-authenticated user (reused in controller)
+  issueTokenForUser(user: { id: string; fullName: string }) {
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload),
+      user: { id: user.id, username: user.fullName },
+    };
+  }
 }

@@ -2,14 +2,14 @@
 
 ## Setup overview
 
-| File | Purpose |
-|---|---|
-| `prisma/schema.prisma` | Single source of truth — all models live here |
-| `prisma/schema.applied.prisma` | Snapshot of what is currently in the database |
-| `prisma/seed.ts` | Idempotent seed — permissions, roles, and the default admin user |
-| `prisma.config.ts` | Prisma v7 CLI config — points the CLI at the database |
-| `scripts/apply-schema.sql` | Generated SQL — always regenerated before applying |
-| `scripts/run-migration.mjs` | Applies the SQL to NeonDB via the HTTP/WebSocket driver |
+| File                           | Purpose                                                          |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `prisma/schema.prisma`         | Single source of truth — all models live here                    |
+| `prisma/schema.applied.prisma` | Snapshot of what is currently in the database                    |
+| `prisma/seed.ts`               | Idempotent seed — permissions, roles, and the default admin user |
+| `prisma.config.ts`             | Prisma v7 CLI config — points the CLI at the database            |
+| `scripts/apply-schema.sql`     | Generated SQL — always regenerated before applying               |
+| `scripts/run-migration.mjs`    | Applies the SQL to NeonDB via the HTTP/WebSocket driver          |
 
 ### Why not `prisma migrate dev`?
 
@@ -80,6 +80,7 @@ node scripts/run-migration.mjs
 ```
 
 The script applies each SQL statement one at a time and prints:
+
 - `✓` — applied successfully
 - `⚠ skipped (already exists)` — already in the database, safe to ignore
 - `✗ FAILED` — something went wrong; the script stops and prints the error
@@ -152,16 +153,16 @@ npx prisma db seed
 
 ## Useful commands (no DB connection needed)
 
-| Command | What it does |
-|---|---|
+| Command               | What it does                                  |
+| --------------------- | --------------------------------------------- |
 | `npx prisma generate` | Regenerates the TypeScript client from schema |
-| `npx prisma format` | Auto-formats `schema.prisma` |
-| `npx prisma validate` | Validates the schema without touching the DB |
+| `npx prisma format`   | Auto-formats `schema.prisma`                  |
+| `npx prisma validate` | Validates the schema without touching the DB  |
 
 ## Useful commands (DB connection required)
 
-| Command | What it does |
-|---|---|
+| Command              | What it does                                           |
+| -------------------- | ------------------------------------------------------ |
 | `npx prisma db seed` | Runs `prisma/seed.ts` — permissions, roles, admin user |
 
 ---

@@ -38,11 +38,11 @@ The quotation is the authoritative source of the approved budget and lead. All t
 
 The service enforces the following guards **before** any write or external call:
 
-| Quotation state | Result |
-|---|---|
+| Quotation state                        | Result                                                             |
+| -------------------------------------- | ------------------------------------------------------------------ |
 | `CONVERTED` or `projectId` already set | `409 ALREADY_CONVERTED` — idempotent, project service never called |
-| `REJECTED` | `400 QUOTATION_REJECTED` |
-| `PENDING_APPROVAL` / `APPROVED` | proceed |
+| `REJECTED`                             | `400 QUOTATION_REJECTED`                                           |
+| `PENDING_APPROVAL` / `APPROVED`        | proceed                                                            |
 
 The conversion is deliberately **not** atomic at the DB level. The sequence:
 
@@ -61,11 +61,13 @@ Notification failure must not roll back a successful project creation. A failed 
 ## Consequences
 
 **Good:**
+
 - Simple, debuggable, no new infrastructure.
 - Idempotency guard prevents double-project creation on retry.
 - Stub client (`PROJECT_SERVICE_STUB=true`) allows development before the project service is live.
 
 **Bad / trade-offs:**
+
 - The quotation service is coupled to the project and notification service APIs.
 - If the process crashes after step 2 but before step 3, a project exists with no matching quotation record. A reconciliation job or retry mechanism will be needed before GA.
 - Notification failure is silent to the caller. Monitoring/alerting on the log `warn` lines is required.
@@ -74,8 +76,8 @@ Notification failure must not roll back a successful project creation. A failed 
 
 ## Alternatives Considered
 
-| Option | Why rejected |
-|---|---|
-| API gateway orchestrates | Gateway is a routing layer, not a business logic layer. |
-| Event-driven saga | Adds Kafka/RabbitMQ at this stage; no other consumers of these events yet. |
+| Option                           | Why rejected                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| API gateway orchestrates         | Gateway is a routing layer, not a business logic layer.                             |
+| Event-driven saga                | Adds Kafka/RabbitMQ at this stage; no other consumers of these events yet.          |
 | Synchronous orchestrator service | An extra network hop for a single chain; adds latency and a new service to operate. |

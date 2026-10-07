@@ -255,16 +255,17 @@ enum AiKnowledgeSourceType {
 }
 
 model Project {
-  id               String        @id @default(uuid())
-  projectName      String
-  location         String?
-  startDate        DateTime
-  endDate          DateTime?
-  budget           Float?
-  projectManagerId String
-  status           ProjectStatus @default(PLANNING)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id                 String        @id @default(uuid())
+  projectName        String
+  location           String?
+  startDate          DateTime
+  endDate            DateTime?
+  budget             Float?
+  projectManagerId   String
+  status             ProjectStatus @default(PLANNING)
+  progressPercentage Float         @default(0)
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 
   quotations        Quotation[]
   projectManager    User               @relation("ProjectManager", fields: [projectManagerId], references: [id])
@@ -278,16 +279,22 @@ model Project {
 }
 
 model Milestone {
-  id            String          @id @default(uuid())
-  projectId     String
-  milestoneName String
-  dueDate       DateTime?
-  status        MilestoneStatus @default(PENDING)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
+  id                 String          @id @default(uuid())
+  projectId          String
+  milestoneName      String
+  description        String?
+  dueDate            DateTime?
+  weight             Float
+  progressPercentage Float           @default(0)
+  status             MilestoneStatus @default(PENDING)
+  completedAt        DateTime?
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
 
   project Project @relation(fields: [projectId], references: [id])
   tasks   Task[]
+
+  @@index([projectId])
 }
 
 model Task {

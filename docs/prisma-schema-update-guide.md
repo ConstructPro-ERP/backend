@@ -3,6 +3,10 @@
 This document explains what each file does, what each command does, and answers
 "do I need to touch apply-schema.sql manually?"
 
+> [!NOTE]
+> **Fallback Workflow:** The primary and recommended method for evolving schemas is standard Prisma migrations (`npx prisma migrate dev --name <name>`, documented in [`data-layer/migration-guide.md`](./data-layer/migration-guide.md)).
+> Only use the workflow described below if direct database access over **Port 5432 is blocked** on your network.
+
 ---
 
 ## The three files you need to understand

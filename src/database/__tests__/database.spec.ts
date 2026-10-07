@@ -409,8 +409,16 @@ describe('Project and Milestone', () => {
 
     await prisma.milestone.createMany({
       data: [
-        { projectId: project.id, milestoneName: 'Phase 1' },
-        { projectId: project.id, milestoneName: 'Phase 2' },
+        {
+          projectId: project.id,
+          milestoneName: 'Phase 1',
+          weight: 50,
+        },
+        {
+          projectId: project.id,
+          milestoneName: 'Phase 2',
+          weight: 50,
+        },
       ],
     });
 

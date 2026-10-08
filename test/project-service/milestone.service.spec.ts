@@ -49,6 +49,7 @@ const mockMilestones = {
   updateInTransaction: jest.fn(),
   deleteInTransaction: jest.fn(),
   updateProjectProgressInTransaction: jest.fn(),
+  countTasksForMilestoneInTransaction: jest.fn(),
 };
 
 const mockAccess = {
@@ -86,6 +87,7 @@ describe('MilestoneService', () => {
     mockMilestones.createInTransaction.mockResolvedValue(milestone);
     mockMilestones.updateInTransaction.mockResolvedValue(milestone);
     mockMilestones.deleteInTransaction.mockResolvedValue(milestone);
+    mockMilestones.countTasksForMilestoneInTransaction.mockResolvedValue(0);
   });
 
   it('creates a milestone inside a transaction', async () => {
@@ -331,5 +333,43 @@ describe('MilestoneService', () => {
     });
 
     expect(mockMilestones.transaction).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects milestone deletion when attached tasks exist', async () => {
+    mockMilestones.countTasksForMilestoneInTransaction.mockResolvedValue(2);
+
+    await expect(service.remove(milestone.id)).rejects.toMatchObject({
+      status: 409,
+      response: {
+        code: 'MILESTONE_IN_USE',
+      },
+    });
+
+    expect(
+      mockMilestones.countTasksForMilestoneInTransaction,
+    ).toHaveBeenCalledWith(tx, milestone.id);
+
+    expect(mockMilestones.deleteInTransaction).not.toHaveBeenCalled();
+
+    expect(
+      mockMilestones.updateProjectProgressInTransaction,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('allows milestone deletion when no tasks are attached', async () => {
+    mockMilestones.countTasksForMilestoneInTransaction.mockResolvedValue(0);
+
+    await expect(service.remove(milestone.id)).resolves.toEqual({
+      message: 'Milestone deleted successfully',
+    });
+
+    expect(mockMilestones.deleteInTransaction).toHaveBeenCalledWith(
+      tx,
+      milestone.id,
+    );
+
+    expect(
+      mockMilestones.updateProjectProgressInTransaction,
+    ).toHaveBeenCalledWith(tx, project.id, 0);
   });
 });

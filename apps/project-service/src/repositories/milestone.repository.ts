@@ -120,6 +120,15 @@ export class MilestoneRepository {
     });
   }
 
+  countTasksForMilestoneInTransaction(
+    tx: ProjectTransaction,
+    milestoneId: string,
+  ) {
+    return tx.task.count({
+      where: { milestoneId },
+    });
+  }
+
   deleteInTransaction(tx: ProjectTransaction, id: string) {
     return tx.milestone.delete({
       where: { id },

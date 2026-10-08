@@ -27,6 +27,9 @@ const mockTx = {
     update: jest.fn(),
     delete: jest.fn(),
   },
+  task: {
+    count: jest.fn(),
+  },
 };
 
 const transactionClient = mockTx as unknown as ProjectTransaction;
@@ -227,5 +230,19 @@ describe('MilestoneRepository', () => {
     await expect(
       repository.transaction(() => Promise.reject(failure)),
     ).rejects.toBe(failure);
+  });
+
+  it('counts tasks attached to a milestone inside the transaction', async () => {
+    mockTx.task.count.mockResolvedValue(2);
+
+    const result = await repository.countTasksForMilestoneInTransaction(
+      transactionClient,
+      'milestone-1',
+    );
+
+    expect(result).toBe(2);
+    expect(mockTx.task.count).toHaveBeenCalledWith({
+      where: { milestoneId: 'milestone-1' },
+    });
   });
 });

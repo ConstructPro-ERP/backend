@@ -326,7 +326,7 @@ model Task {
   updatedAt    DateTime   @updatedAt
 
   project    Project    @relation(fields: [projectId], references: [id])
-  milestone  Milestone? @relation(fields: [milestoneId], references: [id])
+  milestone  Milestone? @relation(fields: [milestoneId], references: [id], onDelete: Restrict)
   assignedTo User?      @relation("AssignedTasks", fields: [assignedToId], references: [id])
 }
 

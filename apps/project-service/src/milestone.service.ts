@@ -154,9 +154,21 @@ export class MilestoneService {
     return this.withLockedProject(existing.projectId, actor, async (tx) => {
       await this.assertMilestoneInTransaction(tx, id, existing.projectId);
 
+      // Prevent deleting milestones that have attached tasks.
+      const taskCount =
+        await this.milestones.countTasksForMilestoneInTransaction(tx, id);
+
+      if (taskCount > 0) {
+        throw new ConflictException({
+          code: ErrorCode.MILESTONE_IN_USE,
+          message: 'Milestone cannot be deleted while tasks reference it.',
+        });
+      }
+
       try {
         await this.milestones.deleteInTransaction(tx, id);
       } catch (error: unknown) {
+        // Keep the database constraint as a final safeguard.
         if (
           error instanceof Prisma.PrismaClientKnownRequestError &&
           error.code === 'P2003'
@@ -166,6 +178,7 @@ export class MilestoneService {
             message: 'Milestone cannot be deleted while tasks reference it.',
           });
         }
+
         throw error;
       }
 

@@ -48,9 +48,9 @@ describe('MilestoneRepository', () => {
   });
 
   it('runs operations in a serializable transaction', async () => {
-    const result = await repository.transaction(async (tx) => {
+    const result = await repository.transaction((tx) => {
       expect(tx).toBe(transactionClient);
-      return 'completed';
+      return Promise.resolve('completed');
     });
 
     expect(result).toBe('completed');
@@ -85,14 +85,14 @@ describe('MilestoneRepository', () => {
 
     expect(mockPrisma.project.findUnique).toHaveBeenCalledWith({
       where: { id: 'project-1' },
-      select: expect.objectContaining({
+      select: {
         id: true,
         projectManagerId: true,
         startDate: true,
         endDate: true,
         status: true,
         progressPercentage: true,
-      }),
+      },
     });
   });
 
@@ -113,10 +113,14 @@ describe('MilestoneRepository', () => {
       where: { id: 'milestone-1' },
       include: {
         project: {
-          select: expect.objectContaining({
+          select: {
             id: true,
             projectManagerId: true,
-          }),
+            startDate: true,
+            endDate: true,
+            status: true,
+            progressPercentage: true,
+          },
         },
       },
     });
@@ -221,9 +225,7 @@ describe('MilestoneRepository', () => {
     const failure = new Error('Database operation failed');
 
     await expect(
-      repository.transaction(async () => {
-        throw failure;
-      }),
+      repository.transaction(() => Promise.reject(failure)),
     ).rejects.toBe(failure);
   });
 });

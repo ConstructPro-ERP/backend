@@ -195,6 +195,42 @@ The test suite uses `DATABASE_URL_TEST` and cleans up all rows after each test â
 
 ## 8. Troubleshooting
 
+### Drift: `google_calendar_connections` already exists
+
+This table can exist after a manual SQL change or `prisma db push` without a
+matching entry in Prisma's migration history. Do not reset a database containing
+data you want to keep.
+
+The migration `20261007000001_ddp78_google_calendar_integration` now tracks the
+calendar table, its unique `userId` index, and its cascading foreign key to `User`.
+For a database where these changes already exist, first compare the live schema:
+
+```bash
+npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma
+```
+
+Only if the calendar table matches the model completely, record the migration
+without executing its SQL:
+
+```bash
+npx prisma migrate resolve --applied 20261007000001_ddp78_google_calendar_integration
+npx prisma migrate status
+```
+
+The custom `ai_knowledge_chunks_embedding_ivfflat_idx` index is maintained by SQL
+migrations and is not represented in the Prisma model. A schema diff may propose
+removing it; do not execute that diff to repair calendar drift. Also, `migrate
+status` checks migration history, not live schema drift.
+
+For databases without the calendar table, use `npx prisma migrate deploy` instead
+of marking this migration as applied. Commit the migration file so other
+environments receive the same change.
+
+Check the target printed by Prisma before running commands: `prisma.config.ts`
+uses `DIRECT_URL_TEST` when set, otherwise `DIRECT_URL`.
+
+Reference: [Prisma: reconciling migration history after a hotfix](https://www.prisma.io/docs/orm/v7/prisma-migrate/workflows/patching-and-hotfixing).
+
 ### `P1000` â€” Authentication failed
 
 ```

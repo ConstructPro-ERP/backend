@@ -372,4 +372,176 @@ describe('MilestoneService', () => {
       mockMilestones.updateProjectProgressInTransaction,
     ).toHaveBeenCalledWith(tx, project.id, 0);
   });
+
+  it('preserves completedAt when a milestone remains completed', async () => {
+    const completedAt = new Date('2026-09-01T00:00:00.000Z');
+
+    mockMilestones.findByIdInTransaction.mockResolvedValue({
+      ...milestone,
+      status: MilestoneStatus.COMPLETED,
+      progressPercentage: 100,
+      completedAt,
+    });
+
+    await service.updateProgress(milestone.id, {
+      progressPercentage: 100,
+    });
+
+    expect(mockMilestones.updateInTransaction).toHaveBeenCalledWith(
+      tx,
+      milestone.id,
+      expect.objectContaining({
+        status: MilestoneStatus.COMPLETED,
+        progressPercentage: 100,
+        completedAt,
+      }),
+    );
+  });
+
+  it('rejects milestone writes in cancelled projects', async () => {
+    mockMilestones.findProjectInTransaction.mockResolvedValue({
+      ...project,
+      status: ProjectStatus.CANCELLED,
+    });
+
+    await expect(
+      service.create(project.id, {
+        milestoneName: 'Forbidden',
+        weight: 5,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+    });
+
+    expect(mockMilestones.createInTransaction).not.toHaveBeenCalled();
+  });
+
+  it('returns a concurrency conflict after four P2034 failures', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'Transaction serialization conflict',
+      {
+        code: 'P2034',
+        clientVersion: '7.8.0',
+      },
+    );
+
+    mockMilestones.transaction.mockRejectedValue(conflict);
+
+    await expect(
+      service.create(project.id, {
+        milestoneName: 'Retry',
+        weight: 5,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: {
+        code: 'MILESTONE_CONCURRENCY_CONFLICT',
+      },
+    });
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(4);
+  }, 15000);
+
+  it('retries a Neon serialization failure reported as P2010', async () => {
+    const conflict = new Prisma.PrismaClientKnownRequestError(
+      'Neon transaction conflict',
+      {
+        code: 'P2010',
+        clientVersion: '7.8.0',
+        meta: { code: '40001' },
+      },
+    );
+
+    mockMilestones.transaction.mockRejectedValueOnce(conflict);
+
+    await service.create(project.id, {
+      milestoneName: 'Retry after Neon conflict',
+      weight: 5,
+    });
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry unrelated transaction failures', async () => {
+    const failure = new Error('Unexpected failure');
+
+    mockMilestones.transaction.mockRejectedValue(failure);
+
+    await expect(
+      service.create(project.id, {
+        milestoneName: 'No retry',
+        weight: 5,
+      }),
+    ).rejects.toBe(failure);
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries an unwrapped Neon serialization conflict', async () => {
+    const conflict = Object.assign(new Error('TransactionWriteConflict'), {
+      name: 'DriverAdapterError',
+      cause: {
+        originalCode: '40001',
+        kind: 'TransactionWriteConflict',
+      },
+    });
+
+    mockMilestones.transaction.mockRejectedValueOnce(conflict);
+
+    await service.create(project.id, {
+      milestoneName: 'Retry after adapter conflict',
+      weight: 5,
+    });
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(2);
+
+    expect(mockMilestones.createInTransaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns a concurrency conflict when all four raw Neon retries fail', async () => {
+    const conflict = Object.assign(new Error('TransactionWriteConflict'), {
+      name: 'DriverAdapterError',
+      cause: {
+        originalCode: '40001',
+        kind: 'TransactionWriteConflict',
+      },
+    });
+
+    mockMilestones.transaction.mockRejectedValue(conflict);
+
+    await expect(
+      service.create(project.id, {
+        milestoneName: 'Repeated conflict',
+        weight: 5,
+      }),
+    ).rejects.toMatchObject({
+      status: 409,
+      response: {
+        code: 'MILESTONE_CONCURRENCY_CONFLICT',
+      },
+    });
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(4);
+  }, 15000);
+
+  it('does not retry unrelated Neon adapter errors', async () => {
+    const failure = Object.assign(new Error('Unique constraint violation'), {
+      name: 'DriverAdapterError',
+      cause: {
+        originalCode: '23505',
+        kind: 'UniqueConstraintViolation',
+      },
+    });
+
+    mockMilestones.transaction.mockRejectedValue(failure);
+
+    await expect(
+      service.create(project.id, {
+        milestoneName: 'Non-retryable conflict',
+        weight: 5,
+      }),
+    ).rejects.toBe(failure);
+
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(1);
+  });
 });

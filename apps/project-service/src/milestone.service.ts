@@ -13,6 +13,11 @@ import { ProjectAccessService } from './project-access.service';
 import type { ProjectAccessActor } from './interfaces/project-access.interface';
 import { MilestoneRepository } from './repositories/milestone.repository';
 import type { ProjectTransaction } from './repositories/project.repository';
+import {
+  MAX_TRANSACTION_ATTEMPTS,
+  isRetryableTransactionError,
+  waitBeforeTransactionRetry,
+} from './utils/transaction-error.util';
 
 @Injectable()
 export class MilestoneService {
@@ -363,7 +368,7 @@ export class MilestoneService {
   private async withTransactionRetry<T>(
     work: (tx: ProjectTransaction) => Promise<T>,
   ): Promise<T> {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
       try {
         return await this.milestones.transaction(work);
       } catch (error: unknown) {
@@ -371,12 +376,14 @@ export class MilestoneService {
           throw error;
         }
 
-        if (attempt === 3) {
+        if (attempt === MAX_TRANSACTION_ATTEMPTS) {
           throw new ConflictException({
             code: ErrorCode.MILESTONE_CONCURRENCY_CONFLICT,
             message: 'Milestone data changed concurrently. Try again.',
           });
         }
+
+        await waitBeforeTransactionRetry(attempt);
       }
     }
 
@@ -385,46 +392,4 @@ export class MilestoneService {
       message: 'Milestone data changed concurrently. Try again.',
     });
   }
-}
-
-function isRetryableTransactionError(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  if (error.code === 'P2034') {
-    return true;
-  }
-
-  if (error.code !== 'P2010') {
-    return false;
-  }
-
-  const meta = error.meta;
-
-  if (!isRecord(meta)) {
-    return false;
-  }
-
-  if (meta.code === '40001') {
-    return true;
-  }
-
-  const adapter = meta.driverAdapterError;
-
-  if (!isRecord(adapter) || !isRecord(adapter.cause)) {
-    return false;
-  }
-
-  const cause = adapter.cause;
-
-  return (
-    cause.originalCode === '40001' ||
-    cause.code === '40001' ||
-    cause.kind === 'TransactionWriteConflict'
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

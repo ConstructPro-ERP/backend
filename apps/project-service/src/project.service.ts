@@ -30,6 +30,11 @@ import {
 } from './repositories/project.repository';
 import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
+import {
+  MAX_TRANSACTION_ATTEMPTS,
+  isRetryableTransactionError,
+  waitBeforeTransactionRetry,
+} from './utils/transaction-error.util';
 
 @Injectable()
 export class ProjectService {
@@ -562,7 +567,7 @@ export class ProjectService {
       message: 'The quotation changed while creating the project. Try again.',
     },
   ): Promise<T> {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
       try {
         return await this.projects.transaction(work);
       } catch (error: unknown) {
@@ -570,65 +575,14 @@ export class ProjectService {
           throw error;
         }
 
-        if (attempt === 3) {
+        if (attempt === MAX_TRANSACTION_ATTEMPTS) {
           throw new ConflictException(conflict);
         }
+
+        await waitBeforeTransactionRetry(attempt);
       }
     }
 
     throw new ConflictException(conflict);
   }
-}
-
-function isRetryableTransactionError(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  // Standard Prisma transaction write-conflict error.
-  if (error.code === 'P2034') {
-    return true;
-  }
-
-  // Raw PostgreSQL errors executed through the Neon driver adapter can be
-  // surfaced by Prisma as P2010 instead of P2034.
-  if (error.code !== 'P2010') {
-    return false;
-  }
-
-  return containsSerializationConflict(error.meta);
-}
-
-function containsSerializationConflict(meta: unknown): boolean {
-  if (!isRecord(meta)) {
-    return false;
-  }
-
-  // Some Prisma/database adapter paths expose the PostgreSQL SQLSTATE
-  // directly in meta.
-  if (meta.code === '40001') {
-    return true;
-  }
-
-  const driverAdapterError = meta.driverAdapterError;
-
-  if (!isRecord(driverAdapterError)) {
-    return false;
-  }
-
-  const cause = driverAdapterError.cause;
-
-  if (!isRecord(cause)) {
-    return false;
-  }
-
-  return (
-    cause.originalCode === '40001' ||
-    cause.code === '40001' ||
-    cause.kind === 'TransactionWriteConflict'
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

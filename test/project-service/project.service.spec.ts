@@ -744,8 +744,45 @@ describe('ProjectService', () => {
       expect(result.status).toBe(ProjectStatus.ON_HOLD);
     });
 
-    it('returns a lifecycle concurrency error after three failed attempts', async () => {
-      // Arrange
+    it('retries an unwrapped Neon conflict during a project status update', async () => {
+      const conflict = Object.assign(new Error('TransactionWriteConflict'), {
+        name: 'DriverAdapterError',
+        cause: {
+          originalCode: '40001',
+          kind: 'TransactionWriteConflict',
+        },
+      });
+
+      const onHoldProject = {
+        ...activeProject,
+        status: ProjectStatus.ON_HOLD,
+      };
+
+      mockProjectRepository.transaction
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce(
+          (work: (tx: ProjectTransaction) => Promise<unknown>) =>
+            work(fakeTransaction),
+        );
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        onHoldProject,
+      );
+
+      const result = await service.updateStatus('project-1', {
+        status: ProjectStatus.ON_HOLD,
+      });
+
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(2);
+
+      expect(result.status).toBe(ProjectStatus.ON_HOLD);
+    });
+
+    it('returns a lifecycle concurrency error after four failed attempts', async () => {
       mockProjectRepository.transaction.mockRejectedValue(
         createNeonSerializationConflict(),
       );
@@ -762,10 +799,10 @@ describe('ProjectService', () => {
         status: 409,
       });
 
-      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(3);
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(4);
 
       expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
-    });
+    }, 15000);
   });
 
   describe('findAll', () => {
@@ -1437,6 +1474,48 @@ describe('ProjectService', () => {
       expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
     });
 
+    it('retries an unwrapped Neon conflict during quotation conversion', async () => {
+      const conflict = Object.assign(new Error('TransactionWriteConflict'), {
+        name: 'DriverAdapterError',
+        cause: {
+          originalCode: '40001',
+          kind: 'TransactionWriteConflict',
+        },
+      });
+
+      mockProjectRepository.transaction
+        .mockRejectedValueOnce(conflict)
+        .mockImplementationOnce(
+          (work: (tx: ProjectTransaction) => Promise<unknown>) =>
+            work(fakeTransaction),
+        );
+
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: 'project-1',
+      });
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      const result = await service.createFromQuotation({
+        quotationId: 'quotation-1',
+        leadId: 'lead-1',
+      });
+
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(2);
+
+      expect(result).toEqual({
+        projectId: 'project-1',
+        status: ProjectStatus.ACTIVE,
+      });
+
+      expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
+    });
+
     it('retries when Prisma reports a P2034 transaction conflict', async () => {
       // Arrange
       mockProjectRepository.transaction
@@ -1560,8 +1639,7 @@ describe('ProjectService', () => {
       expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(1);
     });
 
-    it('throws a concurrency conflict after three serialization failures', async () => {
-      // Arrange
+    it('throws a concurrency conflict after four serialization failures', async () => {
       mockProjectRepository.transaction.mockRejectedValue(
         createNeonSerializationConflict(),
       );
@@ -1576,10 +1654,11 @@ describe('ProjectService', () => {
         response: {
           code: 'PROJECT_CONVERSION_CONCURRENCY_CONFLICT',
         },
+        status: 409,
       });
 
-      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(3);
-    });
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(4);
+    }, 15000);
 
     it('activates the existing PLANNING project during retry', async () => {
       mockProjectRepository.findQuotation.mockResolvedValue({

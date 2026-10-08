@@ -7,6 +7,7 @@ import { ProjectRepository } from './repositories/project.repository';
 import { ProjectService } from './project.service';
 import { ProjectAccessService } from './project-access.service';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
+import { MilestoneRepository } from './repositories/milestone.repository';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
     ProjectAccessService,
     ProjectLifecycleService,
     ProjectRepository,
+    MilestoneRepository,
     PrismaService,
   ],
 })

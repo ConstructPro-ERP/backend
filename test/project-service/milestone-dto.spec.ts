@@ -20,7 +20,7 @@ function validateDto<T extends object>(
 describe('Milestone DTO validation', () => {
   const validCreate = {
     milestoneName: 'Foundation Construction',
-    weight: 40,
+    weight: 5,
   };
 
   describe('CreateMilestoneDto', () => {
@@ -41,7 +41,7 @@ describe('Milestone DTO validation', () => {
     });
 
     it('rejects missing milestone name', () => {
-      expect(validateDto(CreateMilestoneDto, { weight: 40 })).toContain(
+      expect(validateDto(CreateMilestoneDto, { weight: 5 })).toContain(
         'milestoneName',
       );
     });
@@ -55,13 +55,25 @@ describe('Milestone DTO validation', () => {
       ).toContain('milestoneName');
     });
 
-    it.each([0, -1, 101, '40', null])('rejects invalid weight %s', (weight) => {
+    it.each([0, -1, 11, 1.5, '5', null])(
+      'rejects invalid weight %s',
+      (weight) => {
+        expect(
+          validateDto(CreateMilestoneDto, {
+            ...validCreate,
+            weight,
+          }),
+        ).toContain('weight');
+      },
+    );
+
+    it.each([1, 5, 10])('accepts relative weight %s', (weight) => {
       expect(
         validateDto(CreateMilestoneDto, {
           ...validCreate,
           weight,
         }),
-      ).toContain('weight');
+      ).toEqual([]);
     });
 
     it('rejects invalid due dates', () => {
@@ -107,7 +119,7 @@ describe('Milestone DTO validation', () => {
       expect(
         validateDto(UpdateMilestoneDto, {
           milestoneName: 'Revised Foundation',
-          weight: 45,
+          weight: 7,
         }),
       ).toEqual([]);
     });
@@ -121,11 +133,12 @@ describe('Milestone DTO validation', () => {
       ).toEqual([]);
     });
 
-    it('rejects invalid weight', () => {
-      expect(validateDto(UpdateMilestoneDto, { weight: 0 })).toContain(
-        'weight',
-      );
-    });
+    it.each([0, -1, 11, 2.5, '5', null])(
+      'rejects invalid weight %s',
+      (weight) => {
+        expect(validateDto(UpdateMilestoneDto, { weight })).toContain('weight');
+      },
+    );
 
     it('rejects blank milestone name', () => {
       expect(

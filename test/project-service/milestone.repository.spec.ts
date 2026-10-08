@@ -165,7 +165,7 @@ describe('MilestoneRepository', () => {
     const data = {
       projectId: 'project-1',
       milestoneName: 'Foundation',
-      weight: 40,
+      weight: 5,
       progressPercentage: 0,
       status: MilestoneStatus.PENDING,
     };
@@ -179,7 +179,7 @@ describe('MilestoneRepository', () => {
 
   it('updates a milestone using the transaction client', async () => {
     const data = {
-      weight: 60,
+      weight: 7,
       progressPercentage: 50,
       status: MilestoneStatus.IN_PROGRESS,
     };

@@ -302,7 +302,7 @@ model Milestone {
   milestoneName      String
   description        String?
   dueDate            DateTime?
-  weight             Float
+  weight             Int
   progressPercentage Float           @default(0)
   status             MilestoneStatus @default(PENDING)
   completedAt        DateTime?

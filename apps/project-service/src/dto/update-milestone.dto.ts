@@ -1,12 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
+  IsInt,
   IsNotEmpty,
-  IsNumber,
-  IsPositive,
   IsString,
   Matches,
   Max,
+  Min,
   ValidateIf,
 } from 'class-validator';
 
@@ -35,13 +35,14 @@ export class UpdateMilestoneDto {
   dueDate?: string | null;
 
   @ApiPropertyOptional({
-    example: 45,
-    description: 'Milestone weight must be greater than 0 and at most 100',
-    maximum: 100,
+    example: 5,
+    description: 'Relative milestone weight from 1 to 10',
+    minimum: 1,
+    maximum: 10,
   })
   @ValidateIf((_, value: unknown) => value !== undefined)
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @IsPositive()
-  @Max(100)
+  @IsInt()
+  @Min(1)
+  @Max(10)
   weight?: number;
 }

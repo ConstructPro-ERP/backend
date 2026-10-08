@@ -27,7 +27,7 @@ const milestone = {
   milestoneName: 'Foundation',
   description: null,
   dueDate: null,
-  weight: 40,
+  weight: 5,
   progressPercentage: 0,
   status: MilestoneStatus.PENDING,
   completedAt: null,
@@ -91,7 +91,7 @@ describe('MilestoneService', () => {
   it('creates a milestone inside a transaction', async () => {
     await service.create(project.id, {
       milestoneName: 'Foundation',
-      weight: 40,
+      weight: 5,
     });
 
     expect(mockMilestones.lockProject).toHaveBeenCalledWith(tx, project.id);
@@ -109,56 +109,81 @@ describe('MilestoneService', () => {
     ).toHaveBeenCalledWith(tx, project.id, 0);
   });
 
-  it('calculates the correct weighted project progress', async () => {
+  it('calculates weighted progress using relative weights', async () => {
     mockMilestones.findProgressInputsInTransaction.mockResolvedValue([
-      { weight: 40, progressPercentage: 50 },
-      { weight: 60, progressPercentage: 100 },
+      { weight: 5, progressPercentage: 100 },
+      { weight: 3, progressPercentage: 50 },
+      { weight: 2, progressPercentage: 0 },
+    ]);
+
+    await service.create(project.id, {
+      milestoneName: 'Finishing',
+      weight: 2,
+    });
+
+    // (5 * 100 + 3 * 50 + 2 * 0) / 10 = 65
+    expect(
+      mockMilestones.updateProjectProgressInTransaction,
+    ).toHaveBeenCalledWith(tx, project.id, 65);
+  });
+
+  it('normalizes progress using the total relative weight', async () => {
+    mockMilestones.findProgressInputsInTransaction.mockResolvedValue([
+      { weight: 2, progressPercentage: 50 },
+      { weight: 3, progressPercentage: 100 },
     ]);
 
     await service.create(project.id, {
       milestoneName: 'New Work',
-      weight: 40,
+      weight: 2,
     });
 
-    // (40 * 50 + 60 * 100) / 100 = 80
+    // (2 * 50 + 3 * 100) / 5 = 80
     expect(
       mockMilestones.updateProjectProgressInTransaction,
     ).toHaveBeenCalledWith(tx, project.id, 80);
   });
 
-  it('normalizes partial weights using their current total', async () => {
-    mockMilestones.findProgressInputsInTransaction.mockResolvedValue([
-      { weight: 20, progressPercentage: 50 },
-      { weight: 30, progressPercentage: 100 },
-    ]);
+  it('allows combined relative weights exceeding 100', async () => {
+    mockMilestones.findProgressInputsInTransaction.mockResolvedValue(
+      Array.from({ length: 11 }, (_, index) => ({
+        weight: 10,
+        progressPercentage: index === 0 ? 100 : 0,
+      })),
+    );
 
     await service.create(project.id, {
-      milestoneName: 'New Work',
-      weight: 20,
+      milestoneName: 'Additional Work',
+      weight: 10,
     });
 
-    // (20 * 50 + 30 * 100) / 50 = 80
+    // Total weight = 110
+    // Weighted progress = 1000 / 110
     expect(
       mockMilestones.updateProjectProgressInTransaction,
-    ).toHaveBeenCalledWith(tx, project.id, 80);
+    ).toHaveBeenCalledWith(tx, project.id, 1000 / 110);
   });
 
-  it('rejects total milestone weight greater than 100', async () => {
-    mockMilestones.findProgressInputsInTransaction.mockResolvedValue([
-      { weight: 60, progressPercentage: 0 },
-      { weight: 50, progressPercentage: 0 },
-    ]);
+  it.each([0, -1, 11, 2.5])(
+    'rejects invalid creation weight %s',
+    async (weight) => {
+      await expect(
+        service.create(project.id, {
+          milestoneName: 'Foundation',
+          weight,
+        }),
+      ).rejects.toThrow(BadRequestException);
 
-    await expect(
-      service.create(project.id, {
-        milestoneName: 'New Work',
-        weight: 50,
-      }),
-    ).rejects.toThrow(BadRequestException);
+      expect(mockMilestones.createInTransaction).not.toHaveBeenCalled();
+    },
+  );
 
-    expect(
-      mockMilestones.updateProjectProgressInTransaction,
-    ).not.toHaveBeenCalled();
+  it.each([0, 11, 2.5])('rejects invalid update weight %s', async (weight) => {
+    await expect(service.update(milestone.id, { weight })).rejects.toThrow(
+      BadRequestException,
+    );
+
+    expect(mockMilestones.updateInTransaction).not.toHaveBeenCalled();
   });
 
   it('marks a milestone completed with 100% progress', async () => {
@@ -221,7 +246,7 @@ describe('MilestoneService', () => {
     await expect(
       service.create(project.id, {
         milestoneName: 'Foundation',
-        weight: 40,
+        weight: 5,
       }),
     ).rejects.toThrow(ForbiddenException);
 
@@ -237,7 +262,7 @@ describe('MilestoneService', () => {
     await expect(
       service.create(project.id, {
         milestoneName: 'Foundation',
-        weight: 40,
+        weight: 5,
       }),
     ).rejects.toThrow(ConflictException);
   });
@@ -302,7 +327,7 @@ describe('MilestoneService', () => {
 
     await service.create(project.id, {
       milestoneName: 'Foundation',
-      weight: 40,
+      weight: 5,
     });
 
     expect(mockMilestones.transaction).toHaveBeenCalledTimes(3);

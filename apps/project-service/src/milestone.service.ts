@@ -14,9 +14,6 @@ import type { ProjectAccessActor } from './interfaces/project-access.interface';
 import { MilestoneRepository } from './repositories/milestone.repository';
 import type { ProjectTransaction } from './repositories/project.repository';
 
-const MAX_WEIGHT = 100;
-const WEIGHT_TOLERANCE = 1e-9;
-
 @Injectable()
 export class MilestoneService {
   constructor(
@@ -26,6 +23,9 @@ export class MilestoneService {
 
   async create(projectId: string, dto: CreateMilestoneDto, actorId?: string) {
     const actor = await this.projectAccess.resolveActor(actorId);
+
+    this.assertValidWeight(dto.weight);
+
     const progress = dto.progressPercentage ?? 0;
     const state = this.resolveState(progress, dto.status);
 
@@ -76,6 +76,11 @@ export class MilestoneService {
 
   async update(id: string, dto: UpdateMilestoneDto, actorId?: string) {
     const actor = await this.projectAccess.resolveActor(actorId);
+
+    if (dto.weight !== undefined) {
+      this.assertValidWeight(dto.weight);
+    }
+
     const existing = await this.getMilestoneOrThrow(id);
 
     const result = await this.withLockedProject(
@@ -232,6 +237,15 @@ export class MilestoneService {
     return milestone;
   }
 
+  private assertValidWeight(weight: number): void {
+    if (!Number.isInteger(weight) || weight < 1 || weight > 10) {
+      throw new BadRequestException({
+        code: ErrorCode.MILESTONE_INVALID_WEIGHT,
+        message: 'Milestone weight must be an integer from 1 to 10.',
+      });
+    }
+  }
+
   private async recalculateProjectProgress(
     tx: ProjectTransaction,
     projectId: string,
@@ -245,13 +259,6 @@ export class MilestoneService {
       (sum, milestone) => sum + milestone.weight,
       0,
     );
-
-    if (totalWeight > MAX_WEIGHT + WEIGHT_TOLERANCE) {
-      throw new BadRequestException({
-        code: ErrorCode.MILESTONE_TOTAL_WEIGHT_EXCEEDED,
-        message: 'Total milestone weight cannot exceed 100.',
-      });
-    }
 
     const weightedProgress = milestones.reduce(
       (sum, milestone) => sum + milestone.progressPercentage * milestone.weight,

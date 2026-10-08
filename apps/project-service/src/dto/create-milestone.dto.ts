@@ -3,9 +3,9 @@ import { MilestoneStatus } from '@prisma/client';
 import {
   IsDateString,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
-  IsPositive,
   IsString,
   Matches,
   Max,
@@ -37,13 +37,14 @@ export class CreateMilestoneDto {
   dueDate?: string | null;
 
   @ApiProperty({
-    example: 40,
-    description: 'Milestone weight must be greater than 0 and at most 100',
-    maximum: 100,
+    example: 5,
+    description: 'Relative milestone weight from 1 to 10',
+    minimum: 1,
+    maximum: 10,
   })
-  @IsNumber({ allowNaN: false, allowInfinity: false })
-  @IsPositive()
-  @Max(100)
+  @IsInt()
+  @Min(1)
+  @Max(10)
   weight!: number;
 
   @ApiPropertyOptional({

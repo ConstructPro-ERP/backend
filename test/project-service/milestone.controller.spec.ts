@@ -75,12 +75,12 @@ describe('MilestoneController', () => {
     await request(server)
       .post(`/projects/${PROJECT_ID}/milestones`)
       .set('x-user-id', ACTOR_ID)
-      .send({ milestoneName: 'Foundation', weight: 40 })
+      .send({ milestoneName: 'Foundation', weight: 5 })
       .expect(201);
 
     expect(mockService.create).toHaveBeenCalledWith(
       PROJECT_ID,
-      { milestoneName: 'Foundation', weight: 40 },
+      { milestoneName: 'Foundation', weight: 5 },
       ACTOR_ID,
     );
   });
@@ -107,12 +107,12 @@ describe('MilestoneController', () => {
     await request(server)
       .patch(`/milestones/${MILESTONE_ID}`)
       .set('x-user-id', ACTOR_ID)
-      .send({ weight: 45 })
+      .send({ weight: 7 })
       .expect(200);
 
     expect(mockService.update).toHaveBeenCalledWith(
       MILESTONE_ID,
-      { weight: 45 },
+      { weight: 7 },
       ACTOR_ID,
     );
   });
@@ -144,7 +144,7 @@ describe('MilestoneController', () => {
     await request(server)
       .post(`/projects/${PROJECT_ID}/milestones`)
       .set('x-user-id', ACTOR_ID)
-      .send({ milestoneName: 'Foundation', weight: 101 })
+      .send({ milestoneName: 'Foundation', weight: 11 })
       .expect(400);
 
     expect(mockService.create).not.toHaveBeenCalled();
@@ -154,7 +154,7 @@ describe('MilestoneController', () => {
     await request(server)
       .post('/projects/invalid-id/milestones')
       .set('x-user-id', ACTOR_ID)
-      .send({ milestoneName: 'Foundation', weight: 40 })
+      .send({ milestoneName: 'Foundation', weight: 5 })
       .expect(400);
 
     expect(mockService.create).not.toHaveBeenCalled();
@@ -185,7 +185,7 @@ describe('MilestoneController', () => {
       .set('x-user-id', ACTOR_ID)
       .send({
         milestoneName: 'Foundation',
-        weight: 40,
+        weight: 5,
         completedAt: '2026-10-08T00:00:00.000Z',
       })
       .expect(400);
@@ -196,17 +196,22 @@ describe('MilestoneController', () => {
   it('propagates service validation errors', async () => {
     mockService.create.mockRejectedValue(
       new BadRequestException({
-        code: 'MILESTONE_TOTAL_WEIGHT_EXCEEDED',
-        message: 'Total milestone weight cannot exceed 100.',
+        code: 'MILESTONE_INVALID_STATUS_PROGRESS',
+        message: 'Milestone status and progress are inconsistent.',
       }),
     );
 
     const response = await request(server)
       .post(`/projects/${PROJECT_ID}/milestones`)
       .set('x-user-id', ACTOR_ID)
-      .send({ milestoneName: 'Foundation', weight: 40 })
+      .send({
+        milestoneName: 'Foundation',
+        weight: 5,
+        progressPercentage: 50,
+        status: 'PENDING',
+      })
       .expect(400);
 
-    expect(response.text).toContain('MILESTONE_TOTAL_WEIGHT_EXCEEDED');
+    expect(response.text).toContain('MILESTONE_INVALID_STATUS_PROGRESS');
   });
 });

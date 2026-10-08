@@ -116,12 +116,12 @@ describe('MilestonesGatewayController', () => {
       .post(`/api/projects/${PROJECT_ID}/milestones`)
       .set('authorization', AUTHORIZATION)
       .set('x-user-id', 'spoofed-user-id')
-      .send({ milestoneName: 'Foundation', weight: 40 })
+      .send({ milestoneName: 'Foundation', weight: 5 })
       .expect(201);
 
     expect(mockHttp.post).toHaveBeenCalledWith(
       `${SERVICE_URL}/projects/${PROJECT_ID}/milestones`,
-      { milestoneName: 'Foundation', weight: 40 },
+      { milestoneName: 'Foundation', weight: 5 },
       {
         headers: {
           authorization: AUTHORIZATION,
@@ -171,12 +171,12 @@ describe('MilestonesGatewayController', () => {
     await request(server)
       .patch(`/api/milestones/${MILESTONE_ID}`)
       .set('authorization', AUTHORIZATION)
-      .send({ weight: 45 })
+      .send({ weight: 7 })
       .expect(200);
 
     expect(mockHttp.patch).toHaveBeenCalledWith(
       `${SERVICE_URL}/milestones/${MILESTONE_ID}`,
-      { weight: 45 },
+      { weight: 7 },
       {
         headers: {
           authorization: AUTHORIZATION,
@@ -230,7 +230,7 @@ describe('MilestonesGatewayController', () => {
     await request(server)
       .post(`/api/projects/${PROJECT_ID}/milestones`)
       .set('authorization', AUTHORIZATION)
-      .send({ milestoneName: 'Foundation', weight: 40 })
+      .send({ milestoneName: 'Foundation', weight: 5 })
       .expect(403);
 
     expect(mockHttp.post).not.toHaveBeenCalled();
@@ -272,7 +272,7 @@ describe('MilestonesGatewayController', () => {
     await request(server)
       .post(`/api/projects/${PROJECT_ID}/milestones`)
       .set('authorization', AUTHORIZATION)
-      .send({ milestoneName: 'Foundation', weight: 101 })
+      .send({ milestoneName: 'Foundation', weight: 11 })
       .expect(400);
 
     expect(mockHttp.post).not.toHaveBeenCalled();

@@ -19,9 +19,9 @@ import type { AxiosResponse } from 'axios';
 import type { CookieOptions, Request, Response } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { firstValueFrom, type Observable } from 'rxjs';
-import { CalendarEventsQueryDto } from '../../../calendar-service/src/dto/calendar-events-query.dto';
-import { CreateCalendarEventDto } from '../../../calendar-service/src/dto/create-calendar-event.dto';
-import { UpdateCalendarEventDto } from '../../../calendar-service/src/dto/update-calendar-event.dto';
+import { CalendarEventsQueryDto } from '../../../calender-service/src/dto/calendar-events-query.dto';
+import { CreateCalendarEventDto } from '../../../calender-service/src/dto/create-calendar-event.dto';
+import { UpdateCalendarEventDto } from '../../../calender-service/src/dto/update-calendar-event.dto';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 
 const CALENDAR_STATE_COOKIE = 'constructpro_calendar_oauth_state';

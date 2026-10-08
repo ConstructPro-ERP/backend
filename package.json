@@ -13,8 +13,10 @@
     "build": "nest build",
     "build:all": "tsc -p tsconfig.build.json",
     "vercel-build": "prisma generate && npm run build:all",
+  
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
+
     "dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
     "dev:quotation-service": "ts-node -r tsconfig-paths/register apps/quotation-service/src/main.ts",
@@ -27,6 +29,7 @@
     "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
     "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
     "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calender-service/src/main.ts",
+
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
     "start:auth-service": "node dist/apps/auth-service/src/main.js",
@@ -40,10 +43,13 @@
     "start:lead-service": "node dist/apps/lead-service/src/main.js",
     "start:project-service": "node dist/apps/project-service/src/main.js",
     "start:calendar-service": "node dist/apps/calender-service/src/main.js",
+
     "start:vercel": "node dist/server.js",
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
+
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"*.ts\" --fix",
+
     "test": "jest",
     "test:unit": "jest --config ./jest.unit.config.js",
     "test:watch": "jest --watch",

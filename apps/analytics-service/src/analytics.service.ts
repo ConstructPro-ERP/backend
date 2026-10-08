@@ -342,15 +342,12 @@ export class AnalyticsService {
         const completedMilestoneCount = project.milestones.filter(
           (milestone) => milestone.status === 'COMPLETED',
         ).length;
+
         const milestones = project.milestones.map((milestone) => {
           const taskCount = milestone.tasks.length;
           const completedTaskCount = milestone.tasks.filter(
             (task) => task.status === TaskStatus.COMPLETED,
           ).length;
-          const completionPercentage =
-            taskCount === 0
-              ? 0
-              : round2((completedTaskCount / taskCount) * 100);
 
           return {
             id: milestone.id,
@@ -359,7 +356,7 @@ export class AnalyticsService {
             dueDate: milestone.dueDate,
             taskCount,
             completedTaskCount,
-            completionPercentage,
+            completionPercentage: milestone.progressPercentage,
           };
         });
 
@@ -372,10 +369,7 @@ export class AnalyticsService {
           budget: project.budget,
           milestoneCount,
           completedMilestoneCount,
-          completionPercentage:
-            milestoneCount === 0
-              ? 0
-              : round2((completedMilestoneCount / milestoneCount) * 100),
+          completionPercentage: project.progressPercentage,
           milestones,
         };
       }),

@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { MilestoneStatus, Prisma, ProjectStatus } from '@prisma/client';
 import { ErrorCode } from '../../../shared/error-codes';
@@ -15,15 +17,20 @@ import { MilestoneRepository } from './repositories/milestone.repository';
 import type { ProjectTransaction } from './repositories/project.repository';
 import {
   MAX_TRANSACTION_ATTEMPTS,
+  TRANSACTION_RETRY_DELAY_OPTIONS,
   isRetryableTransactionError,
   waitBeforeTransactionRetry,
 } from './utils/transaction-error.util';
+import type { TransactionRetryDelayOptions } from './utils/transaction-error.util';
 
 @Injectable()
 export class MilestoneService {
   constructor(
     private readonly milestones: MilestoneRepository,
     private readonly projectAccess: ProjectAccessService,
+    @Optional()
+    @Inject(TRANSACTION_RETRY_DELAY_OPTIONS)
+    private readonly retryDelayOptions?: TransactionRetryDelayOptions,
   ) {}
 
   async create(projectId: string, dto: CreateMilestoneDto, actorId?: string) {
@@ -383,7 +390,7 @@ export class MilestoneService {
           });
         }
 
-        await waitBeforeTransactionRetry(attempt);
+        await waitBeforeTransactionRetry(attempt, this.retryDelayOptions);
       }
     }
 

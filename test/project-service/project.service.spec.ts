@@ -19,6 +19,7 @@ import {
   SortOrder,
 } from '../../apps/project-service/src/dto/project-query.dto';
 import { ErrorCode } from '../../shared/error-codes';
+import { TRANSACTION_RETRY_DELAY_OPTIONS } from '../../apps/project-service/src/utils/transaction-error.util';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -169,6 +170,14 @@ describe('ProjectService', () => {
         {
           provide: ProjectLifecycleService,
           useValue: mockProjectLifecycleService,
+        },
+        {
+          provide: TRANSACTION_RETRY_DELAY_OPTIONS,
+          useValue: {
+            baseDelayMs: 1,
+            maxDelayMs: 1,
+            maxJitterMs: 0,
+          },
         },
       ],
     }).compile();

@@ -3,6 +3,15 @@ import { Prisma } from '@prisma/client';
 const SERIALIZATION_FAILURE_CODE = '40001';
 export const MAX_TRANSACTION_ATTEMPTS = 4;
 
+export const TRANSACTION_RETRY_DELAY_OPTIONS =
+  'TRANSACTION_RETRY_DELAY_OPTIONS';
+
+export interface TransactionRetryDelayOptions {
+  baseDelayMs?: number;
+  maxDelayMs?: number;
+  maxJitterMs?: number;
+}
+
 /**
  * Checks whether a value is a non-null object.
  */
@@ -74,12 +83,14 @@ export function isRetryableTransactionError(error: unknown): boolean {
  * Uses exponential backoff with random jitter to reduce
  * repeated collisions between concurrent transactions.
  */
+
 export async function waitBeforeTransactionRetry(
   attempt: number,
+  options: TransactionRetryDelayOptions = {},
 ): Promise<void> {
-  const BASE_DELAY_MS = 500;
-  const MAX_DELAY_MS = 10000;
-  const MAX_JITTER_MS = 2500;
+  const BASE_DELAY_MS = options.baseDelayMs ?? 500;
+  const MAX_DELAY_MS = options.maxDelayMs ?? 10000;
+  const MAX_JITTER_MS = options.maxJitterMs ?? 2500;
 
   const backoffMs = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 3 ** (attempt - 1));
 

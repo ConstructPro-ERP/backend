@@ -1,8 +1,10 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
   MilestoneStatus,
@@ -32,9 +34,11 @@ import { ProjectManagerCandidate } from './interfaces/project-manager.interface'
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 import {
   MAX_TRANSACTION_ATTEMPTS,
+  TRANSACTION_RETRY_DELAY_OPTIONS,
   isRetryableTransactionError,
   waitBeforeTransactionRetry,
 } from './utils/transaction-error.util';
+import type { TransactionRetryDelayOptions } from './utils/transaction-error.util';
 
 @Injectable()
 export class ProjectService {
@@ -42,6 +46,9 @@ export class ProjectService {
     private readonly projects: ProjectRepository,
     private readonly projectAccess: ProjectAccessService,
     private readonly projectLifecycle: ProjectLifecycleService,
+    @Optional()
+    @Inject(TRANSACTION_RETRY_DELAY_OPTIONS)
+    private readonly retryDelayOptions?: TransactionRetryDelayOptions,
   ) {}
 
   getHealth() {
@@ -579,7 +586,7 @@ export class ProjectService {
           throw new ConflictException(conflict);
         }
 
-        await waitBeforeTransactionRetry(attempt);
+        await waitBeforeTransactionRetry(attempt, this.retryDelayOptions);
       }
     }
 

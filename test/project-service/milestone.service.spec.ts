@@ -67,6 +67,11 @@ describe('MilestoneService', () => {
     service = new MilestoneService(
       mockMilestones as unknown as MilestoneRepository,
       mockAccess as unknown as ProjectAccessService,
+      {
+        baseDelayMs: 10,
+        maxDelayMs: 100,
+        maxJitterMs: 10,
+      },
     );
 
     mockAccess.resolveActor.mockResolvedValue({

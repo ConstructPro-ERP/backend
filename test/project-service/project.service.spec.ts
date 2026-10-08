@@ -31,8 +31,11 @@ const mockProjectRepository = {
   findApprovedQuotation: jest.fn(),
   transaction: jest.fn(),
   lockQuotation: jest.fn(),
+  lockProject: jest.fn(),
   findQuotation: jest.fn(),
   findProjectInTransaction: jest.fn(),
+  findApprovedQuotationInTransaction: jest.fn(),
+  findMilestonesForCompletionInTransaction: jest.fn(),
   createInTransaction: jest.fn(),
   updateInTransaction: jest.fn(),
   linkQuotation: jest.fn(),
@@ -86,6 +89,7 @@ const planningProject = {
   budget: 10000000,
   projectManagerId: 'manager-1',
   status: ProjectStatus.PLANNING,
+  progressPercentage: 0,
   createdAt: new Date('2026-09-15T00:00:00.000Z'),
   updatedAt: new Date('2026-09-15T00:00:00.000Z'),
   projectManager: {
@@ -185,6 +189,12 @@ describe('ProjectService', () => {
       { id: 'quotation-1' },
     ]);
 
+    mockProjectRepository.lockProject.mockResolvedValue([{ id: 'project-1' }]);
+
+    mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+      planningProject,
+    );
+
     mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
       activeManager,
     );
@@ -194,6 +204,14 @@ describe('ProjectService', () => {
     );
 
     mockProjectRepository.findApprovedQuotation.mockResolvedValue(null);
+
+    mockProjectRepository.findApprovedQuotationInTransaction.mockResolvedValue(
+      null,
+    );
+
+    mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+      [],
+    );
   });
 
   describe('create', () => {
@@ -245,9 +263,13 @@ describe('ProjectService', () => {
 
   describe('updateStatus', () => {
     it('rejects ACTIVE when no approved quotation exists', async () => {
-      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        planningProject,
+      );
 
-      mockProjectRepository.findApprovedQuotation.mockResolvedValue(null);
+      mockProjectRepository.findApprovedQuotationInTransaction.mockResolvedValue(
+        null,
+      );
 
       await expect(
         service.updateStatus('project-1', {
@@ -259,30 +281,54 @@ describe('ProjectService', () => {
         },
       });
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(mockProjectRepository.lockProject).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+      );
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
 
     it('allows ACTIVE when an APPROVED quotation exists', async () => {
-      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        planningProject,
+      );
 
-      mockProjectRepository.findApprovedQuotation.mockResolvedValue({
-        id: 'quotation-1',
-        status: QuotationStatus.APPROVED,
-      });
+      mockProjectRepository.findApprovedQuotationInTransaction.mockResolvedValue(
+        {
+          id: 'quotation-1',
+          status: QuotationStatus.APPROVED,
+        },
+      );
 
-      mockProjectRepository.update.mockResolvedValue(activeProject);
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        activeProject,
+      );
 
       const result = await service.updateStatus('project-1', {
         status: ProjectStatus.ACTIVE,
       });
 
-      expect(
-        mockProjectRepository.findProjectManagerCandidate,
-      ).toHaveBeenCalledWith('manager-1');
+      expect(mockProjectRepository.lockProject).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+      );
 
-      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
-        status: ProjectStatus.ACTIVE,
-      });
+      expect(
+        mockProjectRepository.findProjectManagerCandidateInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'manager-1');
+
+      expect(
+        mockProjectRepository.findApprovedQuotationInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'project-1');
+
+      expect(mockProjectRepository.updateInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+        {
+          status: ProjectStatus.ACTIVE,
+        },
+      );
 
       expect(
         mockProjectLifecycleService.assertTransitionAllowed,
@@ -292,18 +338,36 @@ describe('ProjectService', () => {
     });
 
     it('allows ACTIVE when a CONVERTED quotation exists', async () => {
-      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        planningProject,
+      );
 
-      mockProjectRepository.findApprovedQuotation.mockResolvedValue({
-        id: 'quotation-1',
-        status: QuotationStatus.CONVERTED,
-      });
+      mockProjectRepository.findApprovedQuotationInTransaction.mockResolvedValue(
+        {
+          id: 'quotation-1',
+          status: QuotationStatus.CONVERTED,
+        },
+      );
 
-      mockProjectRepository.update.mockResolvedValue(activeProject);
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        activeProject,
+      );
 
       const result = await service.updateStatus('project-1', {
         status: ProjectStatus.ACTIVE,
       });
+
+      expect(
+        mockProjectRepository.findApprovedQuotationInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'project-1');
+
+      expect(mockProjectRepository.updateInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+        {
+          status: ProjectStatus.ACTIVE,
+        },
+      );
 
       expect(result.status).toBe(ProjectStatus.ACTIVE);
     });
@@ -314,7 +378,9 @@ describe('ProjectService', () => {
         projectManagerId: null,
       };
 
-      mockProjectRepository.findById.mockResolvedValue(projectWithoutManager);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        projectWithoutManager,
+      );
 
       await expect(
         service.updateStatus('project-1', {
@@ -327,10 +393,14 @@ describe('ProjectService', () => {
       });
 
       expect(
-        mockProjectRepository.findProjectManagerCandidate,
+        mockProjectRepository.findProjectManagerCandidateInTransaction,
       ).not.toHaveBeenCalled();
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(
+        mockProjectRepository.findApprovedQuotationInTransaction,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects activation when the Project start date is missing', async () => {
@@ -339,7 +409,9 @@ describe('ProjectService', () => {
         startDate: null,
       };
 
-      mockProjectRepository.findById.mockResolvedValue(projectWithoutStartDate);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        projectWithoutStartDate,
+      );
 
       await expect(
         service.updateStatus('project-1', {
@@ -352,16 +424,18 @@ describe('ProjectService', () => {
       });
 
       expect(
-        mockProjectRepository.findProjectManagerCandidate,
+        mockProjectRepository.findProjectManagerCandidateInTransaction,
       ).not.toHaveBeenCalled();
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects activation when the assigned Project Manager is inactive', async () => {
-      mockProjectRepository.findById.mockResolvedValue(planningProject);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        planningProject,
+      );
 
-      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+      mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
         inactiveManager,
       );
 
@@ -371,11 +445,15 @@ describe('ProjectService', () => {
         }),
       ).rejects.toMatchObject({
         response: {
-          code: 'PROJECT_MANAGER_INACTIVE',
+          code: ErrorCode.PROJECT_MANAGER_INACTIVE,
         },
       });
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(
+        mockProjectRepository.findApprovedQuotationInTransaction,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
 
     it('rejects activation when the stored Project date range is invalid', async () => {
@@ -385,7 +463,9 @@ describe('ProjectService', () => {
         endDate: new Date('2026-10-01T00:00:00.000Z'),
       };
 
-      mockProjectRepository.findById.mockResolvedValue(projectWithInvalidDates);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        projectWithInvalidDates,
+      );
 
       await expect(
         service.updateStatus('project-1', {
@@ -397,7 +477,7 @@ describe('ProjectService', () => {
         },
       });
 
-      expect(mockProjectRepository.update).not.toHaveBeenCalled();
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
 
     it('updates an allowed non-ACTIVE transition without checking quotations', async () => {
@@ -406,8 +486,13 @@ describe('ProjectService', () => {
         status: ProjectStatus.ON_HOLD,
       };
 
-      mockProjectRepository.findById.mockResolvedValue(activeProject);
-      mockProjectRepository.update.mockResolvedValue(onHoldProject);
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        onHoldProject,
+      );
 
       const result = await service.updateStatus('project-1', {
         status: ProjectStatus.ON_HOLD,
@@ -418,14 +503,199 @@ describe('ProjectService', () => {
       ).toHaveBeenCalledWith(ProjectStatus.ACTIVE, ProjectStatus.ON_HOLD);
 
       expect(
-        mockProjectRepository.findApprovedQuotation,
+        mockProjectRepository.findApprovedQuotationInTransaction,
       ).not.toHaveBeenCalled();
 
-      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
-        status: ProjectStatus.ON_HOLD,
-      });
+      expect(
+        mockProjectRepository.findMilestonesForCompletionInTransaction,
+      ).not.toHaveBeenCalled();
+
+      expect(mockProjectRepository.updateInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+        {
+          status: ProjectStatus.ON_HOLD,
+        },
+      );
 
       expect(result.status).toBe(ProjectStatus.ON_HOLD);
+    });
+
+    it('rejects completion when project progress is below 100', async () => {
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue({
+        ...activeProject,
+        progressPercentage: 80,
+      });
+
+      mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+        [
+          {
+            id: 'milestone-1',
+            status: 'IN_PROGRESS',
+            progressPercentage: 80,
+            completedAt: null,
+          },
+        ],
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.COMPLETED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion when no milestones exist', async () => {
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue({
+        ...activeProject,
+        progressPercentage: 100,
+      });
+
+      mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+        [],
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.COMPLETED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion when any milestone is incomplete', async () => {
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue({
+        ...activeProject,
+        progressPercentage: 100,
+      });
+
+      mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+        [
+          {
+            id: 'milestone-1',
+            status: 'COMPLETED',
+            progressPercentage: 100,
+            completedAt: new Date(),
+          },
+          {
+            id: 'milestone-2',
+            status: 'IN_PROGRESS',
+            progressPercentage: 50,
+            completedAt: null,
+          },
+        ],
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.COMPLETED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('allows completion when all requirements are satisfied', async () => {
+      const completedProject = {
+        ...activeProject,
+        status: ProjectStatus.COMPLETED,
+        progressPercentage: 100,
+      };
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue({
+        ...activeProject,
+        progressPercentage: 100,
+      });
+
+      mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+        [
+          {
+            id: 'milestone-1',
+            status: 'COMPLETED',
+            progressPercentage: 100,
+            completedAt: new Date(),
+          },
+          {
+            id: 'milestone-2',
+            status: 'COMPLETED',
+            progressPercentage: 100,
+            completedAt: new Date(),
+          },
+        ],
+      );
+
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        completedProject,
+      );
+
+      const result = await service.updateStatus('project-1', {
+        status: ProjectStatus.COMPLETED,
+      });
+
+      expect(mockProjectRepository.lockProject).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+      );
+
+      expect(
+        mockProjectRepository.findMilestonesForCompletionInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'project-1');
+
+      expect(mockProjectRepository.updateInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+        {
+          status: ProjectStatus.COMPLETED,
+        },
+      );
+
+      expect(result.status).toBe(ProjectStatus.COMPLETED);
+      expect(result.progressPercentage).toBe(100);
+    });
+
+    it('rejects completion when a completed milestone lacks completedAt', async () => {
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue({
+        ...activeProject,
+        progressPercentage: 100,
+      });
+
+      mockProjectRepository.findMilestonesForCompletionInTransaction.mockResolvedValue(
+        [
+          {
+            id: 'milestone-1',
+            status: 'COMPLETED',
+            progressPercentage: 100,
+            completedAt: null,
+          },
+        ],
+      );
+
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.COMPLETED,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+        },
+      });
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
   });
 

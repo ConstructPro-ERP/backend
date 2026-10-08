@@ -8,6 +8,7 @@ import { ProjectService } from './project.service';
 import { ProjectAccessService } from './project-access.service';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 import { MilestoneRepository } from './repositories/milestone.repository';
+import { MilestoneService } from './milestone.service';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { MilestoneRepository } from './repositories/milestone.repository';
   controllers: [ProjectController],
   providers: [
     ProjectService,
+    MilestoneService,
     ProjectAccessService,
     ProjectLifecycleService,
     ProjectRepository,

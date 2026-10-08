@@ -13,10 +13,8 @@
     "build": "nest build",
     "build:all": "tsc -p tsconfig.build.json",
     "vercel-build": "prisma generate && npm run build:all",
-
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
-
     "dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
     "dev:quotation-service": "ts-node -r tsconfig-paths/register apps/quotation-service/src/main.ts",
@@ -28,7 +26,7 @@
     "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
     "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
     "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
-
+    "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calendar-service/src/main.ts",
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
     "start:auth-service": "node dist/apps/auth-service/src/main.js",
@@ -41,14 +39,11 @@
     "start:client-service": "node dist/apps/client-service/src/main.js",
     "start:lead-service": "node dist/apps/lead-service/src/main.js",
     "start:project-service": "node dist/apps/project-service/src/main.js",
-
+   "start:calendar-service": "node dist/apps/calendar-service/src/main.js", 
     "start:vercel": "node dist/server.js",
-
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
-
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"*.ts\" --fix",
-
     "test": "jest",
     "test:unit": "jest --config ./jest.unit.config.js",
     "test:watch": "jest --watch",
@@ -70,11 +65,13 @@
     "@prisma/adapter-neon": "^7.8.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
-    "@vercel/blob": "^1.1.1",
     "@types/passport-google-oauth20": "^2.0.17",
+    "@vercel/blob": "^1.1.1",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
+    "cookie-parser": "^1.4.7",
+    "googleapis": "^183.0.0",
     "joi": "^18.2.1",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
@@ -92,6 +89,7 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
     "@types/express": "^5.0.0",
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",

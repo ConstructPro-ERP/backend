@@ -13,7 +13,7 @@ import { RagGatewayController } from './controllers/rag-gateway.controller';
 import { UsersGatewayController } from './controllers/users-gateway.controller';
 import { LeadGatewayController } from './controllers/lead-gateway.controller';
 import { ClientGatewayController } from './controllers/client-gateway.controller';
-
+import { CalendarGatewayController } from './controllers/calendar-gateway.controller';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -34,6 +34,7 @@ import { ClientGatewayController } from './controllers/client-gateway.controller
     UsersGatewayController,
     LeadGatewayController,
     ClientGatewayController,
+    CalendarGatewayController,
   ],
 })
 export class AppModule {}

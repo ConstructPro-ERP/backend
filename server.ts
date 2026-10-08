@@ -7,7 +7,7 @@ import { bootstrap as bootstrapPaymentService } from './apps/payment-service/src
 import { bootstrap as bootstrapQuotationService } from './apps/quotation-service/src/main.js';
 import { bootstrap as bootstrapUserService } from './apps/user-service/src/main.js';
 import { bootstrap as bootstrapProjectService } from './apps/project-service/src/main.js';
-
+import { bootstrap as bootstrapCalendarService } from './apps/calender-service/src/main.js';
 type DeployableApp =
   | 'api-gateway'
   | 'auth-service'
@@ -17,6 +17,7 @@ type DeployableApp =
   | 'payment-service'
   | 'analytics-service'
   | 'ai-service'
+  | 'calendar-service'
   | 'project-service';
 
 type BootstrapFunction = () => Promise<void>;
@@ -33,6 +34,7 @@ const bootstraps: Record<DeployableApp, BootstrapFunction> = {
   'analytics-service': bootstrapAnalyticsService,
   'ai-service': bootstrapAiService,
   'project-service': bootstrapProjectService,
+  'calendar-service': bootstrapCalendarService,
 };
 
 function isDeployableApp(value: string): value is DeployableApp {

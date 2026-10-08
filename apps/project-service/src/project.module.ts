@@ -9,6 +9,7 @@ import { ProjectAccessService } from './project-access.service';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 import { MilestoneRepository } from './repositories/milestone.repository';
 import { MilestoneService } from './milestone.service';
+import { MilestoneController } from './milestone.controller';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { MilestoneService } from './milestone.service';
       envFilePath: join(process.cwd(), '.env'),
     }),
   ],
-  controllers: [ProjectController],
+  controllers: [ProjectController, MilestoneController],
   providers: [
     ProjectService,
     MilestoneService,

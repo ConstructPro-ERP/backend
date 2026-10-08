@@ -6,6 +6,7 @@ import { AiForecastingGatewayController } from './controllers/ai-forecasting-gat
 import { AnalyticsGatewayController } from './controllers/analytics-gateway.controller';
 import { AuthGatewayController } from './controllers/auth-gateway.controller';
 import { ProjectsGatewayController } from './controllers/projects-gateway.controller';
+import { MilestonesGatewayController } from './controllers/milestones-gateway.controller';
 import { InvoicesGatewayController } from './controllers/invoices-gateway.controller';
 import { PaymentsGatewayController } from './controllers/payments-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
@@ -27,6 +28,7 @@ import { ClientGatewayController } from './controllers/client-gateway.controller
     AnalyticsGatewayController,
     AuthGatewayController,
     ProjectsGatewayController,
+    MilestonesGatewayController,
     QuotationsGatewayController,
     InvoicesGatewayController,
     PaymentsGatewayController,

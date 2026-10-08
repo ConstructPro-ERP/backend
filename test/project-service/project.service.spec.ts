@@ -697,6 +697,75 @@ describe('ProjectService', () => {
 
       expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     });
+
+    it('retries a project status update after a serialization conflict', async () => {
+      // Arrange
+      const onHoldProject = {
+        ...activeProject,
+        status: ProjectStatus.ON_HOLD,
+      };
+
+      mockProjectRepository.transaction
+        .mockRejectedValueOnce(createPrismaTransactionConflict())
+        .mockImplementationOnce(
+          (work: (tx: ProjectTransaction) => Promise<unknown>) =>
+            work(fakeTransaction),
+        );
+
+      mockProjectRepository.findProjectInTransaction.mockResolvedValue(
+        activeProject,
+      );
+
+      mockProjectRepository.updateInTransaction.mockResolvedValue(
+        onHoldProject,
+      );
+
+      // Act
+      const result = await service.updateStatus('project-1', {
+        status: ProjectStatus.ON_HOLD,
+      });
+
+      // Assert
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(2);
+
+      expect(mockProjectRepository.lockProject).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+      );
+
+      expect(mockProjectRepository.updateInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        'project-1',
+        {
+          status: ProjectStatus.ON_HOLD,
+        },
+      );
+
+      expect(result.status).toBe(ProjectStatus.ON_HOLD);
+    });
+
+    it('returns a lifecycle concurrency error after three failed attempts', async () => {
+      // Arrange
+      mockProjectRepository.transaction.mockRejectedValue(
+        createNeonSerializationConflict(),
+      );
+
+      // Act / Assert
+      await expect(
+        service.updateStatus('project-1', {
+          status: ProjectStatus.ON_HOLD,
+        }),
+      ).rejects.toMatchObject({
+        response: {
+          code: ErrorCode.PROJECT_STATUS_CONCURRENCY_CONFLICT,
+        },
+        status: 409,
+      });
+
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(3);
+
+      expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
+    });
   });
 
   describe('findAll', () => {

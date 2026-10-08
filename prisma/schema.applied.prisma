@@ -431,5 +431,6 @@ model AiKnowledgeChunk {
   @@unique([projectId, sourceType, sourceId])
   @@index([projectId])
   @@index([sourceType, sourceId])
+  @@index([embedding], map: "ai_knowledge_chunks_embedding_ivfflat_idx")
   @@map("ai_knowledge_chunks")
 }

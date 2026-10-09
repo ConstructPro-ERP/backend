@@ -352,6 +352,8 @@ export class ProjectService {
     }
 
     if (quotation.projectId) {
+      await this.projects.lockProject(tx, quotation.projectId);
+
       const existingProject = await this.projects.findProjectInTransaction(
         tx,
         quotation.projectId,
@@ -378,6 +380,8 @@ export class ProjectService {
     }
 
     if (dto.targetProjectId) {
+      await this.projects.lockProject(tx, dto.targetProjectId);
+
       const targetProject = await this.projects.findProjectInTransaction(
         tx,
         dto.targetProjectId,
@@ -481,7 +485,10 @@ export class ProjectService {
 
   private async validateActivationRequirements(
     tx: ProjectTransaction,
-    project: ProjectWithDetails,
+    project: Pick<
+      ProjectWithDetails,
+      'id' | 'projectManagerId' | 'startDate' | 'endDate'
+    >,
   ): Promise<void> {
     if (!project.projectManagerId) {
       throw new BadRequestException({
@@ -521,7 +528,7 @@ export class ProjectService {
 
   private async validateCompletionRequirements(
     tx: ProjectTransaction,
-    project: ProjectWithDetails,
+    project: Pick<ProjectWithDetails, 'id' | 'progressPercentage'>,
   ): Promise<void> {
     const milestones =
       await this.projects.findMilestonesForCompletionInTransaction(

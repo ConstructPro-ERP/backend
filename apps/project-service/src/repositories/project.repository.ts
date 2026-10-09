@@ -129,7 +129,6 @@ export class ProjectRepository {
   findProjectInTransaction(tx: ProjectTransaction, projectId: string) {
     return tx.project.findUnique({
       where: { id: projectId },
-      include: projectInclude,
     });
   }
 

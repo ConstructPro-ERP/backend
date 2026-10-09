@@ -14,6 +14,9 @@ describe('Milestone Service — database integration', () => {
   let server: Server;
   let prisma: PrismaService;
   let managerId: string;
+  let adminRoleId: string;
+  let accountantRoleId: string;
+  let projectManagerRoleId: string;
 
   const runId = `${Date.now()}-${process.pid}`;
   const projectIds: string[] = [];
@@ -39,18 +42,28 @@ describe('Milestone Service — database integration', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
-    const role = await prisma.role.upsert({
-      where: { roleName: 'PROJECT_MANAGER' },
-      update: {},
-      create: { roleName: 'PROJECT_MANAGER' },
-    });
+    const [managerRole, adminRole, accountantRole] = await Promise.all([
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'PROJECT_MANAGER' },
+      }),
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'ADMIN' },
+      }),
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'ACCOUNTANT' },
+      }),
+    ]);
+
+    projectManagerRoleId = managerRole.id;
+    adminRoleId = adminRole.id;
+    accountantRoleId = accountantRole.id;
 
     const manager = await prisma.user.create({
       data: {
         fullName: `Milestone Test Manager ${runId}`,
         email: `milestone-integration-${runId}@test.com`,
         password: 'hashed',
-        roleId: role.id,
+        roleId: projectManagerRoleId,
       },
     });
 
@@ -554,23 +567,28 @@ describe('Milestone Service — database integration', () => {
       label: string,
       inactive = false,
     ): Promise<string> {
-      const role = await prisma.role.upsert({
-        where: { roleName },
-        update: {},
-        create: { roleName },
-      });
+      let roleId: string;
+
+      if (roleName === 'ADMIN') {
+        roleId = adminRoleId;
+      } else if (roleName === 'ACCOUNTANT') {
+        roleId = accountantRoleId;
+      } else {
+        roleId = projectManagerRoleId;
+      }
 
       const user = await prisma.user.create({
         data: {
           fullName: `Milestone Permission ${label}`,
           email: `milestone-permission-${Date.now()}-${label}@test.com`,
           password: 'hashed',
-          roleId: role.id,
+          roleId,
           status: inactive ? 'INACTIVE' : 'ACTIVE',
         },
       });
 
       temporaryUserIds.push(user.id);
+
       return user.id;
     }
 

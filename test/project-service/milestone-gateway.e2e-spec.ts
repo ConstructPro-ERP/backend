@@ -33,6 +33,8 @@ describe('Milestones — Gateway to Project Service E2E', () => {
   let authServer: Server;
   let prisma: PrismaService;
   let managerId: string;
+  let projectManagerRoleId: string;
+  let accountantRoleId: string;
 
   const runId = `${Date.now()}-${process.pid}-gateway`;
   const projectIds: string[] = [];
@@ -46,22 +48,20 @@ describe('Milestones — Gateway to Project Service E2E', () => {
     roleName: 'PROJECT_MANAGER' | 'ACCOUNTANT',
     label: string,
   ): Promise<string> {
-    const role = await prisma.role.upsert({
-      where: { roleName },
-      update: {},
-      create: { roleName },
-    });
+    const roleId =
+      roleName === 'PROJECT_MANAGER' ? projectManagerRoleId : accountantRoleId;
 
     const user = await prisma.user.create({
       data: {
         fullName: `Gateway Milestone ${label}`,
         email: `${runId}-${label}@test.com`,
         password: 'hashed',
-        roleId: role.id,
+        roleId,
       },
     });
 
     userIds.push(user.id);
+
     identities.set(label, {
       id: user.id,
       role: roleName,
@@ -95,6 +95,22 @@ describe('Milestones — Gateway to Project Service E2E', () => {
     }).compile();
 
     prisma = projectModule.get<PrismaService>(PrismaService);
+
+    const [managerRole, accountantRole] = await Promise.all([
+      prisma.role.upsert({
+        where: { roleName: 'PROJECT_MANAGER' },
+        update: {},
+        create: { roleName: 'PROJECT_MANAGER' },
+      }),
+      prisma.role.upsert({
+        where: { roleName: 'ACCOUNTANT' },
+        update: {},
+        create: { roleName: 'ACCOUNTANT' },
+      }),
+    ]);
+
+    projectManagerRoleId = managerRole.id;
+    accountantRoleId = accountantRole.id;
 
     managerId = await createUser('PROJECT_MANAGER', 'manager');
     await createUser('PROJECT_MANAGER', 'other');

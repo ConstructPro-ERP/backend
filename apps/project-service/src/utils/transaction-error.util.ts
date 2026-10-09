@@ -88,9 +88,9 @@ export async function waitBeforeTransactionRetry(
   attempt: number,
   options: TransactionRetryDelayOptions = {},
 ): Promise<void> {
-  const BASE_DELAY_MS = options.baseDelayMs ?? 500;
-  const MAX_DELAY_MS = options.maxDelayMs ?? 10000;
-  const MAX_JITTER_MS = options.maxJitterMs ?? 2500;
+  const BASE_DELAY_MS = options.baseDelayMs ?? 200;
+  const MAX_DELAY_MS = options.maxDelayMs ?? 2000;
+  const MAX_JITTER_MS = options.maxJitterMs ?? 250;
 
   const backoffMs = Math.min(MAX_DELAY_MS, BASE_DELAY_MS * 3 ** (attempt - 1));
 

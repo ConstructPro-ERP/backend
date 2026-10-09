@@ -28,6 +28,7 @@
     "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
     "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
     "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
+    "dev:task-service": "ts-node -r tsconfig-paths/register apps/task-service/src/main.ts",
     "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calender-service/src/main.ts",
 
     "start": "node dist/server.js",
@@ -42,6 +43,7 @@
     "start:client-service": "node dist/apps/client-service/src/main.js",
     "start:lead-service": "node dist/apps/lead-service/src/main.js",
     "start:project-service": "node dist/apps/project-service/src/main.js",
+    "start:task-service": "node dist/apps/task-service/src/main.js",
     "start:calendar-service": "node dist/apps/calender-service/src/main.js",
 
     "start:vercel": "node dist/server.js",

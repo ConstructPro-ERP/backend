@@ -7,6 +7,7 @@ import { AnalyticsGatewayController } from './controllers/analytics-gateway.cont
 import { AuthGatewayController } from './controllers/auth-gateway.controller';
 import { ProjectsGatewayController } from './controllers/projects-gateway.controller';
 import { MilestonesGatewayController } from './controllers/milestones-gateway.controller';
+import { TasksGatewayController } from './controllers/tasks-gateway.controller';
 import { InvoicesGatewayController } from './controllers/invoices-gateway.controller';
 import { PaymentsGatewayController } from './controllers/payments-gateway.controller';
 import { QuotationsGatewayController } from './controllers/quotations-gateway.controller';
@@ -29,6 +30,7 @@ import { CalendarGatewayController } from './controllers/calendar-gateway.contro
     AuthGatewayController,
     ProjectsGatewayController,
     MilestonesGatewayController,
+    TasksGatewayController,
     QuotationsGatewayController,
     InvoicesGatewayController,
     PaymentsGatewayController,

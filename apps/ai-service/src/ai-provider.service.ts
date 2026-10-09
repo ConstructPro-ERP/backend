@@ -94,6 +94,9 @@ function parseProviderPrediction(
     throw new Error('AI provider returned invalid JSON.');
   }
 
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+    throw new Error('AI provider returned an invalid prediction schema.');
+  }
   const candidate = parsed as Partial<AiProviderPredictionResponseDto>;
   if (
     !isRiskLevel(candidate.projectRiskLevel) ||
@@ -102,7 +105,8 @@ function parseProviderPrediction(
     !isRevenueTrend(candidate.revenueTrend) ||
     typeof candidate.explanation !== 'string' ||
     typeof candidate.recommendedAction !== 'string' ||
-    typeof candidate.confidenceScore !== 'number'
+    typeof candidate.confidenceScore !== 'number' ||
+    !Number.isFinite(candidate.confidenceScore)
   ) {
     throw new Error('AI provider returned an invalid prediction schema.');
   }

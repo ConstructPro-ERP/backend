@@ -3,6 +3,8 @@ import { InvoiceStatus, Prisma } from '@prisma/client';
 import { FinanceSummaryService } from '../../apps/invoice-service/src/finance-summary.service';
 import { FinanceSummaryRepository } from '../../apps/invoice-service/src/repositories/finance-summary.repository';
 import {
+  FinanceDateRangeQueryDto,
+  OutstandingInvoiceReportQueryDto,
   OutstandingInvoiceSortByDto,
   SortOrderDto,
 } from '../../apps/invoice-service/src/dto/finance-report-query.dto';
@@ -24,6 +26,78 @@ describe('FinanceSummaryService', () => {
     service = new FinanceSummaryService(
       repository as unknown as FinanceSummaryRepository,
     );
+  });
+
+  it.each([
+    {},
+    { fromDate: '2026-10-01' },
+    { toDate: '2026-10-31' },
+    { fromDate: '2026-10-01', toDate: '2026-10-31T12:00:00Z' },
+  ])('handles empty finance summaries and date filters %j', async (dates) => {
+    repository.findCustomer.mockResolvedValue({
+      id: 'customer-1',
+      fullName: 'Acme',
+    });
+    repository.findProject.mockResolvedValue({
+      id: 'project-1',
+      projectName: 'Tower',
+    });
+    repository.aggregateInvoices.mockResolvedValue({
+      _sum: { totalAmount: null, paidAmount: null, outstandingAmount: null },
+    });
+    repository.aggregateExpenses.mockResolvedValue({ _sum: { amount: null } });
+    repository.findOutstandingInvoices.mockResolvedValue([]);
+    repository.countOutstandingInvoices.mockResolvedValue(0);
+    const query: FinanceDateRangeQueryDto = dates;
+    await expect(
+      service.clientSummary('customer-1', query),
+    ).resolves.toMatchObject({
+      totalInvoicedAmount: 0,
+      totalPaidAmount: 0,
+      outstandingBalance: 0,
+    });
+    await expect(
+      service.projectSummary('project-1', query),
+    ).resolves.toMatchObject({
+      revenue: 0,
+      expenseTotal: 0,
+      estimatedProfit: 0,
+    });
+    await expect(
+      service.outstandingInvoices(
+        Object.assign(new OutstandingInvoiceReportQueryDto(), query),
+      ),
+    ).resolves.toMatchObject({
+      items: [],
+      total: 0,
+      totalPages: 0,
+      totalOutstandingAmount: 0,
+    });
+    expect(repository.aggregateInvoices).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceDate:
+          dates.fromDate || dates.toDate
+            ? {
+                gte: dates.fromDate ? new Date(dates.fromDate) : undefined,
+                lte: dates.toDate
+                  ? new Date(
+                      dates.toDate.length === 10
+                        ? `${dates.toDate}T23:59:59.999Z`
+                        : dates.toDate,
+                    )
+                  : undefined,
+              }
+            : undefined,
+      }),
+    );
+  });
+
+  it('rejects unknown projects before aggregating', async () => {
+    repository.findProject.mockResolvedValue(null);
+    await expect(service.projectSummary('missing', {})).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+    expect(repository.aggregateInvoices).not.toHaveBeenCalled();
   });
 
   it('returns a client finance summary from invoice aggregates', async () => {

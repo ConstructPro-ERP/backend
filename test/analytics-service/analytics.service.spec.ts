@@ -8,7 +8,11 @@ import {
 import { AnalyticsService } from '../../apps/analytics-service/src/analytics.service';
 import {
   ActivityTypeDto,
+  ExpenseReportQueryDto,
   ExpenseReportSortByDto,
+  ProjectCompletionReportQueryDto,
+  OverdueInvoiceReportQueryDto,
+  RecentActivityQueryDto,
   SortOrderDto,
 } from '../../apps/analytics-service/src/dto/reporting-query.dto';
 import { AnalyticsRepository } from '../../apps/analytics-service/src/repositories/analytics.repository';
@@ -44,6 +48,164 @@ describe('AnalyticsService', () => {
     service = new AnalyticsService(
       repository as unknown as AnalyticsRepository,
     );
+  });
+
+  function emptyRepository() {
+    repository.aggregateInvoices.mockResolvedValue({
+      _sum: { totalAmount: null, paidAmount: null, outstandingAmount: null },
+    });
+    repository.countProjects.mockResolvedValue(0);
+    repository.groupInvoiceStatuses.mockResolvedValue([]);
+    repository.countLeads.mockResolvedValue(0);
+    repository.countConvertedLeads.mockResolvedValue(0);
+    repository.groupQuotationStatuses.mockResolvedValue([]);
+    for (const method of [
+      repository.findRecentInvoices,
+      repository.findRecentPayments,
+      repository.findRecentProjects,
+      repository.findRecentLeads,
+      repository.findRecentQuotations,
+      repository.findRecentDocuments,
+      repository.findRecentMilestones,
+      repository.findProjectsForCompletionReport,
+      repository.groupExpensesByProject,
+      repository.findProjectsByIds,
+      repository.findOverdueInvoices,
+    ])
+      method.mockResolvedValue([]);
+    repository.countProjectsForReport.mockResolvedValue(0);
+    repository.countOverdueInvoices.mockResolvedValue(0);
+    repository.aggregateExpenses.mockResolvedValue({
+      _sum: { amount: null },
+      _count: { _all: 0 },
+    });
+  }
+
+  it.each([
+    {},
+    { fromDate: '2026-10-01' },
+    { toDate: '2026-10-31' },
+    { fromDate: '2026-10-01', toDate: '2026-10-31T12:00:00Z' },
+  ])('returns empty reports and applies date boundaries %j', async (dates) => {
+    emptyRepository();
+    await service.dashboardSummary(dates);
+    const reports = await Promise.all([
+      service.recentActivity(
+        Object.assign(new RecentActivityQueryDto(), dates),
+      ),
+      service.projectCompletionReport(
+        Object.assign(new ProjectCompletionReportQueryDto(), dates),
+      ),
+      service.expenseReport(Object.assign(new ExpenseReportQueryDto(), dates)),
+      service.overdueInvoiceReport(
+        Object.assign(new OverdueInvoiceReportQueryDto(), dates),
+      ),
+    ]);
+    for (const report of reports)
+      expect(report).toMatchObject({ items: [], total: 0, totalPages: 0 });
+    expect(repository.aggregateInvoices).toHaveBeenCalledWith({
+      invoiceDate:
+        dates.fromDate || dates.toDate
+          ? {
+              gte: dates.fromDate ? new Date(dates.fromDate) : undefined,
+              lte: dates.toDate
+                ? new Date(
+                    dates.toDate.length === 10
+                      ? `${dates.toDate}T23:59:59.999Z`
+                      : dates.toDate,
+                  )
+                : undefined,
+            }
+          : undefined,
+    });
+  });
+
+  it.each(Object.values(ExpenseReportSortByDto))(
+    'sorts grouped expenses by %s in both directions',
+    async (sortBy) => {
+      repository.aggregateExpenses.mockResolvedValue({
+        _sum: { amount: 120 },
+        _count: { _all: 3 },
+      });
+      repository.groupExpensesByProject.mockResolvedValue([
+        {
+          projectId: 'p1',
+          _sum: { amount: null },
+          _count: { _all: 1 },
+          _min: { createdAt: null },
+          _max: { createdAt: null },
+        },
+        {
+          projectId: 'p2',
+          _sum: { amount: 120 },
+          _count: { _all: 2 },
+          _min: { createdAt: new Date('2026-10-01') },
+          _max: { createdAt: new Date('2026-10-02') },
+        },
+      ]);
+      repository.findProjectsByIds.mockResolvedValue([
+        { id: 'p2', projectName: 'Alpha' },
+      ]);
+      const asc = await service.expenseReport(
+        Object.assign(new ExpenseReportQueryDto(), {
+          sortBy,
+          sortOrder: SortOrderDto.ASC,
+        }),
+      );
+      const desc = await service.expenseReport(
+        Object.assign(new ExpenseReportQueryDto(), {
+          sortBy,
+          sortOrder: SortOrderDto.DESC,
+        }),
+      );
+      expect(asc.items.map((item) => item.projectId)).toEqual(
+        sortBy === ExpenseReportSortByDto.PROJECT_NAME
+          ? ['p2', 'p1']
+          : ['p1', 'p2'],
+      );
+      expect(desc.items.map((item) => item.projectId)).toEqual(
+        [...asc.items.map((item) => item.projectId)].reverse(),
+      );
+      expect(asc.summary).toMatchObject({
+        totalExpense: 120,
+        totalExpenseCount: 3,
+      });
+      expect(asc.items.find((item) => item.projectId === 'p1')).toMatchObject({
+        projectName: 'Unknown project',
+        totalExpense: 0,
+        firstExpenseAt: null,
+        lastExpenseAt: null,
+      });
+    },
+  );
+
+  it('returns zero-valued dashboard KPIs for an empty database', async () => {
+    repository.aggregateInvoices.mockResolvedValue({
+      _sum: { totalAmount: null, paidAmount: null, outstandingAmount: null },
+    });
+    repository.countProjects.mockResolvedValue(0);
+    repository.groupInvoiceStatuses.mockResolvedValue([]);
+    repository.countLeads.mockResolvedValue(0);
+    repository.countConvertedLeads.mockResolvedValue(0);
+    repository.groupQuotationStatuses.mockResolvedValue([]);
+    const summary = await service.dashboardSummary({});
+    expect(summary.revenue).toMatchObject({
+      totalRevenue: 0,
+      paidAmount: 0,
+      outstandingBalance: 0,
+    });
+    expect(summary.projects).toMatchObject({
+      totalProjects: 0,
+      completionRate: 0,
+      overdueProjectCount: 0,
+    });
+    expect(summary.invoices).toMatchObject({ totalInvoices: 0, paidCount: 0 });
+    expect(summary.sales).toMatchObject({
+      totalLeads: 0,
+      leadConversionRate: 0,
+      totalQuotations: 0,
+    });
+    expect(JSON.stringify(summary)).not.toContain('NaN');
   });
 
   it('returns revenue KPIs from invoice aggregates', async () => {
@@ -208,7 +370,12 @@ describe('AnalyticsService', () => {
     repository.countProjectsForReport.mockResolvedValue(1);
 
     await expect(
-      service.projectCompletionReport({ page: 1, limit: 10 }),
+      service.projectCompletionReport(
+        Object.assign(new ProjectCompletionReportQueryDto(), {
+          page: 1,
+          limit: 10,
+        }),
+      ),
     ).resolves.toMatchObject({
       total: 1,
       items: [
@@ -288,7 +455,12 @@ describe('AnalyticsService', () => {
     repository.countOverdueInvoices.mockResolvedValue(1);
 
     await expect(
-      service.overdueInvoiceReport({ page: 1, limit: 10 }),
+      service.overdueInvoiceReport(
+        Object.assign(new OverdueInvoiceReportQueryDto(), {
+          page: 1,
+          limit: 10,
+        }),
+      ),
     ).resolves.toMatchObject({
       total: 1,
       items: [

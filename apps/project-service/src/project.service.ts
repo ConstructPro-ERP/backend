@@ -1,10 +1,13 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import {
+  MilestoneStatus,
   Prisma,
   ProjectStatus,
   QuotationStatus,
@@ -29,6 +32,13 @@ import {
 } from './repositories/project.repository';
 import { ProjectManagerCandidate } from './interfaces/project-manager.interface';
 import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
+import {
+  MAX_TRANSACTION_ATTEMPTS,
+  TRANSACTION_RETRY_DELAY_OPTIONS,
+  isRetryableTransactionError,
+  waitBeforeTransactionRetry,
+} from './utils/transaction-error.util';
+import type { TransactionRetryDelayOptions } from './utils/transaction-error.util';
 
 @Injectable()
 export class ProjectService {
@@ -36,6 +46,9 @@ export class ProjectService {
     private readonly projects: ProjectRepository,
     private readonly projectAccess: ProjectAccessService,
     private readonly projectLifecycle: ProjectLifecycleService,
+    @Optional()
+    @Inject(TRANSACTION_RETRY_DELAY_OPTIONS)
+    private readonly retryDelayOptions?: TransactionRetryDelayOptions,
   ) {}
 
   getHealth() {
@@ -177,21 +190,50 @@ export class ProjectService {
     actorId?: string,
   ) {
     const actor = await this.projectAccess.resolveActor(actorId);
-    const project = await this.getProjectOrThrow(id);
 
-    this.projectAccess.assertCanModifyProject(actor, project);
+    return this.withTransactionRetry(
+      async (tx) => {
+        // Lock before reading the state used for transition validation.
+        const locked = await this.projects.lockProject(tx, id);
 
-    this.projectLifecycle.assertTransitionAllowed(project.status, dto.status);
+        if (locked.length === 0) {
+          throw new NotFoundException({
+            code: ErrorCode.PROJECT_NOT_FOUND,
+            message: 'Project not found.',
+          });
+        }
 
-    if (dto.status === ProjectStatus.ACTIVE) {
-      await this.validateActivationRequirements(project);
-    } else if (dto.status === ProjectStatus.COMPLETED) {
-      this.validateCompletionRequirements();
-    }
+        const project = await this.projects.findProjectInTransaction(tx, id);
 
-    return this.projects.update(id, {
-      status: dto.status,
-    });
+        if (!project) {
+          throw new NotFoundException({
+            code: ErrorCode.PROJECT_NOT_FOUND,
+            message: 'Project not found.',
+          });
+        }
+
+        this.projectAccess.assertCanModifyProject(actor, project);
+
+        this.projectLifecycle.assertTransitionAllowed(
+          project.status,
+          dto.status,
+        );
+
+        if (dto.status === ProjectStatus.ACTIVE) {
+          await this.validateActivationRequirements(tx, project);
+        } else if (dto.status === ProjectStatus.COMPLETED) {
+          await this.validateCompletionRequirements(tx, project);
+        }
+
+        return this.projects.updateInTransaction(tx, id, {
+          status: dto.status,
+        });
+      },
+      {
+        code: ErrorCode.PROJECT_STATUS_CONCURRENCY_CONFLICT,
+        message: 'Project changed during the status update. Please retry.',
+      },
+    );
   }
 
   async assignManager(
@@ -310,6 +352,8 @@ export class ProjectService {
     }
 
     if (quotation.projectId) {
+      await this.projects.lockProject(tx, quotation.projectId);
+
       const existingProject = await this.projects.findProjectInTransaction(
         tx,
         quotation.projectId,
@@ -336,6 +380,8 @@ export class ProjectService {
     }
 
     if (dto.targetProjectId) {
+      await this.projects.lockProject(tx, dto.targetProjectId);
+
       const targetProject = await this.projects.findProjectInTransaction(
         tx,
         dto.targetProjectId,
@@ -438,7 +484,11 @@ export class ProjectService {
   }
 
   private async validateActivationRequirements(
-    project: ProjectWithDetails,
+    tx: ProjectTransaction,
+    project: Pick<
+      ProjectWithDetails,
+      'id' | 'projectManagerId' | 'startDate' | 'endDate'
+    >,
   ): Promise<void> {
     if (!project.projectManagerId) {
       throw new BadRequestException({
@@ -454,13 +504,15 @@ export class ProjectService {
       });
     }
 
-    await this.ensureValidProjectManager(project.projectManagerId);
+    await this.ensureValidProjectManagerInTransaction(
+      tx,
+      project.projectManagerId,
+    );
 
     this.validateDateRange(project.startDate, project.endDate);
 
-    const approvedQuotation = await this.projects.findApprovedQuotation(
-      project.id,
-    );
+    const approvedQuotation =
+      await this.projects.findApprovedQuotationInTransaction(tx, project.id);
 
     if (!approvedQuotation) {
       throw new BadRequestException({
@@ -470,12 +522,47 @@ export class ProjectService {
       });
     }
 
-    // Milestone and weight checks are added when Issue 03 provides those fields.
+    // Relative milestone weights do not impose an activation threshold.
+    // Approved quotation conversion can activate projects before milestones exist.
   }
 
-  private validateCompletionRequirements(): void {
-    // Issue 03 will enforce 100% canonical progress
-    // and required milestone completion here.
+  private async validateCompletionRequirements(
+    tx: ProjectTransaction,
+    project: Pick<ProjectWithDetails, 'id' | 'progressPercentage'>,
+  ): Promise<void> {
+    const milestones =
+      await this.projects.findMilestonesForCompletionInTransaction(
+        tx,
+        project.id,
+      );
+
+    // A project must have actual completed milestones, not only a stored 100%.
+    const allMilestonesCompleted =
+      milestones.length > 0 &&
+      milestones.every(
+        (milestone) =>
+          milestone.status === MilestoneStatus.COMPLETED &&
+          milestone.progressPercentage === 100 &&
+          milestone.completedAt !== null,
+      );
+
+    if (project.progressPercentage !== 100 || !allMilestonesCompleted) {
+      throw new BadRequestException({
+        code: ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+        message:
+          'Project completion requires 100% progress and all milestones to be completed.',
+        details: {
+          progressPercentage: project.progressPercentage,
+          totalMilestones: milestones.length,
+          completedMilestones: milestones.filter(
+            (milestone) =>
+              milestone.status === MilestoneStatus.COMPLETED &&
+              milestone.progressPercentage === 100 &&
+              milestone.completedAt !== null,
+          ).length,
+        },
+      });
+    }
   }
 
   private validateDateRange(startDate: Date, endDate?: Date | null) {
@@ -489,83 +576,27 @@ export class ProjectService {
 
   private async withTransactionRetry<T>(
     work: (tx: ProjectTransaction) => Promise<T>,
+    conflict = {
+      code: 'PROJECT_CONVERSION_CONCURRENCY_CONFLICT',
+      message: 'The quotation changed while creating the project. Try again.',
+    },
   ): Promise<T> {
-    for (let attempt = 1; attempt <= 3; attempt += 1) {
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
       try {
         return await this.projects.transaction(work);
       } catch (error: unknown) {
-        if (isRetryableTransactionError(error)) {
-          if (attempt < 3) {
-            continue;
-          }
-
-          throw new ConflictException({
-            code: 'PROJECT_CONVERSION_CONCURRENCY_CONFLICT',
-            message:
-              'The quotation changed while creating the project. Try again.',
-          });
+        if (!isRetryableTransactionError(error)) {
+          throw error;
         }
 
-        throw error;
+        if (attempt === MAX_TRANSACTION_ATTEMPTS) {
+          throw new ConflictException(conflict);
+        }
+
+        await waitBeforeTransactionRetry(attempt, this.retryDelayOptions);
       }
     }
 
-    throw new ConflictException({
-      code: 'PROJECT_CONVERSION_CONCURRENCY_CONFLICT',
-      message: 'The quotation changed while creating the project. Try again.',
-    });
+    throw new ConflictException(conflict);
   }
-}
-
-function isRetryableTransactionError(error: unknown): boolean {
-  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
-    return false;
-  }
-
-  // Standard Prisma transaction write-conflict error.
-  if (error.code === 'P2034') {
-    return true;
-  }
-
-  // Raw PostgreSQL errors executed through the Neon driver adapter can be
-  // surfaced by Prisma as P2010 instead of P2034.
-  if (error.code !== 'P2010') {
-    return false;
-  }
-
-  return containsSerializationConflict(error.meta);
-}
-
-function containsSerializationConflict(meta: unknown): boolean {
-  if (!isRecord(meta)) {
-    return false;
-  }
-
-  // Some Prisma/database adapter paths expose the PostgreSQL SQLSTATE
-  // directly in meta.
-  if (meta.code === '40001') {
-    return true;
-  }
-
-  const driverAdapterError = meta.driverAdapterError;
-
-  if (!isRecord(driverAdapterError)) {
-    return false;
-  }
-
-  const cause = driverAdapterError.cause;
-
-  if (!isRecord(cause)) {
-    return false;
-  }
-
-  return (
-    cause.originalCode === '40001' ||
-    cause.code === '40001' ||
-    cause.kind === 'TransactionWriteConflict'
-  );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
 }

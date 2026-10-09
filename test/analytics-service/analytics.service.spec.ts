@@ -10,6 +10,8 @@ import {
   ActivityTypeDto,
   ExpenseReportQueryDto,
   ExpenseReportSortByDto,
+  OverdueInvoiceSortByDto,
+  ProjectCompletionSortByDto,
   ProjectCompletionReportQueryDto,
   OverdueInvoiceReportQueryDto,
   RecentActivityQueryDto,
@@ -334,12 +336,13 @@ describe('AnalyticsService', () => {
     });
   });
 
-  it('returns project completion report items with milestone percentages', async () => {
+  it('uses canonical progress instead of milestone and task completion ratios', async () => {
     repository.findProjectsForCompletionReport.mockResolvedValue([
       {
         id: 'proj-1',
         projectName: 'Alpha',
         status: ProjectStatus.ACTIVE,
+        progressPercentage: 75,
         startDate: new Date('2026-06-01T00:00:00Z'),
         endDate: null,
         budget: 100000,
@@ -348,45 +351,126 @@ describe('AnalyticsService', () => {
             id: 'ms-1',
             milestoneName: 'Foundation',
             status: MilestoneStatus.COMPLETED,
+            progressPercentage: 100,
+            weight: 5,
             dueDate: null,
-            tasks: [
-              { id: 't-1', status: 'COMPLETED' },
-              { id: 't-2', status: 'COMPLETED' },
-            ],
+            tasks: [{ id: 't-1', status: 'TODO' }],
           },
           {
             id: 'ms-2',
             milestoneName: 'Finishing',
             status: MilestoneStatus.IN_PROGRESS,
+            progressPercentage: 50,
+            weight: 5,
             dueDate: null,
-            tasks: [
-              { id: 't-3', status: 'COMPLETED' },
-              { id: 't-4', status: 'TODO' },
-            ],
+            tasks: [{ id: 't-2', status: 'COMPLETED' }],
           },
         ],
       },
     ]);
+
     repository.countProjectsForReport.mockResolvedValue(1);
 
-    await expect(
-      service.projectCompletionReport(
-        Object.assign(new ProjectCompletionReportQueryDto(), {
-          page: 1,
-          limit: 10,
-        }),
-      ),
-    ).resolves.toMatchObject({
-      total: 1,
-      items: [
-        expect.objectContaining({
-          projectId: 'proj-1',
-          milestoneCount: 2,
-          completedMilestoneCount: 1,
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.total).toBe(1);
+
+    expect(report.items[0]).toMatchObject({
+      projectId: 'proj-1',
+      milestoneCount: 2,
+      completedMilestoneCount: 1,
+      completionPercentage: 75,
+      milestones: [
+        {
+          id: 'ms-1',
+          taskCount: 1,
+          completedTaskCount: 0,
+          completionPercentage: 100,
+        },
+        {
+          id: 'ms-2',
+          taskCount: 1,
+          completedTaskCount: 1,
           completionPercentage: 50,
-        }),
+        },
       ],
     });
+  });
+
+  it('returns zero completion for a project without milestones', async () => {
+    repository.findProjectsForCompletionReport.mockResolvedValue([
+      {
+        id: 'proj-empty',
+        projectName: 'New Project',
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 0,
+        startDate: new Date('2026-06-01T00:00:00Z'),
+        endDate: null,
+        budget: null,
+        milestones: [],
+      },
+    ]);
+
+    repository.countProjectsForReport.mockResolvedValue(1);
+
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.items[0]).toMatchObject({
+      projectId: 'proj-empty',
+      completionPercentage: 0,
+      milestoneCount: 0,
+      completedMilestoneCount: 0,
+      milestones: [],
+    });
+  });
+
+  it('preserves the precision of persisted progress values', async () => {
+    const progress = 66.6666666667;
+
+    repository.findProjectsForCompletionReport.mockResolvedValue([
+      {
+        id: 'proj-precise',
+        projectName: 'Precision Project',
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: progress,
+        startDate: new Date('2026-06-01T00:00:00Z'),
+        endDate: null,
+        budget: null,
+        milestones: [
+          {
+            id: 'ms-precise',
+            milestoneName: 'Progress',
+            status: MilestoneStatus.IN_PROGRESS,
+            progressPercentage: progress,
+            weight: 3,
+            dueDate: null,
+            tasks: [],
+          },
+        ],
+      },
+    ]);
+
+    repository.countProjectsForReport.mockResolvedValue(1);
+
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.items[0].completionPercentage).toBe(progress);
+    expect(report.items[0].milestones[0].completionPercentage).toBe(progress);
   });
 
   it('returns grouped expense report totals', async () => {
@@ -455,12 +539,12 @@ describe('AnalyticsService', () => {
     repository.countOverdueInvoices.mockResolvedValue(1);
 
     await expect(
-      service.overdueInvoiceReport(
-        Object.assign(new OverdueInvoiceReportQueryDto(), {
-          page: 1,
-          limit: 10,
-        }),
-      ),
+      service.overdueInvoiceReport({
+        page: 1,
+        limit: 10,
+        sortBy: OverdueInvoiceSortByDto.DUE_DATE,
+        sortOrder: SortOrderDto.ASC,
+      }),
     ).resolves.toMatchObject({
       total: 1,
       items: [

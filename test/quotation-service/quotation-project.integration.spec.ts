@@ -64,6 +64,7 @@ describe('Quotation → Project cross-service integration', () => {
   let quotationApp: INestApplication;
   let quotationServer: Server;
   let prisma: PrismaService;
+  let projectManagerRoleId: string;
 
   const originalProjectServiceUrl = process.env.PROJECT_SERVICE_URL;
 
@@ -145,22 +146,12 @@ describe('Quotation → Project cross-service integration', () => {
   }
 
   async function createManager(label: string) {
-    const projectManagerRole = await prisma.role.upsert({
-      where: {
-        roleName: 'PROJECT_MANAGER',
-      },
-      update: {},
-      create: {
-        roleName: 'PROJECT_MANAGER',
-      },
-    });
-
     return prisma.user.create({
       data: {
         fullName: `${prefix} Manager ${label}`,
         email: `quotation-project-${runId}-${label}@test.com`,
         password: 'hashed',
-        roleId: projectManagerRole.id,
+        roleId: projectManagerRoleId,
       },
     });
   }
@@ -184,6 +175,12 @@ describe('Quotation → Project cross-service integration', () => {
     }).compile();
 
     prisma = projectModule.get<PrismaService>(PrismaService);
+
+    const role = await prisma.role.findUniqueOrThrow({
+      where: { roleName: 'PROJECT_MANAGER' },
+    });
+
+    projectManagerRoleId = role.id;
 
     projectApp = projectModule.createNestApplication();
 
@@ -304,8 +301,14 @@ describe('Quotation → Project cross-service integration', () => {
         startDate: '2026-10-01T00:00:00.000Z',
         projectManagerId: manager.id,
         budget: 10000000,
-      })
-      .expect(200);
+      });
+
+    if (response.status !== 200) {
+      throw new Error(
+        `Expected HTTP 200, received ${response.status}: ` +
+          JSON.stringify(response.body),
+      );
+    }
 
     const body = parseConversionResponse(response.body as unknown);
 

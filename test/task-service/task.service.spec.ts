@@ -663,4 +663,139 @@ describe('TaskService', () => {
       expect(mockTasks.transaction).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('Additional lifecycle and concurrency coverage', () => {
+    it.each([ProjectStatus.COMPLETED, ProjectStatus.CANCELLED])(
+      'denies every task mutation in %s projects',
+      async (status) => {
+        mockTasks.findProjectInTransaction.mockResolvedValue({
+          ...project,
+          status,
+        });
+
+        const operations = [
+          () => service.update(task.id, { taskName: 'Changed' }, manager.id),
+          () =>
+            service.updateStatus(
+              task.id,
+              { status: TaskStatus.COMPLETED },
+              manager.id,
+            ),
+          () => service.assign(task.id, { assignedToId: 'user-1' }, manager.id),
+          () => service.remove(task.id, manager.id),
+        ];
+
+        for (const operation of operations) {
+          await expect(operation()).rejects.toMatchObject({
+            response: { code: ErrorCode.TASK_MODIFICATION_NOT_ALLOWED },
+          });
+        }
+
+        expect(mockTasks.updateInTransaction).not.toHaveBeenCalled();
+        expect(mockTasks.updateStatusInTransaction).not.toHaveBeenCalled();
+        expect(mockTasks.assignInTransaction).not.toHaveBeenCalled();
+        expect(mockTasks.deleteInTransaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it('denies all mutations by an unassigned Project Manager', async () => {
+      mockTasks.findActor.mockResolvedValue({
+        ...manager,
+        id: 'other-manager',
+      });
+
+      const operations = [
+        () => service.update(task.id, { taskName: 'Changed' }, 'other-manager'),
+        () =>
+          service.updateStatus(
+            task.id,
+            { status: TaskStatus.BLOCKED },
+            'other-manager',
+          ),
+        () =>
+          service.assign(task.id, { assignedToId: 'user-1' }, 'other-manager'),
+        () => service.remove(task.id, 'other-manager'),
+      ];
+
+      for (const operation of operations) {
+        await expect(operation()).rejects.toMatchObject({
+          response: { code: ErrorCode.PROJECT_ACCESS_DENIED },
+        });
+      }
+
+      expect(mockTasks.updateInTransaction).not.toHaveBeenCalled();
+      expect(mockTasks.updateStatusInTransaction).not.toHaveBeenCalled();
+      expect(mockTasks.assignInTransaction).not.toHaveBeenCalled();
+      expect(mockTasks.deleteInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('rejects a changed project ID during transactional reread', async () => {
+      mockTasks.findByIdInTransaction.mockResolvedValue({
+        ...task,
+        projectId: 'other-project',
+      });
+
+      await expect(
+        service.updateStatus(
+          task.id,
+          { status: TaskStatus.COMPLETED },
+          manager.id,
+        ),
+      ).rejects.toMatchObject({
+        response: { code: ErrorCode.TASK_NOT_FOUND },
+      });
+
+      expect(mockTasks.updateStatusInTransaction).not.toHaveBeenCalled();
+    });
+
+    it('retries Neon P2010 serialization failures', async () => {
+      const conflict = new Prisma.PrismaClientKnownRequestError(
+        'Neon serialization failure',
+        {
+          code: 'P2010',
+          clientVersion: '7.10.0',
+          meta: { code: '40001' },
+        },
+      );
+
+      mockTasks.transaction.mockRejectedValueOnce(conflict);
+
+      await service.create(createDto, manager.id);
+
+      expect(mockTasks.transaction).toHaveBeenCalledTimes(2);
+      expect(mockTasks.createInTransaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('retries unwrapped Neon driver serialization failures', async () => {
+      const conflict = Object.assign(new Error('Transaction conflict'), {
+        name: 'DriverAdapterError',
+        cause: {
+          originalCode: '40001',
+          kind: 'TransactionWriteConflict',
+        },
+      });
+
+      mockTasks.transaction.mockRejectedValueOnce(conflict);
+
+      await service.create(createDto, manager.id);
+
+      expect(mockTasks.transaction).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not retry P2010 for unrelated SQLSTATE errors', async () => {
+      const error = new Prisma.PrismaClientKnownRequestError(
+        'Unique violation',
+        {
+          code: 'P2010',
+          clientVersion: '7.10.0',
+          meta: { code: '23505' },
+        },
+      );
+
+      mockTasks.transaction.mockRejectedValue(error);
+
+      await expect(service.create(createDto, manager.id)).rejects.toBe(error);
+      expect(mockTasks.transaction).toHaveBeenCalledTimes(1);
+    });
+  });
 });

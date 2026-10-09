@@ -9,6 +9,10 @@ import { TaskService } from '../../apps/task-service/src/task.service';
 import { TaskRepository } from '../../apps/task-service/src/repositories/task.repository';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ErrorCode } from '../../shared/error-codes';
+import {
+  TaskSortField,
+  TaskSortOrder,
+} from '../../apps/task-service/src/dto/task-query.dto';
 
 jest.setTimeout(60000);
 
@@ -334,5 +338,176 @@ describe('Task Service — database integration', () => {
     });
 
     expect(stored.status).toBe(TaskStatus.TODO);
+  });
+
+  it('filters persisted tasks and returns accurate pagination', async () => {
+    const project = await createProject();
+    const anotherProject = await createProject();
+
+    const milestone = await prisma.milestone.create({
+      data: {
+        projectId: project.id,
+        milestoneName: 'Foundation',
+        weight: 5,
+      },
+    });
+
+    // Two tasks should match every filter.
+    await tasks.create(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: managerId,
+        taskName: 'Alpha foundation',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    await tasks.create(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: managerId,
+        taskName: 'Beta foundation',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    // Same milestone and status, but a different assignee.
+    await tasks.create(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: otherManagerId,
+        taskName: 'Gamma foundation',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    // Same assignee and milestone, but a different status.
+    await tasks.create(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: managerId,
+        taskName: 'Delta foundation',
+        status: TaskStatus.IN_PROGRESS,
+      },
+      managerId,
+    );
+
+    // Same assignee and status, but no milestone.
+    await tasks.create(
+      {
+        projectId: project.id,
+        assignedToId: managerId,
+        taskName: 'Epsilon project task',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    // Same assignee and status, but another project.
+    await tasks.create(
+      {
+        projectId: anotherProject.id,
+        assignedToId: managerId,
+        taskName: 'Foreign project task',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    const filters = {
+      milestoneId: milestone.id,
+      assignedToId: managerId,
+      status: TaskStatus.TODO,
+      limit: 1,
+      sortBy: TaskSortField.TASK_NAME,
+      sortOrder: TaskSortOrder.ASC,
+    };
+
+    // Page 1 must return the first matching record.
+    const firstPage = await tasks.findByProject(
+      project.id,
+      { ...filters, page: 1 },
+      managerId,
+    );
+
+    expect(firstPage.data.map((task) => task.taskName)).toEqual([
+      'Alpha foundation',
+    ]);
+
+    expect(firstPage.meta).toEqual({
+      page: 1,
+      limit: 1,
+      total: 2,
+      totalPages: 2,
+    });
+
+    // Page 2 must return the next matching record.
+    const secondPage = await tasks.findByProject(
+      project.id,
+      { ...filters, page: 2 },
+      managerId,
+    );
+
+    expect(secondPage.data.map((task) => task.taskName)).toEqual([
+      'Beta foundation',
+    ]);
+
+    expect(secondPage.meta).toEqual({
+      page: 2,
+      limit: 1,
+      total: 2,
+      totalPages: 2,
+    });
+
+    // Beyond the final page, no items should be returned.
+    const thirdPage = await tasks.findByProject(
+      project.id,
+      { ...filters, page: 3 },
+      managerId,
+    );
+
+    expect(thirdPage.data).toHaveLength(0);
+    expect(thirdPage.meta.total).toBe(2);
+    expect(thirdPage.meta.totalPages).toBe(2);
+
+    // Verify that the assignee filter actually selects
+    // different persisted records.
+    const otherAssignee = await tasks.findAll(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: otherManagerId,
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
+    expect(otherAssignee.data.map((task) => task.taskName)).toEqual([
+      'Gamma foundation',
+    ]);
+
+    expect(otherAssignee.meta.total).toBe(1);
+
+    // Verify the status filter excludes nonmatching tasks.
+    const noMatches = await tasks.findAll(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: otherManagerId,
+        status: TaskStatus.COMPLETED,
+      },
+      managerId,
+    );
+
+    expect(noMatches.data).toHaveLength(0);
+    expect(noMatches.meta.total).toBe(0);
+    expect(noMatches.meta.totalPages).toBe(0);
   });
 });

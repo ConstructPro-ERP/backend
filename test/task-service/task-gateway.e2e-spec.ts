@@ -1,7 +1,7 @@
 import { HttpModule } from '@nestjs/axios';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { ProjectStatus, TaskStatus } from '@prisma/client';
+import { ProjectStatus, TaskStatus, UserStatus } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
@@ -526,6 +526,81 @@ describe('Tasks — Gateway to Task Service E2E', () => {
     expect((invalidAssigneeResponse.body as { code: string }).code).toBe(
       ErrorCode.INVALID_TASK_ASSIGNEE,
     );
+
+    // Create a real inactive user in the test database.
+    const manager = await prisma.user.findUniqueOrThrow({
+      where: { id: managerId },
+      select: { roleId: true },
+    });
+
+    const inactiveUser = await prisma.user.create({
+      data: {
+        fullName: 'Inactive Task E2E Assignee',
+        email: `task-inactive-${runId}@example.test`,
+        password: 'hashed',
+        roleId: manager.roleId,
+        status: UserStatus.INACTIVE,
+      },
+    });
+
+    // Register for existing afterAll cleanup.
+    userIds.push(inactiveUser.id);
+
+    // Creating a task with an inactive assignee must fail.
+    const inactiveCreateResponse = await request(gatewayServer)
+      .post('/api/tasks')
+      .set('authorization', token('manager'))
+      .send({
+        projectId: project.id,
+        taskName: 'Inactive user assignment',
+        assignedToId: inactiveUser.id,
+      })
+      .expect(400);
+
+    expect((inactiveCreateResponse.body as { code: string }).code).toBe(
+      ErrorCode.INVALID_TASK_ASSIGNEE,
+    );
+
+    // Create a valid unassigned task for reassignment testing.
+    const createdResponse = await request(gatewayServer)
+      .post('/api/tasks')
+      .set('authorization', token('manager'))
+      .send({
+        projectId: project.id,
+        taskName: 'Valid task for reassignment',
+      })
+      .expect(201);
+
+    const created = createdResponse.body as GatewayBody<{
+      id: string;
+    }>;
+
+    // Assigning an existing task to an inactive user must fail.
+    const inactiveAssignResponse = await request(gatewayServer)
+      .patch(`/api/tasks/${created.data.id}/assign`)
+      .set('authorization', token('manager'))
+      .send({
+        assignedToId: inactiveUser.id,
+      })
+      .expect(400);
+
+    expect((inactiveAssignResponse.body as { code: string }).code).toBe(
+      ErrorCode.INVALID_TASK_ASSIGNEE,
+    );
+
+    // Confirm the failed operation did not alter the task.
+    const persistedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: created.data.id },
+    });
+
+    expect(persistedTask.assignedToId).toBeNull();
+
+    // Clean up the valid task so the existing final count
+    // assertion in this test remains correct.
+    await request(gatewayServer)
+      .delete(`/api/tasks/${created.data.id}`)
+      .set('authorization', token('manager'))
+      .expect(200);
 
     // Due date must fall within the project schedule.
     const invalidDateResponse = await request(gatewayServer)

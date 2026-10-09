@@ -52,6 +52,11 @@
 
     "test": "jest",
     "test:unit": "jest --config ./jest.unit.config.js",
+    "test:finance-quality": "jest --config ./jest.finance-analytics-ai.config.js --runInBand",
+    "test:quality-routes": "jest --config ./jest.quality-routes.config.js --runInBand",
+    "test:finance-workflow": "jest --config ./jest.finance-workflow.config.js --runInBand",
+    "test:quality:typecheck": "tsc -p tsconfig.quality.json",
+    "test:quality:lint": "eslint apps/ai-service/src/ai-provider.service.ts \"test/{invoice-service,payment-service,analytics-service,ai-service,finance}/**/*.ts\"",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
@@ -132,7 +137,8 @@
     "rootDir": ".",
     "testRegex": ".*\\.spec\\.ts$",
     "testPathIgnorePatterns": [
-      "\\.e2e-spec\\.ts$"
+      "\\.e2e-spec\\.ts$",
+      "\\.db\\.spec\\.ts$"
     ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

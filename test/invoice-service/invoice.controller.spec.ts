@@ -5,6 +5,8 @@ import {
 } from '../../apps/invoice-service/src/invoice.controller';
 import { FinanceSummaryService } from '../../apps/invoice-service/src/finance-summary.service';
 import { InvoiceService } from '../../apps/invoice-service/src/invoice.service';
+import { ListInvoicesQueryDto } from '../../apps/invoice-service/src/dto/list-invoices-query.dto';
+import { OutstandingInvoiceReportQueryDto } from '../../apps/invoice-service/src/dto/finance-report-query.dto';
 
 describe('Invoice controllers', () => {
   const invoiceService = {
@@ -57,7 +59,10 @@ describe('Invoice controllers', () => {
   });
 
   it('delegates invoice listing', async () => {
-    const query = { page: 1, limit: 20 };
+    const query = Object.assign(new ListInvoicesQueryDto(), {
+      page: 1,
+      limit: 20,
+    });
     const response = { items: [], total: 0, page: 1, limit: 20, totalPages: 0 };
     invoiceService.findAll.mockResolvedValue(response);
 
@@ -189,7 +194,10 @@ describe('Invoice controllers', () => {
   });
 
   it('delegates outstanding invoice reports', async () => {
-    const query = { page: 1, limit: 20 };
+    const query = Object.assign(new OutstandingInvoiceReportQueryDto(), {
+      page: 1,
+      limit: 20,
+    });
     const response = { items: [], total: 0, page: 1, limit: 20, totalPages: 0 };
     financeSummaryService.outstandingInvoices.mockResolvedValue(response);
 

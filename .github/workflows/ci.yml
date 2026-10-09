@@ -13,6 +13,11 @@ on:
       - develop
       - main
 
+concurrency:
+  group: backend-neon-test-database
+  cancel-in-progress: false
+  queue: max
+
 jobs:
   backend-ci:
     uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v1

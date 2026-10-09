@@ -3,6 +3,7 @@ import {
   PaymentController,
 } from '../../apps/payment-service/src/payment.controller';
 import { PaymentService } from '../../apps/payment-service/src/payment.service';
+import { PaymentMethodDto } from '../../apps/payment-service/src/dto/create-payment.dto';
 
 describe('Payment controllers', () => {
   const paymentService = {
@@ -30,7 +31,7 @@ describe('Payment controllers', () => {
       referenceNumber: 'PAY-2026-0001',
       paymentDate: '2026-06-22',
       amount: 250,
-      paymentMethod: 'BANK_TRANSFER',
+      paymentMethod: PaymentMethodDto.BANK_TRANSFER,
     };
     const response = { payment: { id: 'pay-1' }, invoice: { id: 'inv-1' } };
     paymentService.create.mockResolvedValue(response);

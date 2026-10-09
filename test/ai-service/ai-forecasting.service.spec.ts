@@ -55,6 +55,107 @@ describe('AiForecastingService', () => {
     );
   });
 
+  it.each([
+    {
+      amount: 1000,
+      outstanding: 0,
+      expense: 100,
+      trend: RevenueTrendDto.GROWING,
+      milestone: MilestoneStatus.COMPLETED,
+    },
+    {
+      amount: 1000,
+      outstanding: 500,
+      expense: 1000,
+      trend: RevenueTrendDto.DECLINING,
+      milestone: MilestoneStatus.PENDING,
+    },
+    {
+      amount: 1000,
+      outstanding: 500,
+      expense: 500,
+      trend: RevenueTrendDto.STABLE,
+      milestone: MilestoneStatus.COMPLETED,
+    },
+  ])(
+    'predicts revenue $trend from deterministic ERP amounts',
+    async ({ amount, outstanding, expense, trend, milestone }) => {
+      repository.findProjectForRiskForecast.mockResolvedValue({
+        id: 'project-1',
+        projectName: 'Tower',
+        status: ProjectStatus.ACTIVE,
+        budget: null,
+        milestones: [
+          {
+            id: 'ms-1',
+            milestoneName: 'Foundation',
+            status: milestone,
+            dueDate: null,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+        invoices: [
+          {
+            id: 'inv-1',
+            invoiceNumber: null,
+            dueDate: null,
+            status: InvoiceStatus.ISSUED,
+            totalAmount: amount,
+            outstandingAmount: outstanding,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+        expenses: [
+          {
+            id: 'expense-1',
+            amount: expense,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+      });
+      const result = await service.predictProjectRisk('project-1');
+      expect(result.revenueTrend).toBe(trend);
+      expect(result.predictionSource).toBe(PredictionSourceDto.RULE_BASED);
+      expect(result.sufficientData).toBe(true);
+      expect(result.milestoneDelayRisk).toBe(
+        milestone === MilestoneStatus.COMPLETED
+          ? RiskLevelDto.LOW
+          : RiskLevelDto.MEDIUM,
+      );
+      expect(result.recommendedAction).toContain(
+        outstanding >= 350 ? 'payment follow-up' : 'Keep monitoring',
+      );
+    },
+  );
+
+  it('uses relational context when enabled vector retrieval has no matches', async () => {
+    configService.get.mockImplementation((key: string) =>
+      key === 'AI_VECTOR_SEARCH_ENABLED'
+        ? 'true'
+        : key === 'RAG_TOP_K'
+          ? 'invalid'
+          : undefined,
+    );
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: 'project-1',
+      projectName: 'Tower',
+      status: ProjectStatus.ACTIVE,
+      budget: 0,
+      milestones: [],
+      invoices: [],
+      expenses: [
+        { id: 'exp-1', amount: null, createdAt: new Date('2026-01-01') },
+      ],
+    });
+    const result = await service.predictProjectRisk('project-1');
+    expect(repository.findVectorKnowledgeChunks).toHaveBeenCalledWith(
+      'project-1',
+      5,
+    );
+    expect(result.predictionSource).toBe(PredictionSourceDto.SAFE_FALLBACK);
+    expect(result.confidenceScore).toBe(0.25);
+  });
+
   it('rejects invalid project ids when the project does not exist', async () => {
     repository.findProjectForRiskForecast.mockResolvedValue(null);
 

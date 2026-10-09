@@ -5,6 +5,7 @@ module.exports = {
   testPathIgnorePatterns: [
     '\\.integration\\.spec\\.ts$',
     '\\.e2e-spec\\.ts$',
+    '\\.db\\.spec\\.ts$',
     'src/database/__tests__',
   ],
   transform: {

@@ -5,7 +5,7 @@
   "setupFiles": ["<rootDir>/jest-e2e.setup.ts"],
   "testRegex": "test/.*\\.(e2e-spec|integration\\.spec|db\\.spec)\\.ts$",
   "testTimeout": 30000,
-  "maxWorkers": 2,
+  "maxWorkers": 3,
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }

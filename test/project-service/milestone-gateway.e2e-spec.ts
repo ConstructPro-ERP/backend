@@ -97,15 +97,11 @@ describe('Milestones — Gateway to Project Service E2E', () => {
     prisma = projectModule.get<PrismaService>(PrismaService);
 
     const [managerRole, accountantRole] = await Promise.all([
-      prisma.role.upsert({
+      prisma.role.findUniqueOrThrow({
         where: { roleName: 'PROJECT_MANAGER' },
-        update: {},
-        create: { roleName: 'PROJECT_MANAGER' },
       }),
-      prisma.role.upsert({
+      prisma.role.findUniqueOrThrow({
         where: { roleName: 'ACCOUNTANT' },
-        update: {},
-        create: { roleName: 'ACCOUNTANT' },
       }),
     ]);
 

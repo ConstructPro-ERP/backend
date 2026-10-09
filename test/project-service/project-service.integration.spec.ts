@@ -236,25 +236,14 @@ describe('ProjectService — integration', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
-    const projectManagerRole = await prisma.role.upsert({
-      where: {
-        roleName: 'PROJECT_MANAGER',
-      },
-      update: {},
-      create: {
-        roleName: 'PROJECT_MANAGER',
-      },
-    });
-
-    const adminRole = await prisma.role.upsert({
-      where: {
-        roleName: 'ADMIN',
-      },
-      update: {},
-      create: {
-        roleName: 'ADMIN',
-      },
-    });
+    const [projectManagerRole, adminRole] = await Promise.all([
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'PROJECT_MANAGER' },
+      }),
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'ADMIN' },
+      }),
+    ]);
 
     projectManagerRoleId = projectManagerRole.id;
     adminRoleId = adminRole.id;
@@ -577,6 +566,14 @@ describe('ProjectService — integration', () => {
       .patch(`/projects/${project.id}/status`)
       .set('x-user-id', manager.id)
       .send({ status: ProjectStatus.COMPLETED })
+      .expect((response) => {
+        if (response.status !== 200) {
+          throw new Error(
+            `Expected HTTP 200, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
+      })
       .expect(200);
 
     // Assert
@@ -896,22 +893,12 @@ describe('ProjectService — integration', () => {
       'activation-role-change',
     );
 
-    const adminRole = await prisma.role.upsert({
-      where: {
-        roleName: 'ADMIN',
-      },
-      update: {},
-      create: {
-        roleName: 'ADMIN',
-      },
-    });
-
     await prisma.user.update({
       where: {
         id: manager.id,
       },
       data: {
-        roleId: adminRole.id,
+        roleId: adminRoleId,
       },
     });
 
@@ -1016,6 +1003,14 @@ describe('ProjectService — integration', () => {
         projectManagerId: manager.id,
         budget: 10000000,
       })
+      .expect((response) => {
+        if (response.status !== 201) {
+          throw new Error(
+            `Expected HTTP 201, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
+      })
       .expect(201);
 
     const responseBody = parseProjectConversionResponse(res.body as unknown);
@@ -1110,6 +1105,14 @@ describe('ProjectService — integration', () => {
         quotationId: approvedQuotation.id,
         leadId: lead.id,
         targetProjectId: project.id,
+      })
+      .expect((response) => {
+        if (response.status !== 201) {
+          throw new Error(
+            `Expected HTTP 201, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
       })
       .expect(201);
 

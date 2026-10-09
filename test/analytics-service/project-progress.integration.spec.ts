@@ -45,10 +45,8 @@ describe('Project Analytics — real weighted progress integration', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
-    const role = await prisma.role.upsert({
+    const role = await prisma.role.findUniqueOrThrow({
       where: { roleName: 'PROJECT_MANAGER' },
-      update: {},
-      create: { roleName: 'PROJECT_MANAGER' },
     });
 
     const user = await prisma.user.create({

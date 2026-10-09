@@ -387,4 +387,72 @@ describe('QuotationsGatewayController', () => {
       projectStatus: 'ACTIVE',
     });
   });
+
+  it('forwards directApprove() to PATCH /quotations/:id/direct-approve', async () => {
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          id: 'quotation-1',
+          status: 'APPROVED',
+        },
+      }),
+    );
+
+    const req = {
+      headers: {
+        authorization: 'Bearer test-token',
+      },
+    } as unknown as Request;
+
+    const result = await controller.directApprove('quotation-1', req);
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/quotation-1/direct-approve'),
+      {},
+      {
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      id: 'quotation-1',
+      status: 'APPROVED',
+    });
+  });
+
+  it('forwards submit() to PATCH /quotations/:id/submit', async () => {
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          id: 'quotation-1',
+          status: 'PENDING_APPROVAL',
+        },
+      }),
+    );
+
+    const req = {
+      headers: {
+        authorization: 'Bearer test-token',
+      },
+    } as unknown as Request;
+
+    const result = await controller.submit('quotation-1', req);
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      expect.stringContaining('/quotations/quotation-1/submit'),
+      {},
+      {
+        headers: {
+          authorization: 'Bearer test-token',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      id: 'quotation-1',
+      status: 'PENDING_APPROVAL',
+    });
+  });
 });

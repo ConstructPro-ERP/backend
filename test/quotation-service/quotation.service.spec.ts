@@ -7,8 +7,10 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import {
   QuotationService,
+  quotationLeadSelect,
   round2,
 } from '../../apps/quotation-service/src/quotation.service';
+
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentClient } from '../../apps/quotation-service/src/document.client';
 import { ProjectClient } from '../../apps/quotation-service/src/project.client';
@@ -271,7 +273,7 @@ describe('QuotationService.findOne', () => {
     expect(result).toEqual(quotation);
     expect(mockPrisma.quotation.findUnique).toHaveBeenCalledWith({
       where: { id: 'quot-1' },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   });
 
@@ -401,7 +403,12 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
 
     await expect(service.approveAndConvert('quot-1', {})).rejects.toMatchObject(
       {
-        response: { code: 'ALREADY_CONVERTED' },
+        response: {
+          code: 'ALREADY_CONVERTED',
+          details: {
+            projectId: 'existing-proj',
+          },
+        },
       },
     );
 
@@ -783,7 +790,7 @@ describe('QuotationService.reject', () => {
         status: 'REJECTED',
         notes: 'Initial client notes\n[Rejection Reason]: Budget exceeded',
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     expect(result.status).toBe('REJECTED');
@@ -811,7 +818,7 @@ describe('QuotationService.reject', () => {
         status: 'REJECTED',
         notes: '[Rejection Reason]: Specifications unclear',
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   });
 
@@ -879,7 +886,7 @@ describe('QuotationService.revise', () => {
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
       where: { id: 'quot-1' },
       data: { status: 'DRAFT' },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     expect(result.status).toBe('DRAFT');
@@ -994,6 +1001,218 @@ describe('QuotationService.getPdf', () => {
 
     await expect(service.getPdf('non-existent')).rejects.toBeInstanceOf(
       NotFoundException,
+    );
+  });
+});
+
+// ─── directApprove ───────────────────────────────────────────────────────────
+
+describe('QuotationService.directApprove', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('directly approves a PENDING_APPROVAL quotation to APPROVED', async () => {
+    const quotation = {
+      id: 'quot-1',
+      status: 'PENDING_APPROVAL',
+      items: [],
+      lead: { id: 'lead-1', customerName: 'Test Customer' },
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      status: 'APPROVED',
+    });
+
+    const result = await service.directApprove('quot-1');
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-1' },
+      data: { status: 'APPROVED' },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+    expect(result.status).toBe('APPROVED');
+  });
+
+  it('is idempotent when quotation is already APPROVED', async () => {
+    const quotation = {
+      id: 'quot-1',
+      status: 'APPROVED',
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+
+    const result = await service.directApprove('quot-1');
+
+    expect(mockPrisma.quotation.update).not.toHaveBeenCalled();
+    expect(result.status).toBe('APPROVED');
+  });
+
+  it('throws ConflictException with projectId when quotation is already CONVERTED', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-1',
+      status: 'CONVERTED',
+      projectId: 'proj-123',
+      items: [],
+    });
+
+    await expect(service.directApprove('quot-1')).rejects.toMatchObject({
+      response: {
+        code: 'ALREADY_CONVERTED',
+        details: { projectId: 'proj-123' },
+      },
+    });
+  });
+
+  it('throws BadRequestException with QUOTATION_REJECTED when quotation is REJECTED', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-1',
+      status: 'REJECTED',
+      items: [],
+    });
+
+    await expect(service.directApprove('quot-1')).rejects.toMatchObject({
+      response: { code: 'QUOTATION_REJECTED' },
+    });
+  });
+
+  it('throws BadRequestException with INVALID_STATUS_TRANSITION when quotation is in DRAFT', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-1',
+      status: 'DRAFT',
+      items: [],
+    });
+
+    await expect(service.directApprove('quot-1')).rejects.toMatchObject({
+      response: { code: 'INVALID_STATUS_TRANSITION' },
+    });
+  });
+});
+
+// ─── submit ──────────────────────────────────────────────────────────────────
+
+describe('QuotationService.submit', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('submits a DRAFT quotation to PENDING_APPROVAL', async () => {
+    const quotation = {
+      id: 'quot-1',
+      status: 'DRAFT',
+      items: [],
+    };
+    mockPrisma.quotation.findUnique.mockResolvedValue(quotation);
+    mockPrisma.quotation.update.mockResolvedValue({
+      ...quotation,
+      status: 'PENDING_APPROVAL',
+    });
+
+    const result = await service.submit('quot-1');
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'quot-1' },
+      data: { status: 'PENDING_APPROVAL' },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+    expect(result.status).toBe('PENDING_APPROVAL');
+  });
+
+  it('throws BadRequestException with INVALID_STATUS_TRANSITION when quotation is not DRAFT', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'quot-1',
+      status: 'PENDING_APPROVAL',
+      items: [],
+    });
+
+    await expect(service.submit('quot-1')).rejects.toMatchObject({
+      response: { code: 'INVALID_STATUS_TRANSITION' },
+    });
+    expect(mockPrisma.quotation.update).not.toHaveBeenCalled();
+  });
+});
+
+// ─── sorting in findAll ──────────────────────────────────────────────────────
+
+describe('QuotationService.findAll — sorting', () => {
+  let service: QuotationService;
+
+  beforeEach(async () => {
+    jest.clearAllMocks();
+
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        QuotationService,
+        { provide: PrismaService, useValue: mockPrisma },
+        { provide: DocumentClient, useValue: mockDocumentClient },
+        { provide: ProjectClient, useValue: mockProjectClient },
+        { provide: NotificationClient, useValue: mockNotificationClient },
+      ],
+    }).compile();
+
+    service = module.get<QuotationService>(QuotationService);
+  });
+
+  it('orders by totalAmount ascending when requested', async () => {
+    mockPrisma.quotation.count.mockResolvedValue(0);
+    mockPrisma.quotation.findMany.mockResolvedValue([]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await service.findAll({
+      sortBy: 'totalAmount' as any,
+      sortOrder: 'asc' as any,
+    });
+
+    expect(mockPrisma.quotation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { totalAmount: 'asc' },
+      }),
+    );
+  });
+
+  it('orders by status descending when requested', async () => {
+    mockPrisma.quotation.count.mockResolvedValue(0);
+    mockPrisma.quotation.findMany.mockResolvedValue([]);
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await service.findAll({
+      sortBy: 'status' as any,
+      sortOrder: 'desc' as any,
+    });
+
+    expect(mockPrisma.quotation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        orderBy: { status: 'desc' },
+      }),
     );
   });
 });

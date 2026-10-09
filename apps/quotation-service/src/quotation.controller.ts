@@ -61,4 +61,14 @@ export class QuotationController {
   approveAndConvert(@Param('id') id: string, @Body() dto: ApproveQuotationDto) {
     return this.quotationService.approveAndConvert(id, dto);
   }
+
+  @Patch(':id/direct-approve')
+  directApprove(@Param('id') id: string) {
+    return this.quotationService.directApprove(id);
+  }
+
+  @Patch(':id/submit')
+  submit(@Param('id') id: string) {
+    return this.quotationService.submit(id);
+  }
 }

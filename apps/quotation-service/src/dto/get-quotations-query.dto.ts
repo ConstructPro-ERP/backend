@@ -10,6 +10,18 @@ import {
   Min,
 } from 'class-validator';
 
+export enum QuotationSortBy {
+  CREATED_AT = 'createdAt',
+  QUOTATION_DATE = 'quotationDate',
+  TOTAL_AMOUNT = 'totalAmount',
+  STATUS = 'status',
+}
+
+export enum SortOrder {
+  ASC = 'asc',
+  DESC = 'desc',
+}
+
 export class GetQuotationsQueryDto {
   @IsOptional()
   @IsUUID()
@@ -35,4 +47,12 @@ export class GetQuotationsQueryDto {
   @IsOptional()
   @IsString()
   search?: string;
+
+  @IsOptional()
+  @IsEnum(QuotationSortBy)
+  sortBy?: QuotationSortBy = QuotationSortBy.CREATED_AT;
+
+  @IsOptional()
+  @IsEnum(SortOrder)
+  sortOrder?: SortOrder = SortOrder.DESC;
 }

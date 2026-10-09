@@ -55,7 +55,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:db:reset": "node scripts/reset-test-database.mjs",
+    "pretest:e2e": "npm run test:db:reset"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

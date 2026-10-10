@@ -8,14 +8,14 @@ import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { createServer, type Server } from 'node:http';
 import request from 'supertest';
-import { ExpensesGatewayController } from './expenses-gateway.controller';
-import { HttpExceptionFilter } from '../filters/http-exception.filter';
-import { JwtAuthGuard } from '../guards/jwt-auth.guard';
-import { RolesGuard } from '../guards/roles.guard';
-import { ResponseInterceptor } from '../interceptors/response.interceptor';
-import { ExpenseController } from '../../../project-service/src/expense.controller';
-import { ExpenseService } from '../../../project-service/src/expense.service';
-import { ErrorCode } from '../../../../shared/error-codes';
+import { ExpensesGatewayController } from '../../apps/api-gateway/src/controllers/expenses-gateway.controller';
+import { HttpExceptionFilter } from '../../apps/api-gateway/src/filters/http-exception.filter';
+import { JwtAuthGuard } from '../../apps/api-gateway/src/guards/jwt-auth.guard';
+import { RolesGuard } from '../../apps/api-gateway/src/guards/roles.guard';
+import { ResponseInterceptor } from '../../apps/api-gateway/src/interceptors/response.interceptor';
+import { ExpenseController } from '../../apps/project-service/src/expense.controller';
+import { ExpenseService } from '../../apps/project-service/src/expense.service';
+import { ErrorCode } from '../../shared/error-codes';
 
 jest.setTimeout(30000);
 

@@ -16,6 +16,8 @@ import { UsersGatewayController } from './controllers/users-gateway.controller';
 import { LeadGatewayController } from './controllers/lead-gateway.controller';
 import { ClientGatewayController } from './controllers/client-gateway.controller';
 import { CalendarGatewayController } from './controllers/calendar-gateway.controller';
+import { ExpensesGatewayController } from './controllers/expenses-gateway.controller';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -39,6 +41,7 @@ import { CalendarGatewayController } from './controllers/calendar-gateway.contro
     LeadGatewayController,
     ClientGatewayController,
     CalendarGatewayController,
+    ExpensesGatewayController,
   ],
 })
 export class AppModule {}

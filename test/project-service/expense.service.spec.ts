@@ -70,7 +70,7 @@ describe('ExpenseService', () => {
     service = new ExpenseService(
       mockExpenses as unknown as ExpenseRepository,
       mockAccess as unknown as ProjectAccessService,
-      { baseDelayMs: 0, maxDelayMs: 0, maxJitterMs: 0 },
+      { baseDelayMs: 10, maxDelayMs: 10, maxJitterMs: 10 },
     );
 
     mockAccess.resolveActor.mockResolvedValue({

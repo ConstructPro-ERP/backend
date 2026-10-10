@@ -76,9 +76,9 @@ describe('TaskService', () => {
     jest.resetAllMocks();
 
     service = new TaskService(mockTasks as unknown as TaskRepository, {
-      baseDelayMs: 0,
-      maxDelayMs: 0,
-      maxJitterMs: 0,
+      baseDelayMs: 10,
+      maxDelayMs: 10,
+      maxJitterMs: 10,
     });
 
     mockTasks.findActor.mockResolvedValue(manager);

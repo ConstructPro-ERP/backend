@@ -85,9 +85,9 @@ describe('Task Service — database integration', () => {
     );
 
     tasks = new TaskService(new TaskRepository(prisma), {
-      baseDelayMs: 1,
+      baseDelayMs: 10,
       maxDelayMs: 10,
-      maxJitterMs: 0,
+      maxJitterMs: 10,
     });
   });
 

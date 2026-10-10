@@ -12,6 +12,7 @@ import { MilestoneService } from './milestone.service';
 import { MilestoneController } from './milestone.controller';
 import { ExpenseService } from './expense.service';
 import { ExpenseRepository } from './repositories/expense.repository';
+import { ExpenseController } from './expense.controller';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { ExpenseRepository } from './repositories/expense.repository';
       envFilePath: join(process.cwd(), '.env'),
     }),
   ],
-  controllers: [ProjectController, MilestoneController],
+  controllers: [ProjectController, MilestoneController, ExpenseController],
   providers: [
     ProjectService,
     MilestoneService,

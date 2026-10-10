@@ -10,6 +10,8 @@ import { ProjectLifecycleService } from './lifecycle/project-lifecycle.service';
 import { MilestoneRepository } from './repositories/milestone.repository';
 import { MilestoneService } from './milestone.service';
 import { MilestoneController } from './milestone.controller';
+import { ExpenseService } from './expense.service';
+import { ExpenseRepository } from './repositories/expense.repository';
 
 @Module({
   imports: [
@@ -22,10 +24,12 @@ import { MilestoneController } from './milestone.controller';
   providers: [
     ProjectService,
     MilestoneService,
+    ExpenseService,
     ProjectAccessService,
     ProjectLifecycleService,
     ProjectRepository,
     MilestoneRepository,
+    ExpenseRepository,
     PrismaService,
   ],
 })

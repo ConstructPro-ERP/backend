@@ -13,8 +13,19 @@ import { ProjectClient } from './project.client';
 import { NotificationClient } from './notification.client';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { ApproveQuotationDto } from './dto/approve-quotation.dto';
-import { GetQuotationsQueryDto } from './dto/get-quotations-query.dto';
+import {
+  GetQuotationsQueryDto,
+  QuotationSortBy,
+  SortOrder,
+} from './dto/get-quotations-query.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
+
+export const quotationLeadSelect = {
+  id: true,
+  customerName: true,
+  email: true,
+  phone: true,
+};
 
 @Injectable()
 export class QuotationService {
@@ -47,10 +58,13 @@ export class QuotationService {
       itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
     );
 
+    const status = dto.status ?? 'PENDING_APPROVAL';
+
     const quotation = await this.prisma.$transaction(async (tx) => {
       return tx.quotation.create({
         data: {
           leadId: dto.leadId,
+          status,
           totalAmount: totalAmount,
           notes: dto.notes,
           items: {
@@ -62,7 +76,7 @@ export class QuotationService {
             })),
           },
         },
-        include: { items: true },
+        include: { items: true, lead: { select: quotationLeadSelect } },
       });
     });
 
@@ -82,6 +96,12 @@ export class QuotationService {
     const page = Math.max(1, query?.page ?? 1);
     const limit = Math.max(1, Math.min(100, query?.limit ?? 20));
     const skip = (page - 1) * limit;
+
+    const sortBy = query?.sortBy ?? QuotationSortBy.CREATED_AT;
+    const sortOrder = query?.sortOrder ?? SortOrder.DESC;
+    const orderBy: Prisma.QuotationOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
 
     const where: Prisma.QuotationWhereInput = {
       ...(query?.leadId ? { leadId: query.leadId } : {}),
@@ -114,8 +134,8 @@ export class QuotationService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: { items: true },
+        orderBy,
+        include: { items: true, lead: { select: quotationLeadSelect } },
       }),
     ]);
 
@@ -131,7 +151,7 @@ export class QuotationService {
   async findOne(id: string) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
     if (!quotation) {
       throw new NotFoundException({
@@ -145,7 +165,7 @@ export class QuotationService {
   async update(id: string, dto: UpdateQuotationDto) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     if (!quotation) {
@@ -191,7 +211,7 @@ export class QuotationService {
               })),
             },
           },
-          include: { items: true },
+          include: { items: true, lead: { select: quotationLeadSelect } },
         });
       });
     }
@@ -200,17 +220,64 @@ export class QuotationService {
       return this.prisma.quotation.update({
         where: { id },
         data: { notes: dto.notes },
-        include: { items: true },
+        include: { items: true, lead: { select: quotationLeadSelect } },
       });
     }
 
     return quotation;
   }
 
+  async directApprove(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status === 'CONVERTED') {
+      throw new ConflictException({
+        code: 'ALREADY_CONVERTED',
+        message: 'Quotation has already been converted to a project.',
+        details: {
+          projectId: quotation.projectId,
+        },
+      });
+    }
+
+    if (quotation.status === 'REJECTED') {
+      throw new BadRequestException({
+        code: 'QUOTATION_REJECTED',
+        message: 'A rejected quotation cannot be approved. Revise it first.',
+      });
+    }
+
+    if (quotation.status === 'APPROVED') {
+      return quotation;
+    }
+
+    if (quotation.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot approve quotation with status ${quotation.status}. Only PENDING_APPROVAL quotations can be approved.`,
+      });
+    }
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: { status: 'APPROVED' },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+  }
+
   async approveAndConvert(id: string, dto: ApproveQuotationDto) {
+    if (dto?.directApproveOnly) {
+      const approved = await this.directApprove(id);
+      return {
+        quotation: approved,
+        projectId: approved.projectId ?? null,
+        projectStatus: 'ACTIVE',
+      };
+    }
+
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     if (!quotation) {
@@ -224,6 +291,9 @@ export class QuotationService {
       throw new ConflictException({
         code: 'ALREADY_CONVERTED',
         message: 'Quotation has already been converted to a project.',
+        details: {
+          projectId: quotation.projectId,
+        },
       });
     }
 
@@ -288,7 +358,7 @@ export class QuotationService {
         status: 'CONVERTED',
         projectId: projectResult.projectId,
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     try {
@@ -331,7 +401,7 @@ export class QuotationService {
         status: 'REJECTED',
         notes,
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   }
 
@@ -350,7 +420,26 @@ export class QuotationService {
       data: {
         status: 'DRAFT',
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+  }
+
+  async submit(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status !== 'DRAFT') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot submit quotation with status ${quotation.status}. Only DRAFT quotations can be submitted for approval.`,
+      });
+    }
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: {
+        status: 'PENDING_APPROVAL',
+      },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   }
 

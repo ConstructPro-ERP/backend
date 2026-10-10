@@ -8,6 +8,7 @@ import { DocumentClient } from './document.client';
 import { ProjectClient } from './project.client';
 import { NotificationClient } from './notification.client';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CloudinaryModule } from '../../../libs/common/src/cloudinary/cloudinary.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
       envFilePath: join(process.cwd(), '.env'),
     }),
     HttpModule,
+    CloudinaryModule,
   ],
   controllers: [QuotationController],
   providers: [

@@ -1,6 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InvoiceStatus, MilestoneStatus, ProjectStatus } from '@prisma/client';
+import {
+  InvoiceStatus,
+  MilestoneStatus,
+  Prisma,
+  ProjectStatus,
+} from '@prisma/client';
 import { AiPromptService } from '../../apps/ai-service/src/ai-prompt.service';
 import { AiProviderService } from '../../apps/ai-service/src/ai-provider.service';
 import { AiForecastingService } from '../../apps/ai-service/src/ai-forecasting.service';
@@ -108,7 +113,7 @@ describe('AiForecastingService', () => {
         expenses: [
           {
             id: 'expense-1',
-            amount: expense,
+            amount: new Prisma.Decimal(expense),
             createdAt: new Date('2026-01-01'),
           },
         ],
@@ -144,7 +149,11 @@ describe('AiForecastingService', () => {
       milestones: [],
       invoices: [],
       expenses: [
-        { id: 'exp-1', amount: null, createdAt: new Date('2026-01-01') },
+        {
+          id: 'exp-1',
+          amount: new Prisma.Decimal('0.00'),
+          createdAt: new Date('2026-01-01'),
+        },
       ],
     });
     const result = await service.predictProjectRisk('project-1');
@@ -223,7 +232,7 @@ describe('AiForecastingService', () => {
       expenses: [
         {
           id: 'exp-1',
-          amount: 2500,
+          amount: new Prisma.Decimal('2500.00'),
           createdAt: new Date('2026-06-03T00:00:00Z'),
         },
       ],
@@ -278,7 +287,7 @@ describe('AiForecastingService', () => {
       expenses: [
         {
           id: 'exp-1',
-          amount: 2500,
+          amount: new Prisma.Decimal('2500.00'),
           createdAt: new Date('2026-06-03T00:00:00Z'),
         },
       ],
@@ -358,7 +367,7 @@ describe('AiForecastingService', () => {
       expenses: [
         {
           id: 'exp-1',
-          amount: 2500,
+          amount: new Prisma.Decimal('2500.00'),
           createdAt: new Date('2026-06-03T00:00:00Z'),
         },
       ],

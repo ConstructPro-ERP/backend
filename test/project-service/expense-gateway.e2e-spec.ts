@@ -264,6 +264,7 @@ describe('Expenses — Gateway to Project Service E2E', () => {
     }>;
 
     expect(body.data.total).toBe('12.50');
+    expect(response.body).not.toHaveProperty('meta');
     expect(mockExpenses.summary).toHaveBeenCalledWith(projectId, 'manager-id');
   });
 

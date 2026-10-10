@@ -9,6 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DDP-65 — Project Service foundation** ([issue #74](https://github.com/ConstructPro-ERP/backend/issues/74), [PR #79](https://github.com/ConstructPro-ERP/backend/pull/79))
+  - Introduced the deployable NestJS Project Service, Project domain CRUD and API Gateway routes; standalone Projects start in `PLANNING`, while quotation-driven creation/attachment follows the approved-quotation activation and idempotent recovery rules already recorded under Issue #65 and ADR-10.
+- **DDP-68 — Project operations and access control** ([issue #80](https://github.com/ConstructPro-ERP/backend/issues/80), [PR #89](https://github.com/ConstructPro-ERP/backend/pull/89))
+  - Added assigned-Project-Manager authorization, Admin-only manager assignment, validated status transitions, project search/filter/pagination, activation checks and stable domain error codes.
+  - Permitted Admin-only deletion of unused `PLANNING` Projects without related domain records; Projects with business history are cancelled instead of permanently deleted.
+- **DDP-77 — Milestones and canonical weighted progress** ([issue #92](https://github.com/ConstructPro-ERP/backend/issues/92), [PRs #97](https://github.com/ConstructPro-ERP/backend/pull/97) and [#99](https://github.com/ConstructPro-ERP/backend/pull/99))
+  - Added milestone CRUD, progress/status management, derived overdue indicators, completion validation, and transactional recalculation of Project progress using relative integer weights from `1` to `10`.
+  - Added Project Service, API Gateway and Analytics integration with unit, database integration and E2E regression tests.
+- **DDP-81 — Project Task Service** ([issue #104](https://github.com/ConstructPro-ERP/backend/issues/104), [PR #107](https://github.com/ConstructPro-ERP/backend/pull/107))
+  - Implemented Task Service CRUD, assignment/reassignment, independent task status transitions, project-level and optionally milestone-linked tasks, filtering, sorting, pagination, and validated project/assignee access.
+  - Added authenticated API Gateway task routes, DTO/repository/service coverage, database integration tests and gateway-to-service E2E tests.
+- **DDP-82 — Project expense tracking** ([issue #108](https://github.com/ConstructPro-ERP/backend/issues/108), [PR #109](https://github.com/ConstructPro-ERP/backend/pull/109))
+  - Added Project Service expense CRUD and category-based summaries with amount/date validation, project lifecycle restrictions, and permissions for Admin (CRUD), Accountant (create/read/update), and assigned Project Manager (read-only).
+  - Added expense queries with filtering, sorting and pagination; transaction/concurrency handling; unit, database integration and API Gateway E2E coverage.
+- **Project-domain Architecture Decision Records**
+  - Added proposed ADR-11 (Project/Task service boundaries and expense ownership), ADR-12 (relative milestone weights and progress) and ADR-13 (controlled deletion of unused planning Projects). They record implemented decisions pending team/supervisor review; ADR-09 and ADR-10 are unchanged.
+
 - **UC-04 / FR-004 — Convert Quotation to Project** (issue #2)
   - `PATCH /quotations/:id/approve` — approves and converts a quotation to a project; allowed roles: `Admin`, `Management`
   - Business Rule 10.2 enforced: `CONVERTED` status or existing `projectId` → `409 ALREADY_CONVERTED` (idempotent, project service never called); `REJECTED` → `400 QUOTATION_REJECTED`
@@ -49,6 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **DDP-77 — Relative milestone weights and progress semantics** ([PR #99](https://github.com/ConstructPro-ERP/backend/pull/99))
+  - Changed the initial issue-level 100-point allocation rule to normalized relative weights of `1`–`10` without a total-weight requirement. Project completion requires 100% canonical progress and all recorded milestones completed; task status does not automatically update milestone progress.
+- **DDP-81 — Shared transaction retry support** ([PR #107](https://github.com/ConstructPro-ERP/backend/pull/107))
+  - Centralized retry utilities for Prisma/Neon serialization conflicts, reusing them across Project, Milestone, Task and Expense operations.
+- **DDP-82 — Expense financial precision** ([PR #109](https://github.com/ConstructPro-ERP/backend/pull/109))
+  - Changed `Expense.amount` from floating-point storage to PostgreSQL `DECIMAL(12,2)`; added `expenseDate`, optional category/description and query indexes; updated Analytics and AI consumers for Prisma Decimal compatibility.
+
 - `docker-compose.yml` — added `api-gateway`, `auth-service`, and `quotation-service` service definitions (file was previously empty)
 - `libs/config/src/configuration.ts` — added `quotation.port` (env `QUOTATION_SERVICE_PORT`, default `3009`)
 - `libs/config/src/env.validation.ts` — added Joi rule for `QUOTATION_SERVICE_PORT`
@@ -69,6 +93,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Removed the temporary `PROJECT_SERVICE_STUB` fallback now that quotation conversion is integrated with the real Project Service.
 
 ### Fixed
+
+- **DDP-66 — Prisma schema and database reconciliation** ([issue #66](https://github.com/ConstructPro-ERP/backend/issues/66), [PR #76](https://github.com/ConstructPro-ERP/backend/pull/76))
+  - Reconciled migration metadata and existing Neon tables/relations and aligned User authentication nullability and related schema mappings without dropping existing application data.
+- **DDP-79 — Replayable Prisma migration history** ([issue #95](https://github.com/ConstructPro-ERP/backend/issues/95), [PR #96](https://github.com/ConstructPro-ERP/backend/pull/96))
+  - Added missing baseline and lead contact/note migrations and corrected the incompatible embedding migration; preserved the migration sequence rather than squashing it.
+- **DDP-77 — Milestone deletion and E2E reliability** ([PRs #99](https://github.com/ConstructPro-ERP/backend/pull/99) and [#103](https://github.com/ConstructPro-ERP/backend/pull/103))
+  - Prevented deleting milestones referenced by tasks and reduced shared-test-database contention by adjusting transaction handling and integration/E2E test execution.
+- **DDP-82 — API Gateway response pagination detection** ([PR #109](https://github.com/ConstructPro-ERP/backend/pull/109))
+  - Corrected the shared response interceptor so an expense summary's decimal-string `total` does not produce incorrect pagination metadata, while genuine paginated responses retain their metadata.
 
 - Installed missing `@nestjs/axios` package (was declared in `package.json` but absent from `node_modules`, causing TypeScript errors across all HTTP-using guards and controllers)
 - **DDP-67 — Project/Quotation cardinality**

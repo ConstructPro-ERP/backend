@@ -340,12 +340,19 @@ model Expense {
   id           String   @id @default(uuid())
   projectId    String
   recordedById String
-  amount       Float
+  amount       Decimal  @db.Decimal(12, 2)
+  category     String?
+  description  String?
+  expenseDate  DateTime
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   project    Project @relation(fields: [projectId], references: [id])
   recordedBy User    @relation("RecordedBy", fields: [recordedById], references: [id])
+
+  @@index([projectId])
+  @@index([projectId, expenseDate])
+  @@index([projectId, category])
 }
 
 model Invoice {

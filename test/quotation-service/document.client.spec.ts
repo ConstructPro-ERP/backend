@@ -46,6 +46,7 @@ describe('DocumentClient', () => {
     expect(mockHttpService.post).toHaveBeenCalledWith(
       expect.stringContaining('/documents/quotation-pdf'),
       { quotationId: 'quot-1' },
+      { timeout: 10000 },
     );
   });
 
@@ -106,4 +107,48 @@ describe('DocumentClient', () => {
 
     expect(result).toBeNull();
   });
+
+  it.each([0, 120])(
+    'generates a valid paginated PDF for %s line items',
+    async (count) => {
+      mockHttpService.post.mockReturnValue(of({ data: {} }));
+      mockPrismaService.quotation.findUnique.mockResolvedValue({
+        id: 'quot-layout',
+        status: 'DRAFT',
+        totalAmount: count * 1.25,
+        notes: 'Long notes '.repeat(100),
+        lead: { customerName: 'Customer (test)', email: null, phone: null },
+        items: Array.from({ length: count }, () => ({
+          itemName: 'Long item description '.repeat(8),
+          quantity: 1,
+          unitPrice: 1.25,
+          amount: 1.25,
+        })),
+      });
+      mockCloudinaryService.uploadBuffer.mockImplementation(
+        (buffer: Buffer) => {
+          const pdf = buffer.toString('utf8');
+          expect(pdf.startsWith('%PDF-1.4')).toBe(true);
+          expect(pdf).toContain('Customer \\(test\\)');
+          expect(pdf).toContain(`Total Amount: $${(count * 1.25).toFixed(2)}`);
+          const pageCount = Number(pdf.match(/\/Count (\d+)/)?.[1]);
+          expect(pageCount).toBeGreaterThanOrEqual(count === 0 ? 1 : 3);
+          const xref = Number(pdf.match(/startxref\n(\d+)/)?.[1]);
+          expect(buffer.subarray(xref, xref + 4).toString()).toBe('xref');
+          const offsets = [...pdf.matchAll(/(\d{10}) 00000 n/g)].map((match) =>
+            Number(match[1]),
+          );
+          offsets.forEach((offset, index) => {
+            expect(buffer.subarray(offset, offset + 20).toString()).toMatch(
+              new RegExp(`^${index + 1} 0 obj`),
+            );
+          });
+          return Promise.resolve('https://cdn.example.com/layout.pdf');
+        },
+      );
+      await expect(client.generatePdf('quot-layout')).resolves.toBe(
+        'https://cdn.example.com/layout.pdf',
+      );
+    },
+  );
 });

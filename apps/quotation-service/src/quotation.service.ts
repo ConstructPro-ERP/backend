@@ -39,6 +39,12 @@ export class QuotationService {
   ) {}
 
   async create(dto: CreateQuotationDto) {
+    if (dto.status && !['DRAFT', 'PENDING_APPROVAL'].includes(dto.status)) {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: 'New quotations must be draft or pending approval.',
+      });
+    }
     const lead = await this.prisma.lead.findUnique({
       where: { id: dto.leadId },
     });
@@ -50,13 +56,11 @@ export class QuotationService {
     }
 
     const itemsWithAmounts = dto.items.map((item) => {
-      const amount = round2(item.quantity * item.unitPrice);
+      const amount = calculateAmount(item.quantity, item.unitPrice);
       return { ...item, amount };
     });
 
-    const totalAmount = round2(
-      itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
-    );
+    const totalAmount = sumAmounts(itemsWithAmounts.map((item) => item.amount));
 
     const status = dto.status ?? 'PENDING_APPROVAL';
 
@@ -184,12 +188,12 @@ export class QuotationService {
 
     if (dto.items && dto.items.length > 0) {
       const itemsWithAmounts = dto.items.map((item) => {
-        const amount = round2(item.quantity * item.unitPrice);
+        const amount = calculateAmount(item.quantity, item.unitPrice);
         return { ...item, amount };
       });
 
-      const totalAmount = round2(
-        itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
+      const totalAmount = sumAmounts(
+        itemsWithAmounts.map((item) => item.amount),
       );
 
       return this.prisma.$transaction(async (tx) => {
@@ -264,7 +268,7 @@ export class QuotationService {
 
     return this.prisma.quotation.update({
       where: { id },
-      data: { status: 'APPROVED' },
+      data: { status: 'APPROVED', pdfUrl: null },
       include: { items: true, lead: { select: quotationLeadSelect } },
     });
   }
@@ -308,6 +312,13 @@ export class QuotationService {
       });
     }
 
+    if (!['PENDING_APPROVAL', 'APPROVED'].includes(quotation.status)) {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: 'Submit the quotation for approval before converting it.',
+      });
+    }
+
     if (
       quotation.projectId &&
       dto.targetProjectId &&
@@ -335,7 +346,7 @@ export class QuotationService {
     if (quotation.status !== 'APPROVED') {
       await this.prisma.quotation.update({
         where: { id },
-        data: { status: 'APPROVED' },
+        data: { status: 'APPROVED', pdfUrl: null },
       });
     }
 
@@ -353,13 +364,14 @@ export class QuotationService {
           startDate: dto.startDate,
           endDate: dto.endDate,
           projectManagerId: dto.projectManagerId,
-          budget: dto.budget,
+          budget: dto.budget ?? Number(quotation.totalAmount),
         });
 
     const converted = await this.prisma.quotation.update({
       where: { id },
       data: {
         status: 'CONVERTED',
+        pdfUrl: null,
         projectId: projectResult.projectId,
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
@@ -403,6 +415,7 @@ export class QuotationService {
       where: { id },
       data: {
         status: 'REJECTED',
+        pdfUrl: null,
         notes,
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
@@ -443,6 +456,7 @@ export class QuotationService {
       where: { id },
       data: {
         status: 'PENDING_APPROVAL',
+        pdfUrl: null,
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
     });
@@ -474,5 +488,50 @@ export class QuotationService {
 }
 
 export function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  return new Prisma.Decimal(n)
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+    .toNumber();
+}
+
+// Match the database Decimal(12, 2) limit before attempting persistence.
+function checkedAmount(amount: Prisma.Decimal): number {
+  if (
+    !amount.isFinite() ||
+    amount.isNegative() ||
+    amount.greaterThan('9999999999.99')
+  ) {
+    throw new BadRequestException({
+      code: 'INVALID_QUOTATION_AMOUNT',
+      message:
+        'Quotation amounts must be non-negative and within the supported monetary range.',
+    });
+  }
+  return amount.toNumber();
+}
+
+export function calculateAmount(quantity: number, unitPrice: number): number {
+  if (
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 2147483647 ||
+    !Number.isFinite(unitPrice) ||
+    unitPrice < 0
+  ) {
+    throw new BadRequestException({
+      code: 'INVALID_QUOTATION_ITEM',
+      message:
+        'Items require a positive integer quantity and a finite non-negative unit price.',
+    });
+  }
+  return checkedAmount(
+    new Prisma.Decimal(unitPrice)
+      .mul(quantity)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+  );
+}
+
+export function sumAmounts(amounts: number[]): number {
+  return checkedAmount(
+    amounts.reduce((sum, amount) => sum.plus(amount), new Prisma.Decimal(0)),
+  );
 }

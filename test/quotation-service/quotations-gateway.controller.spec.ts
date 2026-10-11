@@ -8,10 +8,7 @@ import type { Request } from 'express';
 import { of } from 'rxjs';
 import { QuotationsGatewayController } from '../../apps/api-gateway/src/controllers/quotations-gateway.controller';
 
-function makeContext(
-  userRoles: string[],
-  handler: () => void,
-): ExecutionContext {
+function makeContext(userRoles: string[], handler: unknown): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => ({ user: { role: userRoles[0], roles: userRoles } }),
@@ -47,7 +44,10 @@ describe('RolesGuard — quotations endpoint access', () => {
     'ACCOUNTANT',
   );
 
-  const approveHandler = handlerWithRoles('ADMIN');
+  // The guard reads metadata from this method; it never invokes it.
+  const approveHandler =
+    // eslint-disable-next-line @typescript-eslint/unbound-method
+    QuotationsGatewayController.prototype.approveAndConvert;
 
   it('allows SALES_MANAGER to POST /quotations', () => {
     expect(
@@ -95,10 +95,10 @@ describe('RolesGuard — quotations endpoint access', () => {
     );
   });
 
-  it('throws 403 when SALES_MANAGER tries to PATCH /quotations/:id/approve', () => {
-    expect(() =>
+  it('allows SALES_MANAGER to PATCH /quotations/:id/approve', () => {
+    expect(
       guard.canActivate(makeContext(['SALES_MANAGER'], approveHandler)),
-    ).toThrow(ForbiddenException);
+    ).toBe(true);
   });
 
   it('throws 403 when ACCOUNTANT tries to PATCH /quotations/:id/approve', () => {

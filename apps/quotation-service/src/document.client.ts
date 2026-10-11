@@ -1,6 +1,6 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { CloudinaryService } from '../../../libs/common/src/cloudinary/cloudinary.service';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -39,6 +39,7 @@ export class DocumentClient {
         this.httpService.post<{ pdfUrl: string }>(
           `${this.baseUrl}/documents/quotation-pdf`,
           { quotationId },
+          { timeout: 10000 },
         ),
       );
       if (resp.data?.pdfUrl) {
@@ -116,12 +117,12 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
     '--------------------------------------',
   ];
 
-  let subtotal = 0;
+  let subtotal = new Prisma.Decimal(0);
   if (quotation.items && Array.isArray(quotation.items)) {
     for (const item of quotation.items) {
       const unitPrice = Number(item.unitPrice);
       const itemTotal = Number(item.amount ?? item.quantity * unitPrice);
-      subtotal += itemTotal;
+      subtotal = subtotal.plus(itemTotal);
       lines.push(
         `- ${item.itemName}: ${item.quantity} x $${unitPrice.toFixed(2)} = $${itemTotal.toFixed(2)}`,
       );
@@ -146,26 +147,40 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
     'Terms: Payment terms as agreed. Subject to standard ConstructPro terms.',
   );
 
-  const content = [
-    'BT',
-    '/F1 12 Tf',
-    '50 780 Td',
-    '14 TL',
-    ...lines.map((line, index) =>
-      index === 0
-        ? `(${escapePdfText(line)}) Tj`
-        : `T* (${escapePdfText(line)}) Tj`,
-    ),
-    'ET',
-  ].join('\n');
-
+  // Wrap long fields and paginate so large quotations do not run off the page.
+  const wrapped = lines.flatMap((line) => {
+    const clean = line.replace(/[\r\n\t]/g, ' ');
+    return clean.match(/.{1,80}/g) ?? [''];
+  });
+  const pages: string[][] = [];
+  for (let i = 0; i < wrapped.length; i += 50) {
+    pages.push(wrapped.slice(i, i + 50));
+  }
+  const pageIds = pages.map((_, index) => 4 + index * 2);
   const objects = [
     '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
-    '2 0 obj << /Type /Pages /Count 1 /Kids [3 0 R] >> endobj',
-    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj',
-    '4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
-    `5 0 obj << /Length ${Buffer.byteLength(content, 'utf8')} >> stream\n${content}\nendstream endobj`,
+    `2 0 obj << /Type /Pages /Count ${pages.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(' ')}] >> endobj`,
+    '3 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj',
   ];
+  pages.forEach((pageLines, index) => {
+    const pageId = pageIds[index];
+    const contentId = pageId + 1;
+    const content = [
+      'BT',
+      '/F1 10 Tf',
+      '50 750 Td',
+      '14 TL',
+      ...pageLines.map(
+        (line, lineIndex) =>
+          `${lineIndex === 0 ? '' : 'T* '}(${escapePdfText(line)}) Tj`,
+      ),
+      'ET',
+    ].join('\n');
+    objects.push(
+      `${pageId} 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >> endobj`,
+      `${contentId} 0 obj << /Length ${Buffer.byteLength(content, 'utf8')} >> stream\n${content}\nendstream endobj`,
+    );
+  });
 
   let pdf = '%PDF-1.4\n';
   const offsets = [0];

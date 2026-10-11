@@ -376,7 +376,7 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
     expect(mockPrisma.quotation.update).toHaveBeenNthCalledWith(
       2,
       expect.objectContaining({
-        data: { status: 'CONVERTED', projectId: 'proj-abc' },
+        data: { status: 'CONVERTED', pdfUrl: null, projectId: 'proj-abc' },
       }),
     );
 
@@ -462,6 +462,7 @@ describe('QuotationService.approveAndConvert — UC-04, CRITICAL 90% coverage', 
       expect.objectContaining({
         data: {
           status: 'CONVERTED',
+          pdfUrl: null,
           projectId: 'existing-proj',
         },
       }),
@@ -817,6 +818,7 @@ describe('QuotationService.reject', () => {
       where: { id: 'quot-1' },
       data: {
         status: 'REJECTED',
+        pdfUrl: null,
         notes: 'Initial client notes\n[Rejection Reason]: Budget exceeded',
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
@@ -845,6 +847,7 @@ describe('QuotationService.reject', () => {
       where: { id: 'quot-2' },
       data: {
         status: 'REJECTED',
+        pdfUrl: null,
         notes: '[Rejection Reason]: Specifications unclear',
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
@@ -1072,7 +1075,7 @@ describe('QuotationService.directApprove', () => {
 
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
       where: { id: 'quot-1' },
-      data: { status: 'APPROVED' },
+      data: { status: 'APPROVED', pdfUrl: null },
       include: { items: true, lead: { select: quotationLeadSelect } },
     });
     expect(result.status).toBe('APPROVED');
@@ -1170,7 +1173,7 @@ describe('QuotationService.submit', () => {
 
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
       where: { id: 'quot-1' },
-      data: { status: 'PENDING_APPROVAL' },
+      data: { status: 'PENDING_APPROVAL', pdfUrl: null },
       include: { items: true, lead: { select: quotationLeadSelect } },
     });
     expect(result.status).toBe('PENDING_APPROVAL');

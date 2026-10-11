@@ -120,9 +120,7 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
   if (quotation.items && Array.isArray(quotation.items)) {
     for (const item of quotation.items) {
       const unitPrice = Number(item.unitPrice);
-      const itemTotal = Number(
-        item.amount ?? item.quantity * unitPrice,
-      );
+      const itemTotal = Number(item.amount ?? item.quantity * unitPrice);
       subtotal += itemTotal;
       lines.push(
         `- ${item.itemName}: ${item.quantity} x $${unitPrice.toFixed(2)} = $${itemTotal.toFixed(2)}`,
@@ -144,7 +142,9 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
   }
 
   lines.push('');
-  lines.push('Terms: Payment terms as agreed. Subject to standard ConstructPro terms.');
+  lines.push(
+    'Terms: Payment terms as agreed. Subject to standard ConstructPro terms.',
+  );
 
   const content = [
     'BT',

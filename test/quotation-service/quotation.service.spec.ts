@@ -713,7 +713,8 @@ describe('QuotationService.update', () => {
       id: 'q-notes-only',
       status: 'PENDING_APPROVAL',
       notes: 'Old notes',
-      pdfUrl: 'https://res.cloudinary.com/constructpro/quotations/quotation-q.pdf',
+      pdfUrl:
+        'https://res.cloudinary.com/constructpro/quotations/quotation-q.pdf',
     });
     mockPrisma.quotation.update.mockResolvedValue({
       id: 'q-notes-only',

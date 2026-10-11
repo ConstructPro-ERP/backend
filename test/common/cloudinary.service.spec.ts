@@ -127,18 +127,22 @@ describe('CloudinaryService', () => {
 
   it('rejects with timeout error when upload exceeds timeout limit', async () => {
     const mockUploadStream = new PassThrough();
-    (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(
-      () => {
-        // Deliberately do not invoke callback to simulate network stall
-        return mockUploadStream;
-      },
-    );
+    (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(() => {
+      // Deliberately do not invoke callback to simulate network stall
+      return mockUploadStream;
+    });
 
     const service = new CloudinaryService();
     const buffer = Buffer.from('dummy content');
 
     await expect(
-      service.uploadBuffer(buffer, 'quotations', 'quotation-timeout', 'raw', 50),
+      service.uploadBuffer(
+        buffer,
+        'quotations',
+        'quotation-timeout',
+        'raw',
+        50,
+      ),
     ).rejects.toThrow('Cloudinary upload timed out after 50ms');
   });
 });

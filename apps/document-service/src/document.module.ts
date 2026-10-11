@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { CloudinaryModule } from '../../../libs/common/src/cloudinary/cloudinary.module';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { DocumentController } from './document.controller';
+import { DocumentReconciliationController } from './document-reconciliation.controller';
 import { DocumentReconciliationService } from './document-reconciliation.service';
 import { DocumentService } from './document.service';
 import { DocumentRepository } from './repositories/document.repository';
@@ -16,7 +17,7 @@ import { DocumentRepository } from './repositories/document.repository';
     }),
     CloudinaryModule,
   ],
-  controllers: [DocumentController],
+  controllers: [DocumentController, DocumentReconciliationController],
   providers: [
     DocumentService,
     DocumentReconciliationService,

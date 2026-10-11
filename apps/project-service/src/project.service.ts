@@ -37,8 +37,8 @@ import {
   TRANSACTION_RETRY_DELAY_OPTIONS,
   isRetryableTransactionError,
   waitBeforeTransactionRetry,
-} from './utils/transaction-error.util';
-import type { TransactionRetryDelayOptions } from './utils/transaction-error.util';
+} from '../../../shared/utils/transaction-error.util';
+import type { TransactionRetryDelayOptions } from '../../../shared/utils/transaction-error.util';
 
 @Injectable()
 export class ProjectService {

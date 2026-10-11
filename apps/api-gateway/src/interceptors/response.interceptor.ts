@@ -8,6 +8,23 @@ import type { Request, Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 
+function isPaginatedResponse(value: unknown): value is {
+  items: unknown[];
+  total: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'items' in value &&
+    Array.isArray(value.items) &&
+    'total' in value &&
+    typeof value.total === 'number'
+  );
+}
+
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
@@ -24,21 +41,15 @@ export class ResponseInterceptor implements NestInterceptor {
           timestamp: new Date().toISOString(),
         };
 
-        if (
-          data &&
-          typeof data === 'object' &&
-          ('items' in data || 'total' in data)
-        ) {
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+        if (isPaginatedResponse(data)) {
           envelope.data = data.items ?? data;
           envelope.meta = {
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
             total: data.total,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+
             page: data.page,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+
             limit: data.limit,
-            // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access
+
             totalPages: data.totalPages,
           };
         } else {

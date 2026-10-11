@@ -202,6 +202,7 @@ export class QuotationService {
           data: {
             notes: dto.notes !== undefined ? dto.notes : quotation.notes,
             totalAmount,
+            pdfUrl: null, // Invalidate cached Cloudinary URL so next request regenerates
             items: {
               create: itemsWithAmounts.map((i) => ({
                 itemName: i.itemName,
@@ -219,7 +220,10 @@ export class QuotationService {
     if (dto.notes !== undefined) {
       return this.prisma.quotation.update({
         where: { id },
-        data: { notes: dto.notes },
+        data: {
+          notes: dto.notes,
+          pdfUrl: null, // Invalidate cached Cloudinary URL so next request regenerates
+        },
         include: { items: true, lead: { select: quotationLeadSelect } },
       });
     }
@@ -419,6 +423,7 @@ export class QuotationService {
       where: { id },
       data: {
         status: 'DRAFT',
+        pdfUrl: null, // Force regeneration upon next submission
       },
       include: { items: true, lead: { select: quotationLeadSelect } },
     });
@@ -455,7 +460,7 @@ export class QuotationService {
       throw new BadGatewayException({
         code: 'PDF_GENERATION_FAILED',
         message:
-          'Quotation PDF generation failed or document service is unavailable.',
+          'Quotation PDF generation failed or cloud storage is unavailable.',
       });
     }
 

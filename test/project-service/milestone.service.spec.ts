@@ -69,7 +69,7 @@ describe('MilestoneService', () => {
       mockAccess as unknown as ProjectAccessService,
       {
         baseDelayMs: 10,
-        maxDelayMs: 100,
+        maxDelayMs: 10,
         maxJitterMs: 10,
       },
     );

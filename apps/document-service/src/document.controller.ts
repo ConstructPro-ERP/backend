@@ -25,16 +25,13 @@ import {
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { DocumentFileInterceptor } from './interceptors/document-file.interceptor';
 import { DocumentService } from './document.service';
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
-import {
-  MAX_DOCUMENT_FILE_SIZE_BYTES,
-  type UploadedDocumentFile,
-} from './validation/document-file.validator';
+import { type UploadedDocumentFile } from './validation/document-file.validator';
 
 @ApiTags('Documents')
 @ApiBadRequestResponse({ description: 'Invalid document request' })
@@ -46,14 +43,7 @@ export class DocumentController {
   constructor(private readonly documents: DocumentService) {}
 
   @Post('projects/:projectId/documents')
-  @UseInterceptors(
-    FileInterceptor('file', {
-      limits: {
-        fileSize: MAX_DOCUMENT_FILE_SIZE_BYTES,
-        files: 1,
-      },
-    }),
-  )
+  @UseInterceptors(DocumentFileInterceptor)
   @ApiOperation({ summary: 'Upload a project document' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({

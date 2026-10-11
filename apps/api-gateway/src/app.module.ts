@@ -17,6 +17,7 @@ import { LeadGatewayController } from './controllers/lead-gateway.controller';
 import { ClientGatewayController } from './controllers/client-gateway.controller';
 import { CalendarGatewayController } from './controllers/calendar-gateway.controller';
 import { ExpensesGatewayController } from './controllers/expenses-gateway.controller';
+import { DocumentsGatewayController } from './controllers/documents-gateway.controller';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ExpensesGatewayController } from './controllers/expenses-gateway.contro
     ClientGatewayController,
     CalendarGatewayController,
     ExpensesGatewayController,
+    DocumentsGatewayController,
   ],
 })
 export class AppModule {}

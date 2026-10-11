@@ -5,6 +5,8 @@ import type { DocumentResourceType } from '../../../../libs/common/src/cloudinar
 import { ErrorCode } from '../../../../shared/error-codes';
 
 export const MAX_DOCUMENT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
+export const MAX_DOCUMENT_FILE_SIZE_MIB =
+  MAX_DOCUMENT_FILE_SIZE_BYTES / (1024 * 1024);
 
 interface DocumentTypeRule {
   mimeType: string;
@@ -254,7 +256,7 @@ export function validateDocumentFile(
   if (file.buffer.length > MAX_DOCUMENT_FILE_SIZE_BYTES) {
     throw new PayloadTooLargeException({
       code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
-      message: 'Document exceeds the 4 MiB upload limit.',
+      message: `Document exceeds the ${MAX_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
     });
   }
 

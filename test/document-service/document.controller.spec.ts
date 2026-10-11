@@ -4,7 +4,11 @@ import type { Server } from 'node:http';
 import request from 'supertest';
 import { DocumentController } from '../../apps/document-service/src/document.controller';
 import { DocumentService } from '../../apps/document-service/src/document.service';
-import { MAX_DOCUMENT_FILE_SIZE_BYTES } from '../../apps/document-service/src/validation/document-file.validator';
+import {
+  MAX_DOCUMENT_FILE_SIZE_BYTES,
+  MAX_DOCUMENT_FILE_SIZE_MIB,
+} from '../../apps/document-service/src/validation/document-file.validator';
+import { ErrorCode } from '../../shared/error-codes';
 
 const projectId = 'b390c2c8-86f5-484f-ad9f-170bca22703d';
 const documentId = 'f5ff5c48-922c-4f43-b49b-9330f422d041';
@@ -122,8 +126,8 @@ describe('DocumentController', () => {
     expect(mockDocuments.upload).not.toHaveBeenCalled();
   });
 
-  it('rejects oversized multipart uploads', async () => {
-    await request(server)
+  it('rejects oversized multipart uploads with the correct error code', async () => {
+    const response = await request(server)
       .post(`/projects/${projectId}/documents`)
       .set('x-user-id', actorId)
       .field('categoryId', categoryId)
@@ -133,6 +137,18 @@ describe('DocumentController', () => {
         'large.pdf',
       )
       .expect(413);
+
+    const body = response.body as {
+      code: string;
+      message: string;
+    };
+
+    expect(response.status).toBe(413);
+
+    expect(body).toMatchObject({
+      code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
+      message: `Document exceeds the ${MAX_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
+    });
 
     expect(mockDocuments.upload).not.toHaveBeenCalled();
   });

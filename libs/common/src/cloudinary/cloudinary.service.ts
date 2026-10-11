@@ -85,8 +85,11 @@ export class CloudinaryService {
               `Cloudinary upload failed for ${folder}/${filename}:`,
               error,
             );
+
             return reject(
-              error ?? new Error('Cloudinary upload returned empty response'),
+              new Error(
+                error?.message ?? 'Cloudinary upload returned empty response',
+              ),
             );
           }
           this.logger.log(`Uploaded to Cloudinary: ${result.secure_url}`);

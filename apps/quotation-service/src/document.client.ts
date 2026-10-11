@@ -1,8 +1,24 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { HttpService } from '@nestjs/axios';
+import type { Prisma } from '@prisma/client';
 import { firstValueFrom } from 'rxjs';
 import { CloudinaryService } from '../../../libs/common/src/cloudinary/cloudinary.service';
 import { PrismaService } from '../../../prisma/prisma.service';
+
+// Quotation data required to generate a PDF.
+// Derived from the Prisma schema to keep relation and field types synchronized with the database model.
+type QuotationPdfData = Prisma.QuotationGetPayload<{
+  include: {
+    items: true;
+    lead: {
+      select: {
+        customerName: true;
+        email: true;
+        phone: true;
+      };
+    };
+  };
+}>;
 
 @Injectable()
 export class DocumentClient {
@@ -81,7 +97,7 @@ function escapePdfText(value: string): string {
     .replace(/\)/g, '\\)');
 }
 
-function buildQuotationPdf(quotation: any): Buffer {
+function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
   const lines: string[] = [
     'ConstructPro ERP — Official Quotation',
     '======================================',
@@ -99,9 +115,9 @@ function buildQuotationPdf(quotation: any): Buffer {
 
   if (quotation.items && Array.isArray(quotation.items)) {
     for (const item of quotation.items) {
-      const itemTotal = Number(
-        item.amount ?? item.quantity * item.unitPrice,
-      ).toFixed(2);
+      // Prisma Decimal fields must be converted explicitly for PDF output.
+      const itemTotal = Number(item.amount).toFixed(2);
+
       lines.push(
         `- ${item.itemName}: ${item.quantity} x $${Number(item.unitPrice).toFixed(2)} = $${itemTotal}`,
       );

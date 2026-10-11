@@ -1,6 +1,16 @@
 import { CloudinaryService } from '../../libs/common/src/cloudinary/cloudinary.service';
-import { v2 as cloudinary } from 'cloudinary';
+import {
+  v2 as cloudinary,
+  type UploadApiErrorResponse,
+  type UploadApiResponse,
+} from 'cloudinary';
 import { PassThrough } from 'node:stream';
+
+// Match the Cloudinary SDK callback contract in test mocks.
+type UploadCallback = (
+  error?: UploadApiErrorResponse,
+  result?: UploadApiResponse,
+) => void;
 
 jest.mock('cloudinary', () => ({
   v2: {
@@ -41,13 +51,13 @@ describe('CloudinaryService', () => {
   it('uploads a buffer successfully and returns the secure URL', async () => {
     const mockUploadStream = new PassThrough();
     (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(
-      (options, callback) => {
+      (_options: unknown, callback: UploadCallback) => {
         // Emit callback asynchronously
         setImmediate(() => {
-          callback(null, {
+          callback(undefined, {
             secure_url:
               'https://res.cloudinary.com/test-cloud/raw/upload/v1234/test.pdf',
-          });
+          } as UploadApiResponse);
         });
         return mockUploadStream;
       },
@@ -80,9 +90,15 @@ describe('CloudinaryService', () => {
   it('rejects if upload_stream yields an error', async () => {
     const mockUploadStream = new PassThrough();
     (cloudinary.uploader.upload_stream as jest.Mock).mockImplementation(
-      (options, callback) => {
+      (_options: unknown, callback: UploadCallback) => {
         setImmediate(() => {
-          callback(new Error('Cloudinary stream network failure'), null);
+          const uploadError: UploadApiErrorResponse = {
+            name: 'Error',
+            message: 'Cloudinary stream network failure',
+            http_code: 503,
+          };
+
+          callback(uploadError);
         });
         return mockUploadStream;
       },

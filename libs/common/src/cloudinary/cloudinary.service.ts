@@ -171,6 +171,47 @@ export class CloudinaryService {
     });
   }
 
+  async findAuthenticatedAsset(
+    publicId: string,
+    resourceType: DocumentResourceType,
+  ): Promise<AuthenticatedUploadResult | null> {
+    this.ensureDocumentStorageConfigured();
+
+    try {
+      const result: unknown = await cloudinary.api.resource(publicId, {
+        resource_type: resourceType,
+        type: 'authenticated',
+      });
+
+      if (
+        !result ||
+        typeof result !== 'object' ||
+        !('public_id' in result) ||
+        result.public_id !== publicId ||
+        !('resource_type' in result) ||
+        result.resource_type !== resourceType ||
+        !('type' in result) ||
+        result.type !== 'authenticated' ||
+        !('bytes' in result) ||
+        typeof result.bytes !== 'number'
+      ) {
+        throw new Error('Cloudinary returned invalid asset metadata.');
+      }
+
+      return {
+        publicId: result.public_id,
+        resourceType,
+        bytes: result.bytes,
+      };
+    } catch (error: unknown) {
+      if (this.isCloudinaryNotFound(error)) {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
   createAuthenticatedDownloadUrl(
     publicId: string,
     format: string,
@@ -231,5 +272,18 @@ export class CloudinaryService {
     });
 
     this.isConfigured = true;
+  }
+
+  private isCloudinaryNotFound(error: unknown): boolean {
+    if (!error || typeof error !== 'object') {
+      return false;
+    }
+
+    const response = error as {
+      http_code?: unknown;
+      error?: { http_code?: unknown };
+    };
+
+    return response.http_code === 404 || response.error?.http_code === 404;
   }
 }

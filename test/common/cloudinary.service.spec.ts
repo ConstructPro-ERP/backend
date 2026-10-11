@@ -22,6 +22,9 @@ jest.mock('cloudinary', () => ({
       upload_stream: jest.fn(),
       destroy: jest.fn(),
     },
+    api: {
+      resource: jest.fn(),
+    },
   },
 }));
 
@@ -350,5 +353,63 @@ describe('CloudinaryService', () => {
         'raw',
       ),
     ).rejects.toThrow('Provider unavailable');
+  });
+
+  it('retrieves authenticated asset metadata', async () => {
+    const publicId = 'constructpro/projects/project-1/doc-1.pdf';
+
+    (cloudinary.api.resource as jest.Mock).mockResolvedValue({
+      public_id: publicId,
+      resource_type: 'raw',
+      type: 'authenticated',
+      bytes: 100,
+    });
+
+    const service = new CloudinaryService();
+
+    await expect(
+      service.findAuthenticatedAsset(publicId, 'raw'),
+    ).resolves.toEqual({
+      publicId,
+      resourceType: 'raw',
+      bytes: 100,
+    });
+
+    expect(cloudinary.api.resource).toHaveBeenCalledWith(publicId, {
+      resource_type: 'raw',
+      type: 'authenticated',
+    });
+  });
+
+  it('returns null for a confirmed missing asset', async () => {
+    (cloudinary.api.resource as jest.Mock).mockRejectedValue({
+      error: { http_code: 404 },
+    });
+
+    const service = new CloudinaryService();
+
+    await expect(
+      service.findAuthenticatedAsset(
+        'constructpro/projects/project-1/missing.pdf',
+        'raw',
+      ),
+    ).resolves.toBeNull();
+  });
+
+  it('does not treat provider failures as missing assets', async () => {
+    (cloudinary.api.resource as jest.Mock).mockRejectedValue({
+      error: { http_code: 503 },
+    });
+
+    const service = new CloudinaryService();
+
+    await expect(
+      service.findAuthenticatedAsset(
+        'constructpro/projects/project-1/doc-1.pdf',
+        'raw',
+      ),
+    ).rejects.toEqual({
+      error: { http_code: 503 },
+    });
   });
 });

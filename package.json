@@ -15,6 +15,7 @@
     "vercel-build": "prisma generate && npm run build:all",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
+
     "dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
     "dev:quotation-service": "ts-node -r tsconfig-paths/register apps/quotation-service/src/main.ts",
@@ -28,6 +29,7 @@
     "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
     "dev:task-service": "ts-node -r tsconfig-paths/register apps/task-service/src/main.ts",
     "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calender-service/src/main.ts",
+
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
     "start:auth-service": "node dist/apps/auth-service/src/main.js",
@@ -45,7 +47,9 @@
     "start:vercel": "node dist/server.js",
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
+
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"*.ts\" --fix",
+
     "test": "jest",
     "test:unit": "jest --config ./jest.unit.config.js",
     "test:finance-quality": "jest --config ./jest.finance-analytics-ai.config.js --runInBand",
@@ -56,7 +60,9 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:cloudinary-live": "jest --config ./test/jest-cloudinary.json --runInBand",
+    "test:db:reset": "node scripts/reset-test-db.js"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
@@ -133,7 +139,8 @@
     "testRegex": ".*\\.spec\\.ts$",
     "testPathIgnorePatterns": [
       "\\.e2e-spec\\.ts$",
-      "\\.db\\.spec\\.ts$"
+      "\\.db\\.spec\\.ts$",
+      "document-cloudinary\\.integration\\.spec\\.ts$"
     ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

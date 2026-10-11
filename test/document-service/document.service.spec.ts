@@ -474,7 +474,7 @@ describe('DocumentService', () => {
         ),
       ).rejects.toThrow(ServiceUnavailableException);
 
-      expect(mockDocuments.markUploadFailed).not.toHaveBeenCalled();
+      expect(mockDocuments.markUploadFailed).toHaveBeenCalledTimes(1);
     });
 
     it('reports failure when compensation metadata cannot be finalized', async () => {

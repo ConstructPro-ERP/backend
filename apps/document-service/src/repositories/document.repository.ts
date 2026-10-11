@@ -109,6 +109,57 @@ export class DocumentRepository {
     });
   }
 
+  async findStaleForReconciliation(before: Date, take = 25) {
+    const statuses = [
+      DocumentStorageStatus.DELETING,
+      DocumentStorageStatus.FAILED,
+      DocumentStorageStatus.PENDING,
+    ] as const;
+
+    const quotas = statuses.map(
+      (_, index) =>
+        Math.floor(take / statuses.length) +
+        (index < take % statuses.length ? 1 : 0),
+    );
+
+    const batches = await Promise.all(
+      statuses.map((storageStatus, index) =>
+        this.prisma.document.findMany({
+          where: {
+            storageStatus,
+            deletedAt: null,
+            updatedAt: { lt: before },
+          },
+          select: {
+            id: true,
+            storageStatus: true,
+            cloudinaryPublicId: true,
+            cloudinaryResourceType: true,
+            fileSize: true,
+            updatedAt: true,
+          },
+          orderBy: [{ updatedAt: 'asc' }, { id: 'asc' }],
+          take: quotas[index],
+        }),
+      ),
+    );
+
+    return batches.flat();
+  }
+
+  markFailedCleaned(id: string) {
+    return this.prisma.document.updateMany({
+      where: {
+        id,
+        storageStatus: DocumentStorageStatus.FAILED,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: new Date(),
+      },
+    });
+  }
+
   async findManyAndCount(args: DocumentListArgs) {
     const where: Prisma.DocumentWhereInput = {
       projectId: args.projectId,

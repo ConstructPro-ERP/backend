@@ -352,4 +352,49 @@ describe('DocumentRepository', () => {
       },
     });
   });
+
+  it('finds stale records across all recovery states', async () => {
+    const cutoff = new Date('2026-10-11T10:00:00.000Z');
+
+    mockPrisma.document.findMany.mockResolvedValue([]);
+
+    await repository.findStaleForReconciliation(cutoff, 25);
+
+    const statuses = [
+      DocumentStorageStatus.DELETING,
+      DocumentStorageStatus.FAILED,
+      DocumentStorageStatus.PENDING,
+    ];
+
+    expect(mockPrisma.document.findMany).toHaveBeenCalledTimes(3);
+
+    statuses.forEach((storageStatus, index) => {
+      expect(mockPrisma.document.findMany).toHaveBeenNthCalledWith(
+        index + 1,
+        expect.objectContaining({
+          where: {
+            storageStatus,
+            deletedAt: null,
+            updatedAt: { lt: cutoff },
+          },
+          take: index === 0 ? 9 : 8,
+        }),
+      );
+    });
+  });
+
+  it('marks cleaned failed uploads without removing history', async () => {
+    await repository.markFailedCleaned('doc-1');
+
+    expect(mockPrisma.document.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'doc-1',
+        storageStatus: DocumentStorageStatus.FAILED,
+        deletedAt: null,
+      },
+      data: {
+        deletedAt: expect.any(Date) as Date,
+      },
+    });
+  });
 });

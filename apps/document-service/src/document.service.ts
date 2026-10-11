@@ -453,36 +453,28 @@ export class DocumentService {
     resourceType: DocumentResourceType,
   ): Promise<void> {
     try {
-      await this.cloudinary.deleteAuthenticatedAsset(publicId, resourceType);
+      const updated = await this.documents.markUploadFailed(id);
+
+      if (updated.count !== 1) {
+        throw new ConflictException(
+          'Document status changed during upload compensation.',
+        );
+      }
     } catch (error: unknown) {
-      this.logFailure(
-        `Unable to remove inconsistent Cloudinary asset for ${id}`,
-        error,
-      );
+      this.logFailure(`Failed to transition document ${id} to FAILED`, error);
 
       throw new ServiceUnavailableException(
-        'Invalid uploaded asset requires storage reconciliation.',
+        'Document upload requires metadata reconciliation.',
       );
     }
 
     try {
-      const updated = await this.documents.markUploadFailed(id);
-
-      if (updated.count !== 1) {
-        this.logger.error(
-          `Document ${id} could not be marked FAILED after compensation`,
-        );
-
-        throw new ConflictException('Document status requires reconciliation.');
-      }
+      await this.cloudinary.deleteAuthenticatedAsset(publicId, resourceType);
     } catch (error: unknown) {
-      this.logFailure(
-        `Unable to finalize failed upload metadata for ${id}`,
-        error,
-      );
+      this.logFailure(`Failed to remove invalid Cloudinary asset ${id}`, error);
 
       throw new ServiceUnavailableException(
-        'Document upload compensation requires metadata reconciliation.',
+        'Document upload requires storage cleanup.',
       );
     }
   }

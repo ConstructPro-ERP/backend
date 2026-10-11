@@ -10,7 +10,10 @@ import {
   quotationLeadSelect,
   round2,
 } from '../../apps/quotation-service/src/quotation.service';
-
+import {
+  QuotationSortBy,
+  SortOrder,
+} from '../../apps/quotation-service/src/dto/get-quotations-query.dto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { DocumentClient } from '../../apps/quotation-service/src/document.client';
 import { ProjectClient } from '../../apps/quotation-service/src/project.client';
@@ -1212,10 +1215,9 @@ describe('QuotationService.findAll — sorting', () => {
     mockPrisma.quotation.count.mockResolvedValue(0);
     mockPrisma.quotation.findMany.mockResolvedValue([]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await service.findAll({
-      sortBy: 'totalAmount' as any,
-      sortOrder: 'asc' as any,
+      sortBy: QuotationSortBy.TOTAL_AMOUNT,
+      sortOrder: SortOrder.ASC,
     });
 
     expect(mockPrisma.quotation.findMany).toHaveBeenCalledWith(
@@ -1229,10 +1231,9 @@ describe('QuotationService.findAll — sorting', () => {
     mockPrisma.quotation.count.mockResolvedValue(0);
     mockPrisma.quotation.findMany.mockResolvedValue([]);
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await service.findAll({
-      sortBy: 'status' as any,
-      sortOrder: 'desc' as any,
+      sortBy: QuotationSortBy.STATUS,
+      sortOrder: SortOrder.DESC,
     });
 
     expect(mockPrisma.quotation.findMany).toHaveBeenCalledWith(

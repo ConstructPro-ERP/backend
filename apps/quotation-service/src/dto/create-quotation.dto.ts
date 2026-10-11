@@ -6,11 +6,13 @@ import {
   IsNumber,
   IsOptional,
   IsArray,
+  IsEnum,
   ValidateNested,
   ArrayMinSize,
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { QuotationStatus } from '@prisma/client';
 
 export class CreateQuotationItemDto {
   @IsString()
@@ -39,4 +41,8 @@ export class CreateQuotationDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @IsOptional()
+  @IsEnum(QuotationStatus)
+  status?: QuotationStatus;
 }

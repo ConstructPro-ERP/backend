@@ -739,7 +739,7 @@ describe('QuotationService.update', () => {
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
       where: { id: 'q-notes-only' },
       data: { notes: 'New notes', pdfUrl: null },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   });
 

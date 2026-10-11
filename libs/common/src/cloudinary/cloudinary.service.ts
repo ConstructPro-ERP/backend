@@ -6,6 +6,14 @@ import {
 } from 'cloudinary';
 import { Readable } from 'node:stream';
 
+export type DocumentResourceType = 'image' | 'raw';
+
+export interface AuthenticatedUploadResult {
+  publicId: string;
+  resourceType: DocumentResourceType;
+  bytes: number;
+}
+
 @Injectable()
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
@@ -100,5 +108,128 @@ export class CloudinaryService {
       const stream = Readable.from(buffer);
       stream.pipe(uploadStream);
     });
+  }
+
+  async uploadAuthenticatedBuffer(
+    buffer: Buffer,
+    publicId: string,
+    resourceType: DocumentResourceType,
+  ): Promise<AuthenticatedUploadResult> {
+    this.ensureDocumentStorageConfigured();
+
+    if (buffer.length === 0) {
+      throw new Error('Cannot upload an empty document.');
+    }
+
+    if (!publicId.startsWith('constructpro/projects/')) {
+      throw new Error('Invalid project document public ID.');
+    }
+
+    return new Promise<AuthenticatedUploadResult>((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          public_id: publicId,
+          resource_type: resourceType,
+          type: 'authenticated',
+          overwrite: false,
+        },
+        (
+          error: UploadApiErrorResponse | undefined,
+          result: UploadApiResponse | undefined,
+        ) => {
+          if (error || !result) {
+            this.logger.error(
+              `Authenticated document upload failed for ${publicId}.`,
+            );
+            return reject(
+              new Error(
+                error?.message ?? 'Cloudinary returned no upload result.',
+              ),
+            );
+          }
+
+          if (
+            result.public_id !== publicId ||
+            result.type !== 'authenticated' ||
+            result.resource_type !== resourceType
+          ) {
+            return reject(
+              new Error('Cloudinary returned unexpected asset metadata.'),
+            );
+          }
+
+          resolve({
+            publicId: result.public_id,
+            resourceType,
+            bytes: result.bytes,
+          });
+        },
+      );
+
+      uploadStream.on('error', (error: Error) => reject(error));
+      uploadStream.end(buffer);
+    });
+  }
+
+  createAuthenticatedDownloadUrl(
+    publicId: string,
+    format: string,
+    resourceType: DocumentResourceType,
+  ): string {
+    this.ensureDocumentStorageConfigured();
+
+    const expiresAt = Math.floor(Date.now() / 1000) + 300;
+
+    return cloudinary.utils.private_download_url(publicId, format, {
+      resource_type: resourceType,
+      type: 'authenticated',
+      expires_at: expiresAt,
+      attachment: true,
+    });
+  }
+
+  async deleteAuthenticatedAsset(
+    publicId: string,
+    resourceType: DocumentResourceType,
+  ): Promise<void> {
+    this.ensureDocumentStorageConfigured();
+
+    const response: unknown = await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+      type: 'authenticated',
+      invalidate: true,
+    });
+
+    if (
+      !response ||
+      typeof response !== 'object' ||
+      !('result' in response) ||
+      (response.result !== 'ok' && response.result !== 'not found')
+    ) {
+      throw new Error('Cloudinary did not confirm asset deletion.');
+    }
+  }
+
+  private ensureDocumentStorageConfigured(): void {
+    if (this.isConfigured) {
+      return;
+    }
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error('Cloudinary document storage is not configured.');
+    }
+
+    cloudinary.config({
+      cloud_name: cloudName,
+      api_key: apiKey,
+      api_secret: apiSecret,
+      secure: true,
+    });
+
+    this.isConfigured = true;
   }
 }

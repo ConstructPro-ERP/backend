@@ -40,6 +40,7 @@ export class CloudinaryService {
    * @param folder Folder inside Cloudinary (e.g., 'quotations', 'invoices', 'projects')
    * @param filename Desired filename/public ID
    * @param resourceType 'raw' for PDFs and docs, 'image' for pictures, or 'auto'
+   * @param timeoutMs Maximum time to wait for upload before timing out (default 8000ms)
    * @returns The secure HTTPS URL of the uploaded asset
    */
   async uploadBuffer(
@@ -47,6 +48,7 @@ export class CloudinaryService {
     folder: string,
     filename: string,
     resourceType: 'raw' | 'image' | 'auto' = 'raw',
+    timeoutMs = 8000,
   ): Promise<string> {
     if (!this.isConfigured) {
       // Re-check in case environment variables were populated after bootstrap
@@ -69,6 +71,25 @@ export class CloudinaryService {
     }
 
     return new Promise<string>((resolve, reject) => {
+      let isSettled = false;
+      const timer = setTimeout(() => {
+        if (!isSettled) {
+          isSettled = true;
+          this.logger.error(
+            `Cloudinary upload timed out after ${timeoutMs}ms for ${folder}/${filename}`,
+          );
+          reject(
+            new Error(
+              `Cloudinary upload timed out after ${timeoutMs}ms for ${folder}/${filename}`,
+            ),
+          );
+        }
+      }, timeoutMs);
+
+      if (timer && typeof timer.unref === 'function') {
+        timer.unref();
+      }
+
       const uploadStream = cloudinary.uploader.upload_stream(
         {
           folder: `constructpro/${folder}`,
@@ -80,6 +101,9 @@ export class CloudinaryService {
           error: UploadApiErrorResponse | undefined,
           result: UploadApiResponse | undefined,
         ) => {
+          if (isSettled) return;
+          clearTimeout(timer);
+          isSettled = true;
           if (error || !result) {
             this.logger.error(
               `Cloudinary upload failed for ${folder}/${filename}:`,

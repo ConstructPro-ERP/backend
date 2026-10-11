@@ -700,11 +700,36 @@ describe('QuotationService.update', () => {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const updateArg = mockPrisma.quotation.update.mock.calls[0][0] as {
       where: { id: string };
-      data: { notes: string; totalAmount: number };
+      data: { notes: string; totalAmount: number; pdfUrl: string | null };
     };
     expect(updateArg.where.id).toBe('q-1');
     expect(updateArg.data.notes).toBe('Updated notes');
     expect(updateArg.data.totalAmount).toBe(750);
+    expect(updateArg.data.pdfUrl).toBeNull();
+  });
+
+  it('resets pdfUrl to null when updating notes only', async () => {
+    mockPrisma.quotation.findUnique.mockResolvedValue({
+      id: 'q-notes-only',
+      status: 'PENDING_APPROVAL',
+      notes: 'Old notes',
+      pdfUrl: 'https://res.cloudinary.com/constructpro/quotations/quotation-q.pdf',
+    });
+    mockPrisma.quotation.update.mockResolvedValue({
+      id: 'q-notes-only',
+      status: 'PENDING_APPROVAL',
+      notes: 'New notes',
+      pdfUrl: null,
+      items: [],
+    });
+
+    await service.update('q-notes-only', { notes: 'New notes' });
+
+    expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
+      where: { id: 'q-notes-only' },
+      data: { notes: 'New notes', pdfUrl: null },
+      include: { items: true },
+    });
   });
 
   it('throws NotFoundException when quotation does not exist', async () => {
@@ -878,7 +903,7 @@ describe('QuotationService.revise', () => {
 
     expect(mockPrisma.quotation.update).toHaveBeenCalledWith({
       where: { id: 'quot-1' },
-      data: { status: 'DRAFT' },
+      data: { status: 'DRAFT', pdfUrl: null },
       include: { items: true },
     });
 

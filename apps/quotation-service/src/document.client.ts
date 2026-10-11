@@ -105,7 +105,10 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
     `Quotation ID: ${quotation.id}`,
     `Status: ${quotation.status}`,
     `Date: ${new Date().toISOString().slice(0, 10)}`,
-    `Customer: ${quotation.lead?.customerName ?? 'N/A'}`,
+    'Validity: Valid for 30 days from generation',
+    '',
+    'Client Information:',
+    `Customer Name: ${quotation.lead?.customerName ?? 'N/A'}`,
     `Email: ${quotation.lead?.email ?? 'N/A'}`,
     `Phone: ${quotation.lead?.phone ?? 'N/A'}`,
     '',
@@ -113,23 +116,35 @@ function buildQuotationPdf(quotation: QuotationPdfData): Buffer {
     '--------------------------------------',
   ];
 
+  let subtotal = 0;
   if (quotation.items && Array.isArray(quotation.items)) {
     for (const item of quotation.items) {
-      // Prisma Decimal fields must be converted explicitly for PDF output.
-      const itemTotal = Number(item.amount).toFixed(2);
-
+      const unitPrice = Number(item.unitPrice);
+      const itemTotal = Number(
+        item.amount ?? item.quantity * unitPrice,
+      );
+      subtotal += itemTotal;
       lines.push(
-        `- ${item.itemName}: ${item.quantity} x $${Number(item.unitPrice).toFixed(2)} = $${itemTotal}`,
+        `- ${item.itemName}: ${item.quantity} x $${unitPrice.toFixed(2)} = $${itemTotal.toFixed(2)}`,
       );
     }
   }
 
-  lines.push('');
+  lines.push('--------------------------------------');
+  lines.push(`Subtotal: $${subtotal.toFixed(2)}`);
   lines.push(`Total Amount: $${Number(quotation.totalAmount).toFixed(2)}`);
+
   if (quotation.notes) {
     lines.push('');
-    lines.push(`Notes: ${quotation.notes}`);
+    lines.push('Notes & Special Conditions:');
+    const noteLines = String(quotation.notes).split('\n');
+    for (const nLine of noteLines) {
+      lines.push(`  ${nLine}`);
+    }
   }
+
+  lines.push('');
+  lines.push('Terms: Payment terms as agreed. Subject to standard ConstructPro terms.');
 
   const content = [
     'BT',

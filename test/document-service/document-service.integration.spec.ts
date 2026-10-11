@@ -6,6 +6,8 @@ import {
 } from '@prisma/client';
 import { Test } from '@nestjs/testing';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { Server } from 'node:http';
 import request from 'supertest';
 import { DocumentModule } from '../../apps/document-service/src/document.module';
@@ -21,6 +23,13 @@ jest.setTimeout(60000);
 
 const pdf = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
 const signedUrl = 'https://example.test/signed-document';
+
+const DOCX_MIME =
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+const validDocx = readFileSync(
+  join(__dirname, 'fixtures', 'valid-project-document.docx'),
+);
 
 const mockCloudinary = {
   uploadAuthenticatedBuffer: jest.fn(),
@@ -598,5 +607,98 @@ describe('Document Service — Neon database integration', () => {
     const deleted = await prisma.document.findUniqueOrThrow({ where: { id } });
     expect(deleted.storageStatus).toBe(DocumentStorageStatus.DELETED);
     expect(deleted.deletedAt).not.toBeNull();
+  });
+
+  it('persists a valid DOCX upload and generates its signed download', async () => {
+    const project = await createProject();
+    const category = await createCategory();
+
+    const response = await request(server)
+      .post(`/projects/${project.id}/documents`)
+      .set('x-user-id', managerId)
+      .field('categoryId', category.id)
+      .attach('file', validDocx, {
+        filename: 'approved-contract.docx',
+        contentType: DOCX_MIME,
+      })
+      .expect(201);
+
+    const documentId = (response.body as DocumentResponse).id;
+
+    const saved = await prisma.document.findUniqueOrThrow({
+      where: { id: documentId },
+    });
+
+    expect(saved.originalName).toBe('approved-contract.docx');
+    expect(saved.mimeType).toBe(DOCX_MIME);
+    expect(saved.fileSize).toBe(validDocx.length);
+    expect(saved.cloudinaryResourceType).toBe('raw');
+    expect(saved.storageStatus).toBe(DocumentStorageStatus.ACTIVE);
+    expect(saved.cloudinaryPublicId).toMatch(/\.docx$/);
+
+    expect(mockCloudinary.uploadAuthenticatedBuffer).toHaveBeenCalledWith(
+      validDocx,
+      saved.cloudinaryPublicId,
+      'raw',
+    );
+
+    const download = await request(server)
+      .get(`/documents/${documentId}/download`)
+      .set('x-user-id', accountantId)
+      .expect(200);
+
+    expect(download.body).toEqual({
+      downloadUrl: signedUrl,
+      expiresInSeconds: 300,
+    });
+
+    expect(mockCloudinary.createAuthenticatedDownloadUrl).toHaveBeenCalledWith(
+      saved.cloudinaryPublicId,
+      'docx',
+      'raw',
+    );
+  });
+
+  it('rejects spoofed MIME types and invalid DOCX before storage', async () => {
+    const project = await createProject();
+    const category = await createCategory();
+
+    await request(server)
+      .post(`/projects/${project.id}/documents`)
+      .set('x-user-id', managerId)
+      .field('categoryId', category.id)
+      .attach('file', pdf, {
+        filename: 'fake-image.png',
+        contentType: 'image/png',
+      })
+      .expect(400);
+
+    await request(server)
+      .post(`/projects/${project.id}/documents`)
+      .set('x-user-id', managerId)
+      .field('categoryId', category.id)
+      .attach('file', Buffer.from('PK'), {
+        filename: 'invalid.docx',
+        contentType: DOCX_MIME,
+      })
+      .expect(400);
+
+    await request(server)
+      .post(`/projects/${project.id}/documents`)
+      .set('x-user-id', managerId)
+      .field('categoryId', category.id)
+      .attach('file', Buffer.from('#!/bin/sh\necho unsafe'), {
+        filename: 'script.sh',
+        contentType: 'text/plain',
+      })
+      .expect(400);
+
+    expect(
+      await prisma.document.count({
+        where: { projectId: project.id },
+      }),
+    ).toBe(0);
+
+    expect(mockCloudinary.uploadAuthenticatedBuffer).not.toHaveBeenCalled();
   });
 });

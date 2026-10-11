@@ -1,4 +1,6 @@
 import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   MAX_DOCUMENT_FILE_SIZE_BYTES,
   validateDocumentFile,
@@ -8,6 +10,9 @@ import {
 const PDF_MIME = 'application/pdf';
 const DOCX_MIME =
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const validDocx = readFileSync(
+  join(__dirname, 'fixtures', 'valid-project-document.docx'),
+);
 
 function makeFile(
   name: string,
@@ -64,6 +69,66 @@ describe('Document file validation', () => {
     });
   });
 
+  it('accepts a valid DOCX file', () => {
+    expect(
+      validateDocumentFile(
+        makeFile('approved-contract.docx', DOCX_MIME, validDocx),
+      ),
+    ).toMatchObject({
+      originalName: 'approved-contract.docx',
+      mimeType: DOCX_MIME,
+      fileSize: validDocx.length,
+      extension: '.docx',
+      resourceType: 'raw',
+    });
+  });
+
+  it('accepts PDF files at exactly the 4 MiB limit', () => {
+    const maximumPdf = Buffer.alloc(MAX_DOCUMENT_FILE_SIZE_BYTES, 0x20);
+
+    pdf.copy(maximumPdf);
+    Buffer.from('%%EOF').copy(maximumPdf, maximumPdf.length - 5);
+
+    expect(
+      validateDocumentFile(makeFile('maximum.pdf', PDF_MIME, maximumPdf)),
+    ).toMatchObject({
+      fileSize: MAX_DOCUMENT_FILE_SIZE_BYTES,
+      extension: '.pdf',
+      resourceType: 'raw',
+    });
+  });
+
+  it('accepts the JPEG extension as well as JPG', () => {
+    const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00, 0xff, 0xd9]);
+
+    expect(
+      validateDocumentFile(makeFile('construction.jpeg', 'image/jpeg', jpeg)),
+    ).toHaveProperty('extension', '.jpeg');
+  });
+
+  it('rejects JPEG content without the closing marker', () => {
+    const incompleteJpeg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x00]);
+
+    expect(() =>
+      validateDocumentFile(
+        makeFile('incomplete.jpg', 'image/jpeg', incompleteJpeg),
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a PNG with an invalid IHDR length', () => {
+    const png = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6vPYAAAAASUVORK5CYII=',
+      'base64',
+    );
+
+    png.writeUInt32BE(12, 8);
+
+    expect(() =>
+      validateDocumentFile(makeFile('invalid.png', 'image/png', png)),
+    ).toThrow(BadRequestException);
+  });
+
   it('rejects a missing file', () => {
     expect(() => validateDocumentFile(undefined)).toThrow(BadRequestException);
   });
@@ -114,6 +179,9 @@ describe('Document file validation', () => {
       'folder\\contract.pdf',
       ' contract.pdf',
       'contract.pdf\n',
+      'contract.pdf\u0000',
+      'contract.pdf\u007f',
+      `${'a'.repeat(252)}.pdf`,
     ]) {
       expect(() => validateDocumentFile(makeFile(name, PDF_MIME, pdf))).toThrow(
         BadRequestException,

@@ -1,7 +1,9 @@
 import { HttpModule } from '@nestjs/axios';
 import {
+  ConflictException,
   ForbiddenException,
   INestApplication,
+  ServiceUnavailableException,
   ValidationPipe,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -555,5 +557,92 @@ describe('Documents — Gateway to Document Service E2E', () => {
     };
 
     expect(body.code).toBe(ErrorCode.PROJECT_ACCESS_DENIED);
+  });
+
+  it('rejects invalid upload metadata before forwarding', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents`)
+      .set('authorization', token('manager'))
+      .field('categoryId', 'invalid-category')
+      .attach('file', Buffer.from('test'), {
+        filename: 'contract.pdf',
+        contentType: 'application/pdf',
+      })
+      .expect(400);
+
+    expect(mockDocuments.upload).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid document listing parameters', async () => {
+    await request(gatewayServer)
+      .get(`/api/projects/${projectId}/documents`)
+      .set('authorization', token('manager'))
+      .query({
+        page: 0,
+        limit: 101,
+        sortBy: 'invalid',
+      })
+      .expect(400);
+
+    expect(mockDocuments.findAll).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid category create and update requests', async () => {
+    await request(gatewayServer)
+      .post('/api/document-categories')
+      .set('authorization', token('admin'))
+      .send({ categoryName: '   ' })
+      .expect(400);
+
+    await request(gatewayServer)
+      .patch(`/api/document-categories/${categoryId}`)
+      .set('authorization', token('admin'))
+      .send({ isActive: 'false' })
+      .expect(400);
+
+    expect(mockDocuments.createCategory).not.toHaveBeenCalled();
+    expect(mockDocuments.updateCategory).not.toHaveBeenCalled();
+  });
+
+  it('propagates document storage failures', async () => {
+    mockDocuments.download.mockRejectedValueOnce(
+      new ServiceUnavailableException('Document storage unavailable.'),
+    );
+
+    await request(gatewayServer)
+      .get(`/api/documents/${documentId}/download`)
+      .set('authorization', token('manager'))
+      .expect(503);
+
+    expect(mockDocuments.download).toHaveBeenCalledWith(
+      documentId,
+      actors.manager.id,
+    );
+  });
+
+  it('propagates duplicate category conflicts', async () => {
+    mockDocuments.createCategory.mockRejectedValueOnce(
+      new ConflictException('Document category already exists.'),
+    );
+
+    await request(gatewayServer)
+      .post('/api/document-categories')
+      .set('authorization', token('admin'))
+      .send({ categoryName: 'Contracts' })
+      .expect(409);
+
+    expect(mockDocuments.createCategory).toHaveBeenCalledWith(
+      { categoryName: 'Contracts' },
+      actors.admin.id,
+    );
+  });
+
+  it('rejects invalid bearer tokens', async () => {
+    await request(gatewayServer)
+      .get(`/api/documents/${documentId}`)
+      .set('authorization', 'Bearer invalid-token')
+      .expect(401);
+
+    expect(mockDocuments.findOne).not.toHaveBeenCalled();
   });
 });

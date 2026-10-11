@@ -26,7 +26,7 @@ import {
   ExpenseSortOrder,
 } from './dto/expense-query.dto';
 import { UpdateExpenseDto } from './dto/update-expense.dto';
-import type { ProjectAccessActor } from './interfaces/project-access.interface';
+import type { ProjectAccessActor } from '../../../libs/common/src/project-access/project-access.policy';
 import { ProjectAccessService } from './project-access.service';
 import { ExpenseRepository } from './repositories/expense.repository';
 import type { ProjectTransaction } from './repositories/project.repository';

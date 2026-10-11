@@ -30,6 +30,7 @@ const actors: Record<string, { id: string; role: string }> = {
   manager: { id: 'manager-user', role: 'PROJECT_MANAGER' },
   accountant: { id: 'accountant-user', role: 'ACCOUNTANT' },
   sales: { id: 'sales-user', role: 'SALES_MANAGER' },
+  client: { id: 'client-user', role: 'CLIENT_PORTAL_USER' },
 };
 
 const mockDocuments = {
@@ -313,13 +314,90 @@ describe('Documents — Gateway to Document Service E2E', () => {
     expect(mockDocuments.findAll).not.toHaveBeenCalled();
   });
 
-  it('rejects unrelated roles reading documents', async () => {
+  it('allows sales managers to read documents and categories', async () => {
+    await request(gatewayServer)
+      .get(`/api/projects/${projectId}/documents`)
+      .set('authorization', token('sales'))
+      .expect(200);
+
+    expect(mockDocuments.findAll).toHaveBeenCalledWith(
+      projectId,
+      expect.any(Object),
+      actors.sales.id,
+    );
+
     await request(gatewayServer)
       .get(`/api/documents/${documentId}`)
       .set('authorization', token('sales'))
+      .expect(200);
+
+    expect(mockDocuments.findOne).toHaveBeenCalledWith(
+      documentId,
+      actors.sales.id,
+    );
+
+    await request(gatewayServer)
+      .get(`/api/documents/${documentId}/download`)
+      .set('authorization', token('sales'))
+      .expect(200);
+
+    expect(mockDocuments.download).toHaveBeenCalledWith(
+      documentId,
+      actors.sales.id,
+    );
+
+    await request(gatewayServer)
+      .get('/api/document-categories')
+      .set('authorization', token('sales'))
+      .expect(200);
+
+    expect(mockDocuments.listCategories).toHaveBeenCalledWith(actors.sales.id);
+  });
+
+  it('prevents sales managers from modifying documents and categories', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents`)
+      .set('authorization', token('sales'))
+      .field('categoryId', categoryId)
+      .attach('file', Buffer.from('test'), 'test.pdf')
       .expect(403);
 
-    expect(mockDocuments.findOne).not.toHaveBeenCalled();
+    await request(gatewayServer)
+      .delete(`/api/documents/${documentId}`)
+      .set('authorization', token('sales'))
+      .expect(403);
+
+    await request(gatewayServer)
+      .post('/api/document-categories')
+      .set('authorization', token('sales'))
+      .send({ categoryName: 'Drawings' })
+      .expect(403);
+
+    await request(gatewayServer)
+      .patch(`/api/document-categories/${categoryId}`)
+      .set('authorization', token('sales'))
+      .send({ isActive: false })
+      .expect(403);
+
+    await request(gatewayServer)
+      .delete(`/api/document-categories/${categoryId}`)
+      .set('authorization', token('sales'))
+      .expect(403);
+
+    expect(mockDocuments.upload).not.toHaveBeenCalled();
+    expect(mockDocuments.remove).not.toHaveBeenCalled();
+    expect(mockDocuments.createCategory).not.toHaveBeenCalled();
+    expect(mockDocuments.updateCategory).not.toHaveBeenCalled();
+    expect(mockDocuments.deleteCategory).not.toHaveBeenCalled();
+  });
+
+  it('rejects client downloads until ownership is implemented', async () => {
+    await request(gatewayServer)
+      .get(`/api/documents/${documentId}/download`)
+      .set('authorization', token('client'))
+      .expect(403);
+
+    expect(mockDocuments.download).not.toHaveBeenCalled();
   });
 
   it('forwards document filtering and pagination', async () => {

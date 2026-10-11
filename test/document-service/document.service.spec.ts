@@ -252,6 +252,80 @@ describe('DocumentService', () => {
       expect(mockCloudinary.uploadAuthenticatedBuffer).not.toHaveBeenCalled();
     });
 
+    it('allows active sales managers to read documents', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('SALES_MANAGER', 'sales-1'),
+      );
+
+      await expect(
+        service.findAll('project-1', {}, 'sales-1'),
+      ).resolves.toHaveProperty('meta.total', 0);
+
+      await expect(service.findOne('doc-1', 'sales-1')).resolves.toHaveProperty(
+        'id',
+        'doc-1',
+      );
+
+      await expect(service.download('doc-1', 'sales-1')).resolves.toEqual({
+        downloadUrl: 'https://cloudinary.example/signed-document',
+        expiresInSeconds: 300,
+      });
+
+      await expect(service.listCategories('sales-1')).resolves.toEqual([
+        { id: 'category-1', categoryName: 'Contracts' },
+      ]);
+    });
+
+    it('prevents sales managers from modifying documents and categories', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('SALES_MANAGER', 'sales-1'),
+      );
+
+      await expect(
+        service.upload(
+          'project-1',
+          { categoryId: 'category-1' },
+          file,
+          'sales-1',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(service.remove('doc-1', 'sales-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      await expect(
+        service.createCategory({ categoryName: 'Drawings' }, 'sales-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.updateCategory('category-1', { isActive: false }, 'sales-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      await expect(
+        service.deleteCategory('category-1', 'sales-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+      expect(mockDocuments.beginDelete).not.toHaveBeenCalled();
+      expect(mockDocuments.createCategory).not.toHaveBeenCalled();
+      expect(mockDocuments.updateCategory).not.toHaveBeenCalled();
+      expect(mockDocuments.deleteUnusedCategory).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive sales managers', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue({
+        ...makeUser('SALES_MANAGER', 'sales-1'),
+        status: UserStatus.INACTIVE,
+      });
+
+      await expect(service.findOne('doc-1', 'sales-1')).rejects.toThrow(
+        ForbiddenException,
+      );
+
+      expect(mockDocuments.findActiveById).not.toHaveBeenCalled();
+    });
+
     it('prevents accountants from deleting documents', async () => {
       mockDocuments.findUserWithRole.mockResolvedValue(
         makeUser('ACCOUNTANT', 'accountant-1'),

@@ -47,7 +47,12 @@ import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
 
-const DOCUMENT_READ_ROLES = ['ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT'];
+const DOCUMENT_READ_ROLES = [
+  'ADMIN',
+  'PROJECT_MANAGER',
+  'ACCOUNTANT',
+  'SALES_MANAGER',
+];
 const DOCUMENT_WRITE_ROLES = ['ADMIN', 'PROJECT_MANAGER'];
 
 interface AuthenticatedRequest extends Request {

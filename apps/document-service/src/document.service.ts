@@ -7,7 +7,11 @@ import {
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
-import { DocumentStorageStatus, ProjectStatus } from '@prisma/client';
+import {
+  DocumentStorageStatus,
+  ProjectStatus,
+  UserStatus,
+} from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
 import {
@@ -162,10 +166,12 @@ export class DocumentService {
   }
 
   async findAll(projectId: string, query: DocumentQueryDto, actorId?: string) {
-    const actor = await this.resolveActor(actorId);
+    const projectActor = await this.resolveDocumentReader(actorId);
     const project = await this.getProject(projectId);
 
-    assertCanReadProject(actor, project);
+    if (projectActor) {
+      assertCanReadProject(projectActor, project);
+    }
 
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
@@ -193,7 +199,7 @@ export class DocumentService {
   }
 
   async findOne(id: string, actorId?: string) {
-    const actor = await this.resolveActor(actorId);
+    const projectActor = await this.resolveDocumentReader(actorId);
     const document = await this.documents.findActiveById(id);
 
     if (!document) {
@@ -201,7 +207,10 @@ export class DocumentService {
     }
 
     const project = await this.getProject(document.projectId);
-    assertCanReadProject(actor, project);
+
+    if (projectActor) {
+      assertCanReadProject(projectActor, project);
+    }
 
     return {
       id: document.id,
@@ -219,7 +228,7 @@ export class DocumentService {
   }
 
   async download(id: string, actorId?: string) {
-    const actor = await this.resolveActor(actorId);
+    const projectActor = await this.resolveDocumentReader(actorId);
     const document = await this.documents.findActiveById(id);
 
     if (!document) {
@@ -227,7 +236,10 @@ export class DocumentService {
     }
 
     const project = await this.getProject(document.projectId);
-    assertCanReadProject(actor, project);
+
+    if (projectActor) {
+      assertCanReadProject(projectActor, project);
+    }
 
     const resourceType = this.getResourceType(document.cloudinaryResourceType);
     const format = extname(document.originalName).slice(1).toLowerCase();
@@ -358,7 +370,7 @@ export class DocumentService {
   }
 
   async listCategories(actorId?: string) {
-    await this.resolveActor(actorId);
+    await this.resolveDocumentReader(actorId);
 
     return this.documents.listCategories();
   }
@@ -500,6 +512,23 @@ export class DocumentService {
     const id = requireProjectActorId(actorId);
     const user = await this.documents.findUserWithRole(id);
 
+    return resolveProjectActor(user);
+  }
+
+  private async resolveDocumentReader(actorId?: string) {
+    const userId = requireProjectActorId(actorId);
+    const user = await this.documents.findUserWithRole(userId);
+
+    // Sales Managers can read documents without gaining
+    // general Project Service permissions.
+    if (
+      user?.status === UserStatus.ACTIVE &&
+      user.role?.roleName === 'SALES_MANAGER'
+    ) {
+      return null;
+    }
+
+    // All other roles use the existing project authorization policy.
     return resolveProjectActor(user);
   }
 

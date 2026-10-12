@@ -100,6 +100,43 @@ describe('ClientPortalReadService', () => {
     });
   });
 
+  it('defaults the page when only limit is provided', async () => {
+    prisma.project.findMany.mockResolvedValue([]);
+    prisma.project.count.mockResolvedValue(0);
+
+    const result = await service.findProjects('user-a', {
+      limit: 5,
+    });
+
+    expect(result).toMatchObject({
+      page: 1,
+      limit: 5,
+      totalPages: 0,
+    });
+  });
+
+  it('defaults the limit when only page is provided', async () => {
+    prisma.project.findMany.mockResolvedValue([]);
+    prisma.project.count.mockResolvedValue(0);
+
+    const result = await service.findProjects('user-a', {
+      page: 3,
+    });
+
+    expect(result).toMatchObject({
+      page: 3,
+      limit: 10,
+      totalPages: 0,
+    });
+
+    expect(prisma.project.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        skip: 20,
+        take: 10,
+      }),
+    );
+  });
+
   it('returns only an authorized project', async () => {
     prisma.project.findFirst.mockResolvedValue({
       id: 'project-a',

@@ -84,6 +84,19 @@ describe('ClientPortalAccessService', () => {
       );
     });
 
+    it('rejects a User without an assigned role', async () => {
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-a',
+        status: UserStatus.ACTIVE,
+        role: null,
+        customer: { id: 'customer-a' },
+      });
+
+      await expect(service.resolveClient('user-a')).rejects.toBeInstanceOf(
+        ForbiddenException,
+      );
+    });
+
     it('rejects an account without a linked Customer', async () => {
       prisma.user.findUnique.mockResolvedValue({
         id: 'user-a',

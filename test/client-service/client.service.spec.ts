@@ -170,3 +170,125 @@ describe('ClientService — portal account linking', () => {
     ).rejects.toThrow(ConflictException);
   });
 });
+
+describe('ClientService — Customer CRUD', () => {
+  const repository = {
+    create: jest.fn(),
+    findAll: jest.fn(),
+    findById: jest.fn(),
+    findByLeadId: jest.fn(),
+    update: jest.fn(),
+    delete: jest.fn(),
+  };
+
+  const customer = {
+    id: 'customer-1',
+    fullName: 'Test Customer',
+    leadId: 'lead-1',
+    userId: null,
+  };
+
+  let service: ClientService;
+
+  beforeEach(() => {
+    jest.resetAllMocks();
+
+    repository.create.mockResolvedValue(customer);
+    repository.findAll.mockResolvedValue([customer]);
+    repository.findById.mockResolvedValue(customer);
+    repository.findByLeadId.mockResolvedValue(null);
+    repository.update.mockResolvedValue(customer);
+    repository.delete.mockResolvedValue(customer);
+
+    service = new ClientService(repository as unknown as ClientRepository);
+  });
+
+  it('creates a Customer without a Lead', async () => {
+    await expect(
+      service.create({ fullName: 'Test Customer' }),
+    ).resolves.toEqual(customer);
+
+    expect(repository.findByLeadId).not.toHaveBeenCalled();
+    expect(repository.create).toHaveBeenCalledWith({
+      fullName: 'Test Customer',
+      leadId: undefined,
+    });
+  });
+
+  it('creates a Customer with an available Lead', async () => {
+    await service.create({
+      fullName: 'Test Customer',
+      leadId: 'lead-1',
+    });
+
+    expect(repository.findByLeadId).toHaveBeenCalledWith('lead-1');
+    expect(repository.create).toHaveBeenCalledWith({
+      fullName: 'Test Customer',
+      leadId: 'lead-1',
+    });
+  });
+
+  it('rejects a Lead already assigned to another Customer', async () => {
+    repository.findByLeadId.mockResolvedValue(customer);
+
+    await expect(
+      service.create({
+        fullName: 'Another Customer',
+        leadId: 'lead-1',
+      }),
+    ).rejects.toThrow(ConflictException);
+
+    expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  it('returns all Customers', async () => {
+    await expect(service.findAll()).resolves.toEqual([customer]);
+    expect(repository.findAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns an existing Customer', async () => {
+    await expect(service.findOne('customer-1')).resolves.toEqual(customer);
+
+    expect(repository.findById).toHaveBeenCalledWith('customer-1');
+  });
+
+  it('rejects a missing Customer lookup', async () => {
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.findOne('missing')).rejects.toThrow(NotFoundException);
+  });
+
+  it('updates an existing Customer', async () => {
+    const dto = { fullName: 'Updated Customer' };
+
+    await expect(service.update('customer-1', dto)).resolves.toEqual(customer);
+
+    expect(repository.findById).toHaveBeenCalledWith('customer-1');
+    expect(repository.update).toHaveBeenCalledWith('customer-1', dto);
+  });
+
+  it('rejects updates to a missing Customer', async () => {
+    repository.findById.mockResolvedValue(null);
+
+    await expect(
+      service.update('missing', { fullName: 'Updated' }),
+    ).rejects.toThrow(NotFoundException);
+
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('deletes an existing Customer', async () => {
+    await service.remove('customer-1');
+
+    expect(repository.findById).toHaveBeenCalledWith('customer-1');
+    expect(repository.delete).toHaveBeenCalledWith('customer-1');
+  });
+
+  it('rejects deletion of a missing Customer', async () => {
+    repository.findById.mockResolvedValue(null);
+
+    await expect(service.remove('missing')).rejects.toThrow(NotFoundException);
+
+    expect(repository.delete).not.toHaveBeenCalled();
+  });
+});

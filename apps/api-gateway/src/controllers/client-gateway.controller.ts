@@ -6,6 +6,7 @@ import {
   HttpException,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Req,
@@ -27,6 +28,7 @@ import {
   CreateClientDto,
   UpdateClientDto,
 } from '../../../client-service/src/dto/client.dto';
+import { LinkClientPortalUserDto } from '../../../client-service/src/dto/link-client-portal-user.dto';
 import { Roles } from '../decorators/roles.decorator';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { RolesGuard } from '../guards/roles.guard';
@@ -109,6 +111,26 @@ export class ClientGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.patch(this.url(`/clients/${id}`), body, {
+        headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
+  @Patch(':id/portal-user')
+  @Roles('ADMIN')
+  @ApiOperation({
+    summary: 'Link a Customer to an existing Client Portal User',
+  })
+  @ApiOkResponse({
+    description: 'Customer account association created or confirmed',
+  })
+  linkPortalUser(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: LinkClientPortalUserDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.patch(this.url(`/clients/${id}/portal-user`), dto, {
         headers: this.forwardHeaders(req),
       }),
     );

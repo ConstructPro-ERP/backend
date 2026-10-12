@@ -7,6 +7,8 @@
   "testPathIgnorePatterns": ["document-cloudinary\\.integration\\.spec\\.ts$"],
   "testTimeout": 30000,
   "maxWorkers": 3,
+  "coverageDirectory": "<rootDir>/../coverage/e2e",
+  "coverageReporters": ["json", "json-summary"],
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"
   }

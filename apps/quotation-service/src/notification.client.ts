@@ -16,10 +16,14 @@ export class NotificationClient {
   ): Promise<void> {
     try {
       await firstValueFrom(
-        this.httpService.post(`${this.baseUrl}/notifications/project-created`, {
-          quotationId,
-          projectId,
-        }),
+        this.httpService.post(
+          `${this.baseUrl}/notifications/project-created`,
+          {
+            quotationId,
+            projectId,
+          },
+          { timeout: 10000 },
+        ),
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);

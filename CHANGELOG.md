@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DDP-86 — Client Portal ownership-filtered read-only access** ([issue #123](https://github.com/ConstructPro-ERP/backend/issues/123))
+  - Added nullable unique `Customer.userId` relationship and Admin-only Customer–User account linking.
+  - Introduced authenticated Client Portal endpoints for quotations, projects, progress, milestones and document browsing.
+  - Enforced Customer ownership across Project and Document queries, denying access to foreign and mixed-customer projects.
+  - Enabled authorized signed document downloads without exposing storage identifiers or internal project financial data.
+  - Added Customer CRUD, DTO, repository and controller unit tests, plus Neon ownership/account-linking integration and Gateway E2E tests.
+  - Documented server-side ownership filtering and the SDS RLS deviation in ADR-15.
 - **DDP-65 — Project Service foundation** ([issue #74](https://github.com/ConstructPro-ERP/backend/issues/74), [PR #79](https://github.com/ConstructPro-ERP/backend/pull/79))
   - Introduced the deployable NestJS Project Service, Project domain CRUD and API Gateway routes; standalone Projects start in `PLANNING`, while quotation-driven creation/attachment follows the approved-quotation activation and idempotent recovery rules already recorded under Issue #65 and ADR-10.
 - **DDP-68 — Project operations and access control** ([issue #80](https://github.com/ConstructPro-ERP/backend/issues/80), [PR #89](https://github.com/ConstructPro-ERP/backend/pull/89))

@@ -4,6 +4,7 @@ import {
   UnprocessableEntityException,
 } from '@nestjs/common';
 import { InvoiceStatus, PaymentMethod, Prisma } from '@prisma/client';
+import { PaymentResultingInvoiceStatusDto } from '../../apps/payment-service/src/dto/payment-status.dto';
 import {
   CreatePaymentDto,
   PaymentMethodDto,
@@ -182,6 +183,61 @@ describe('PaymentService', () => {
     await expect(service.create(dto)).rejects.toThrow('database offline');
   });
 
+  it.each([
+    { code: '40001' },
+    { driverAdapterError: { cause: { code: '40001' } } },
+    { driverAdapterError: { cause: { kind: 'TransactionWriteConflict' } } },
+  ])('retries supported database serialization metadata %j', async (meta) => {
+    repository.transaction.mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError('serialization conflict', {
+        code: 'P2010',
+        clientVersion: 'test',
+        meta,
+      }),
+    );
+    await service.create(dto);
+    expect(repository.transaction).toHaveBeenCalledTimes(2);
+    expect(repository.create).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    undefined,
+    {},
+    { driverAdapterError: null },
+    { driverAdapterError: {} },
+    { driverAdapterError: { cause: null } },
+    { driverAdapterError: { cause: { code: '42P01' } } },
+  ])(
+    'does not retry an unrelated raw-query failure with metadata %j',
+    async (meta) => {
+      const error = new Prisma.PrismaClientKnownRequestError(
+        'raw query failed',
+        { code: 'P2010', clientVersion: 'test', meta },
+      );
+      repository.transaction.mockRejectedValueOnce(error);
+      await expect(service.create(dto)).rejects.toBe(error);
+      expect(repository.transaction).toHaveBeenCalledTimes(1);
+      expect(repository.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('accepts payment on an overdue invoice and preserves cent precision', async () => {
+    repository.findInvoice.mockResolvedValue({
+      ...invoice,
+      status: InvoiceStatus.OVERDUE,
+      totalAmount: new Prisma.Decimal('1000.01'),
+    });
+    await service.create({ ...dto, amount: 250.01 });
+    expect(repository.updateInvoice).toHaveBeenCalledWith(
+      tx,
+      invoice.id,
+      expect.objectContaining({
+        paidAmount: new Prisma.Decimal('250.01'),
+        outstandingAmount: new Prisma.Decimal(750),
+      }),
+    );
+  });
+
   it('returns payment details and rejects missing payment/history records', async () => {
     repository.findPayment.mockResolvedValue(payment);
     await expect(service.findOne(payment.id)).resolves.toMatchObject({
@@ -251,7 +307,7 @@ describe('PaymentService', () => {
         status: InvoiceStatus.PAID,
       }),
     );
-    expect(result.invoice.status).toBe(InvoiceStatus.PAID);
+    expect(result.invoice.status).toBe(PaymentResultingInvoiceStatusDto.PAID);
   });
 
   it('rejects a payment greater than the outstanding balance', async () => {

@@ -164,6 +164,28 @@ export class DocumentsGatewayController {
     );
   }
 
+  @Get('client-portal/documents/:id/download')
+  @Roles('CLIENT_PORTAL_USER')
+  @ApiOperation({
+    summary: 'Download an authorized client portal document',
+  })
+  @ApiOkResponse({
+    description: 'Temporary authenticated download URL',
+  })
+  downloadForClient(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.get<unknown>(
+        this.url(`/client-portal/documents/${id}/download`),
+        {
+          headers: this.forwardHeaders(req),
+        },
+      ),
+    );
+  }
+
   @Get('documents/:id')
   @ApiOperation({ summary: 'Get document metadata' })
   @ApiOkResponse({ description: 'Document metadata' })

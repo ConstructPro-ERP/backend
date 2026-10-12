@@ -99,6 +99,20 @@ export class DocumentController {
     return this.documents.download(id, actorId);
   }
 
+  @Get('client-portal/documents/:id/download')
+  @ApiOperation({
+    summary: 'Generate a signed download URL for an owned client document',
+  })
+  @ApiOkResponse({
+    description: 'Temporary authenticated download URL',
+  })
+  downloadForClient(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.downloadForClient(id, actorId);
+  }
+
   @Delete('documents/:id')
   @ApiOperation({ summary: 'Delete a project document' })
   @ApiOkResponse({ description: 'Document deleted successfully' })

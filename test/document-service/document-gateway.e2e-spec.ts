@@ -40,6 +40,7 @@ const mockDocuments = {
   findAll: jest.fn(),
   findOne: jest.fn(),
   download: jest.fn(),
+  downloadForClient: jest.fn(),
   remove: jest.fn(),
   createCategory: jest.fn(),
   listCategories: jest.fn(),
@@ -169,6 +170,10 @@ describe('Documents — Gateway to Document Service E2E', () => {
     });
     mockDocuments.findOne.mockResolvedValue({ id: documentId });
     mockDocuments.download.mockResolvedValue({
+      downloadUrl: 'https://example.com/signed-document',
+      expiresInSeconds: 300,
+    });
+    mockDocuments.downloadForClient.mockResolvedValue({
       downloadUrl: 'https://example.com/signed-document',
       expiresInSeconds: 300,
     });
@@ -455,6 +460,43 @@ describe('Documents — Gateway to Document Service E2E', () => {
       documentId,
       actors.manager.id,
     );
+  });
+
+  it('forwards client downloads with verified identity', async () => {
+    const response = await request(gatewayServer)
+      .get(`/api/client-portal/documents/${documentId}/download`)
+      .set('authorization', token('client'))
+      .set('x-user-id', actors.admin.id)
+      .expect(200);
+
+    const body = response.body as GatewayBody<{
+      downloadUrl: string;
+      expiresInSeconds: number;
+    }>;
+
+    expect(body.data.expiresInSeconds).toBe(300);
+
+    expect(mockDocuments.downloadForClient).toHaveBeenCalledWith(
+      documentId,
+      actors.client.id,
+    );
+  });
+
+  it('rejects non-client roles on client download routes', async () => {
+    await request(gatewayServer)
+      .get(`/api/client-portal/documents/${documentId}/download`)
+      .set('authorization', token('admin'))
+      .expect(403);
+
+    expect(mockDocuments.downloadForClient).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated client downloads', async () => {
+    await request(gatewayServer)
+      .get(`/api/client-portal/documents/${documentId}/download`)
+      .expect(401);
+
+    expect(mockDocuments.downloadForClient).not.toHaveBeenCalled();
   });
 
   it('allows managers to delete documents but not accountants', async () => {

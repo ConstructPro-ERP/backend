@@ -59,6 +59,8 @@ const mockDocuments = {
   markUploadActive: jest.fn(),
   markUploadFailed: jest.fn(),
   findActiveById: jest.fn(),
+  findClientPortalUser: jest.fn(),
+  findActiveForClient: jest.fn(),
   findByIdForReconciliation: jest.fn(),
   findManyAndCount: jest.fn(),
   beginDelete: jest.fn(),
@@ -762,6 +764,127 @@ describe('DocumentService', () => {
       await expect(service.download('doc-1', 'admin-1')).rejects.toThrow(
         ServiceUnavailableException,
       );
+    });
+  });
+
+  describe('client portal document downloads', () => {
+    beforeEach(() => {
+      mockDocuments.findClientPortalUser.mockResolvedValue({
+        id: 'client-1',
+        status: UserStatus.ACTIVE,
+        role: { roleName: 'CLIENT_PORTAL_USER' },
+        customer: { id: 'customer-1' },
+      });
+
+      mockDocuments.findActiveForClient.mockResolvedValue(document);
+    });
+
+    it('rejects missing authentication', async () => {
+      await expect(service.downloadForClient('doc-1')).rejects.toThrow(
+        UnauthorizedException,
+      );
+
+      expect(mockDocuments.findActiveForClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown users', async () => {
+      mockDocuments.findClientPortalUser.mockResolvedValue(null);
+
+      await expect(
+        service.downloadForClient('doc-1', 'unknown-user'),
+      ).rejects.toThrow(UnauthorizedException);
+
+      expect(mockDocuments.findActiveForClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive clients', async () => {
+      mockDocuments.findClientPortalUser.mockResolvedValue({
+        id: 'client-1',
+        status: UserStatus.INACTIVE,
+        role: { roleName: 'CLIENT_PORTAL_USER' },
+        customer: { id: 'customer-1' },
+      });
+
+      await expect(
+        service.downloadForClient('doc-1', 'client-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.findActiveForClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-client roles', async () => {
+      mockDocuments.findClientPortalUser.mockResolvedValue({
+        id: 'admin-1',
+        status: UserStatus.ACTIVE,
+        role: { roleName: 'ADMIN' },
+        customer: { id: 'customer-1' },
+      });
+
+      await expect(
+        service.downloadForClient('doc-1', 'admin-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.findActiveForClient).not.toHaveBeenCalled();
+    });
+
+    it('rejects clients without a linked customer', async () => {
+      mockDocuments.findClientPortalUser.mockResolvedValue({
+        id: 'client-1',
+        status: UserStatus.ACTIVE,
+        role: { roleName: 'CLIENT_PORTAL_USER' },
+        customer: null,
+      });
+
+      await expect(
+        service.downloadForClient('doc-1', 'client-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.findActiveForClient).not.toHaveBeenCalled();
+    });
+
+    it('hides documents that are not authorized', async () => {
+      mockDocuments.findActiveForClient.mockResolvedValue(null);
+
+      await expect(
+        service.downloadForClient('foreign-doc', 'client-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.findActiveForClient).toHaveBeenCalledWith(
+        'foreign-doc',
+        'customer-1',
+      );
+
+      expect(
+        mockCloudinary.createAuthenticatedDownloadUrl,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('generates a signed URL for an owned document', async () => {
+      const result = await service.downloadForClient('doc-1', 'client-1');
+
+      expect(result).toEqual({
+        downloadUrl: 'https://cloudinary.example/signed-document',
+        expiresInSeconds: 300,
+      });
+
+      expect(mockDocuments.findActiveForClient).toHaveBeenCalledWith(
+        'doc-1',
+        'customer-1',
+      );
+
+      expect(
+        mockCloudinary.createAuthenticatedDownloadUrl,
+      ).toHaveBeenCalledWith(document.cloudinaryPublicId, 'pdf', 'raw');
+    });
+
+    it('handles Cloudinary signing errors', async () => {
+      mockCloudinary.createAuthenticatedDownloadUrl.mockImplementation(() => {
+        throw new Error('Storage unavailable');
+      });
+
+      await expect(
+        service.downloadForClient('doc-1', 'client-1'),
+      ).rejects.toThrow(ServiceUnavailableException);
     });
   });
 

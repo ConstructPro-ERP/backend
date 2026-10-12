@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { join } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { CloudinaryModule } from '../../../libs/common/src/cloudinary/cloudinary.module';
 import { FinanceSummaryService } from './finance-summary.service';
 import {
   FinanceReportsController,
@@ -19,6 +20,7 @@ import { InvoiceRepository } from './repositories/invoice.repository';
       isGlobal: true,
       envFilePath: join(process.cwd(), '.env'),
     }),
+    CloudinaryModule,
   ],
   controllers: [
     InvoiceController,

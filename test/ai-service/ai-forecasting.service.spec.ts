@@ -173,6 +173,38 @@ describe('AiForecastingService', () => {
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 
+  it('uses default context limits and accepts provider predictions without optional warnings', async () => {
+    configService.get.mockReturnValue(undefined);
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: 'p1',
+      projectName: 'Tower',
+      status: ProjectStatus.ACTIVE,
+      budget: 100,
+      milestones: [],
+      invoices: [],
+      expenses: [1, 2, 3].map((index) => ({
+        id: `e${index}`,
+        amount: 10,
+        createdAt: new Date('2026-10-01'),
+      })),
+    });
+    aiProviderService.predictViaProvider.mockResolvedValue({
+      projectRiskLevel: RiskLevelDto.LOW,
+      paymentDelayRisk: RiskLevelDto.LOW,
+      milestoneDelayRisk: RiskLevelDto.LOW,
+      revenueTrend: RevenueTrendDto.STABLE,
+      explanation: 'Provider explanation',
+      recommendedAction: 'Monitor',
+      confidenceScore: 0.8,
+    });
+    const result = await service.predictProjectRisk('p1');
+    expect(result.predictionSource).toBe(PredictionSourceDto.AI_PROVIDER);
+    expect(result.context.retrievedChunks).toHaveLength(4);
+    expect(result.warnings).toEqual([
+      expect.stringContaining('relational fallback'),
+    ]);
+  });
+
   it('returns an insufficient-data safe fallback when history is too sparse', async () => {
     repository.findProjectForRiskForecast.mockResolvedValue({
       id: '8df76ed3-983b-4648-b421-e8d98484e234',

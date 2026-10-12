@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -114,11 +115,16 @@ describe('InvoicePdfService', () => {
     'returns an actionable storage failure without falling back to disk: %s',
     async (error) => {
       configureCloudinary();
+
+      jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
+
       uploadBuffer.mockRejectedValue(error);
+
       await expect(service.generate(data)).rejects.toMatchObject({
         status: 503,
         response: { code: 'INVOICE_PDF_STORAGE_UNAVAILABLE' },
       });
+
       await expect(
         readFile(join(directory, 'storage/invoices/INV-202610-0001.pdf')),
       ).rejects.toMatchObject({ code: 'ENOENT' });

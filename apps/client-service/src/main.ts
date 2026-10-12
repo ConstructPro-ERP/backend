@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ClientModule } from './client.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(ClientModule);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -35,4 +35,6 @@ async function bootstrap() {
   console.log(`Client service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

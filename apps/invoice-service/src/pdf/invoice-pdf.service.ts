@@ -1,7 +1,12 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  Optional,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { put } from '@vercel/blob';
+import { CloudinaryService } from '../../../../libs/common/src/cloudinary/cloudinary.service';
 
 interface InvoicePdfData {
   invoiceId: string;
@@ -21,12 +26,38 @@ interface InvoicePdfData {
 
 @Injectable()
 export class InvoicePdfService {
+  private readonly logger = new Logger(InvoicePdfService.name);
+
+  constructor(
+    @Optional() private readonly cloudinaryService?: CloudinaryService,
+  ) {}
+
   async generate(data: InvoicePdfData) {
     const fileName = `${sanitize(data.invoiceNumber)}.pdf`;
     const pdfBuffer = buildPdf(data);
 
-    if (shouldUseBlobStorage()) {
-      return this.storeInvoicePdfInBlob(fileName, pdfBuffer);
+    if (this.cloudinaryService && hasCloudinaryCredentials()) {
+      try {
+        return await this.storeInvoicePdfInCloudinary(fileName, pdfBuffer);
+      } catch (error) {
+        this.logger.error(
+          `Could not store generated invoice PDF ${fileName}.`,
+          error instanceof Error ? error.stack : undefined,
+        );
+        throw new ServiceUnavailableException({
+          code: 'INVOICE_PDF_STORAGE_UNAVAILABLE',
+          message:
+            'Invoice PDF storage is unavailable. Check the Cloudinary configuration and try again.',
+        });
+      }
+    }
+
+    if (isProductionRuntime()) {
+      throw new ServiceUnavailableException({
+        code: 'INVOICE_PDF_STORAGE_NOT_CONFIGURED',
+        message:
+          'Invoice PDF storage is not configured. Add the Cloudinary credentials to the invoice service.',
+      });
     }
 
     return this.storeInvoicePdfLocally(fileName, pdfBuffer);
@@ -51,18 +82,22 @@ export class InvoicePdfService {
     };
   }
 
-  private async storeInvoicePdfInBlob(fileName: string, pdfBuffer: Buffer) {
-    const { url, pathname } = await put(`invoices/${fileName}`, pdfBuffer, {
-      access: 'public',
-      addRandomSuffix: false,
-      contentType: 'application/pdf',
-    });
+  private async storeInvoicePdfInCloudinary(
+    fileName: string,
+    pdfBuffer: Buffer,
+  ) {
+    const publicUrl = await this.cloudinaryService!.uploadBuffer(
+      pdfBuffer,
+      'invoices',
+      fileName,
+      'raw',
+    );
 
     return {
-      filePath: pathname,
-      publicUrl: url,
+      filePath: `constructpro/invoices/${fileName}`,
+      publicUrl,
       generatedAt: new Date(),
-      directory: 'vercel-blob:invoices',
+      directory: 'cloudinary:constructpro/invoices',
       fileName,
     };
   }
@@ -72,8 +107,16 @@ function sanitize(value: string): string {
   return value.replace(/[^A-Za-z0-9_-]/g, '-');
 }
 
-function shouldUseBlobStorage(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN);
+function hasCloudinaryCredentials(): boolean {
+  return Boolean(
+    process.env.CLOUDINARY_CLOUD_NAME &&
+    process.env.CLOUDINARY_API_KEY &&
+    process.env.CLOUDINARY_API_SECRET,
+  );
+}
+
+function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 }
 
 function escapePdfText(value: string): string {

@@ -1,13 +1,14 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { put } from '@vercel/blob';
+import { CloudinaryService } from '../../libs/common/src/cloudinary/cloudinary.service';
 import { InvoicePdfService } from '../../apps/invoice-service/src/pdf/invoice-pdf.service';
 
-jest.mock('@vercel/blob', () => ({ put: jest.fn() }));
-
 describe('InvoicePdfService', () => {
-  const service = new InvoicePdfService();
+  const uploadBuffer = jest.fn();
+  const service = new InvoicePdfService({
+    uploadBuffer,
+  } as unknown as CloudinaryService);
   const data = {
     invoiceId: 'invoice-1',
     invoiceNumber: 'INV/202610/0001',
@@ -28,7 +29,11 @@ describe('InvoicePdfService', () => {
 
   beforeEach(async () => {
     originalEnv = { ...process.env };
-    delete process.env.BLOB_READ_WRITE_TOKEN;
+    delete process.env.CLOUDINARY_CLOUD_NAME;
+    delete process.env.CLOUDINARY_API_KEY;
+    delete process.env.CLOUDINARY_API_SECRET;
+    delete process.env.VERCEL;
+    process.env.NODE_ENV = 'test';
     delete process.env.INVOICE_PDF_BASE_URL;
     directory = await mkdtemp(join(tmpdir(), 'finance-pdf-'));
     jest.spyOn(process, 'cwd').mockReturnValue(directory);
@@ -81,32 +86,72 @@ describe('InvoicePdfService', () => {
     );
   });
 
-  it('uploads generated PDF bytes to Blob when configured', async () => {
-    process.env.BLOB_READ_WRITE_TOKEN = 'test-token';
-    jest.mocked(put).mockResolvedValue({
-      url: 'https://blob.test/invoice.pdf',
-      pathname: 'invoices/invoice.pdf',
-      contentType: 'application/pdf',
-      contentDisposition: 'inline',
-      downloadUrl: 'https://blob.test/invoice.pdf',
-    });
+  function configureCloudinary() {
+    process.env.CLOUDINARY_CLOUD_NAME = 'test-cloud';
+    process.env.CLOUDINARY_API_KEY = 'test-key';
+    process.env.CLOUDINARY_API_SECRET = 'test-secret';
+  }
+
+  it('uploads generated PDF bytes to Cloudinary when configured', async () => {
+    configureCloudinary();
+    uploadBuffer.mockResolvedValue('https://files.test/invoice.pdf');
     const result = await service.generate(data);
-    expect(put).toHaveBeenCalledWith(
-      'invoices/INV-202610-0001.pdf',
+    expect(uploadBuffer).toHaveBeenCalledWith(
       expect.any(Buffer),
-      {
-        access: 'public',
-        addRandomSuffix: false,
-        contentType: 'application/pdf',
-      },
+      'invoices',
+      'INV-202610-0001.pdf',
+      'raw',
     );
-    expect(result.publicUrl).toBe('https://blob.test/invoice.pdf');
-    expect(result.directory).toBe('vercel-blob:invoices');
+    const [uploadedPdf] = uploadBuffer.mock.calls[0] as [Buffer];
+    expect(uploadedPdf.toString()).toContain('%PDF-1.4');
+    expect(result.publicUrl).toBe('https://files.test/invoice.pdf');
+    expect(result.filePath).toBe('constructpro/invoices/INV-202610-0001.pdf');
+    expect(result.directory).toBe('cloudinary:constructpro/invoices');
+    expect(result.generatedAt).toBeInstanceOf(Date);
   });
 
-  it('propagates upload failures without returning successful metadata', async () => {
-    process.env.BLOB_READ_WRITE_TOKEN = 'test-token';
-    jest.mocked(put).mockRejectedValue(new Error('storage unavailable'));
-    await expect(service.generate(data)).rejects.toThrow('storage unavailable');
+  it.each([new Error('storage unavailable'), 'upload rejected'])(
+    'returns an actionable storage failure without falling back to disk: %s',
+    async (error) => {
+      configureCloudinary();
+      uploadBuffer.mockRejectedValue(error);
+      await expect(service.generate(data)).rejects.toMatchObject({
+        status: 503,
+        response: { code: 'INVOICE_PDF_STORAGE_UNAVAILABLE' },
+      });
+      await expect(
+        readFile(join(directory, 'storage/invoices/INV-202610-0001.pdf')),
+      ).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
+
+  it.each([
+    'CLOUDINARY_CLOUD_NAME',
+    'CLOUDINARY_API_KEY',
+    'CLOUDINARY_API_SECRET',
+  ])('rejects production PDF generation when %s is missing', async (key) => {
+    configureCloudinary();
+    delete process.env[key];
+    process.env.NODE_ENV = 'production';
+    await expect(service.generate(data)).rejects.toMatchObject({
+      status: 503,
+      response: { code: 'INVOICE_PDF_STORAGE_NOT_CONFIGURED' },
+    });
+    expect(uploadBuffer).not.toHaveBeenCalled();
+  });
+
+  it('rejects disk fallback on Vercel even when NODE_ENV is not production', async () => {
+    process.env.VERCEL = '1';
+    await expect(service.generate(data)).rejects.toMatchObject({ status: 503 });
+  });
+
+  it('allows development disk storage without an injected Cloudinary service', async () => {
+    configureCloudinary();
+    const result = await new InvoicePdfService().generate({
+      ...data,
+      notes: '   ',
+    });
+    expect(await readFile(result.filePath, 'utf8')).toContain('Notes: N/A');
+    expect(uploadBuffer).not.toHaveBeenCalled();
   });
 });

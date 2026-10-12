@@ -183,6 +183,210 @@ describe('DocumentReconciliationService', () => {
     expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
   });
 
+  it('returns an empty result when no stale documents exist', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([]);
+
+    const result = await service.reconcile();
+
+    expect(result).toEqual({
+      checked: 0,
+      activated: 0,
+      failed: 0,
+      cleaned: 0,
+      deleted: 0,
+      pending: 0,
+      errors: 0,
+    });
+
+    expect(mockCloudinary.findAuthenticatedAsset).not.toHaveBeenCalled();
+  });
+
+  it('accepts an expired upload already marked failed by another worker', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, updatedAt: new Date(Date.now() - 26 * HOUR) },
+    ]);
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue(null);
+    mockRepository.markUploadFailed.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.FAILED,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.failed).toBe(0);
+    expect(result.errors).toBe(0);
+    expect(mockRepository.findByIdForReconciliation).toHaveBeenCalledWith(
+      record.id,
+    );
+  });
+
+  it('reports unresolved expired uploads after a concurrent update', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, updatedAt: new Date(Date.now() - 26 * HOUR) },
+    ]);
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue(null);
+    mockRepository.markUploadFailed.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.PENDING,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.checked).toBe(1);
+    expect(result.errors).toBe(1);
+    expect(result.failed).toBe(0);
+  });
+
+  it('accepts a mismatched upload already marked failed by another worker', async () => {
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue({
+      publicId: record.cloudinaryPublicId,
+      resourceType: 'raw',
+      bytes: 50,
+    });
+
+    mockRepository.markUploadFailed.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.FAILED,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(0);
+    expect(result.failed).toBe(0);
+    expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+  });
+
+  it('accepts an upload already activated by another worker', async () => {
+    mockRepository.markUploadActive.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.ACTIVE,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(0);
+    expect(result.activated).toBe(0);
+    expect(mockRepository.findByIdForReconciliation).toHaveBeenCalledWith(
+      record.id,
+    );
+  });
+
+  it('reports an unexpected state after concurrent activation', async () => {
+    mockRepository.markUploadActive.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.PENDING,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(1);
+    expect(result.activated).toBe(0);
+  });
+
+  it('accepts a failed document already cleaned by another worker', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, storageStatus: DocumentStorageStatus.FAILED },
+    ]);
+
+    mockRepository.markFailedCleaned.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.FAILED,
+      deletedAt: new Date(),
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(0);
+    expect(result.cleaned).toBe(0);
+    expect(mockCloudinary.deleteAuthenticatedAsset).toHaveBeenCalledWith(
+      record.cloudinaryPublicId,
+      'raw',
+    );
+  });
+
+  it('reports failed documents that could not be finalized', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, storageStatus: DocumentStorageStatus.FAILED },
+    ]);
+
+    mockRepository.markFailedCleaned.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.FAILED,
+      deletedAt: null,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(1);
+    expect(result.cleaned).toBe(0);
+  });
+
+  it('accepts a deletion already completed by another worker', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, storageStatus: DocumentStorageStatus.DELETING },
+    ]);
+
+    mockRepository.finishDelete.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.DELETED,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(0);
+    expect(result.deleted).toBe(0);
+  });
+
+  it('reports an unresolved concurrent deletion', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, storageStatus: DocumentStorageStatus.DELETING },
+    ]);
+
+    mockRepository.finishDelete.mockResolvedValue({ count: 0 });
+    mockRepository.findByIdForReconciliation.mockResolvedValue({
+      storageStatus: DocumentStorageStatus.DELETING,
+    });
+
+    const result = await service.reconcile();
+
+    expect(result.errors).toBe(1);
+    expect(result.deleted).toBe(0);
+  });
+
+  it('reconciles image resources using the image resource type', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      {
+        ...record,
+        storageStatus: DocumentStorageStatus.DELETING,
+        cloudinaryResourceType: 'image',
+      },
+    ]);
+
+    const result = await service.reconcile();
+
+    expect(result.deleted).toBe(1);
+    expect(result.errors).toBe(0);
+    expect(mockCloudinary.deleteAuthenticatedAsset).toHaveBeenCalledWith(
+      record.cloudinaryPublicId,
+      'image',
+    );
+  });
+
+  it('rejects an unsupported stored resource type safely', async () => {
+    mockRepository.findStaleForReconciliation.mockResolvedValue([
+      { ...record, cloudinaryResourceType: 'video' },
+    ]);
+
+    const result = await service.reconcile();
+
+    expect(result.checked).toBe(1);
+    expect(result.errors).toBe(1);
+    expect(mockCloudinary.findAuthenticatedAsset).not.toHaveBeenCalled();
+    expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+  });
+
   it('limits reconciliation to a bounded batch', async () => {
     await service.reconcile();
 

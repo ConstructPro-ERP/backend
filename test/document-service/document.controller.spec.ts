@@ -153,6 +153,18 @@ describe('DocumentController', () => {
     expect(mockDocuments.upload).not.toHaveBeenCalled();
   });
 
+  it('rejects multiple files in a single document upload', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents`)
+      .set('x-user-id', actorId)
+      .field('categoryId', categoryId)
+      .attach('file', Buffer.from('first'), 'first.pdf')
+      .attach('file', Buffer.from('second'), 'second.pdf')
+      .expect(400);
+
+    expect(mockDocuments.upload).not.toHaveBeenCalled();
+  });
+
   it('forwards document pagination and filters', async () => {
     await request(server)
       .get(`/projects/${projectId}/documents`)

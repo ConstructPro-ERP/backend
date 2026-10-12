@@ -579,6 +579,35 @@ describe('DocumentService', () => {
       ).rejects.toThrow(ServiceUnavailableException);
     });
 
+    it('preserves storage when upload compensation loses a concurrent update', async () => {
+      mockCloudinary.uploadAuthenticatedBuffer.mockImplementationOnce(
+        (
+          buffer: Buffer,
+          publicId: string,
+          resourceType: DocumentResourceType,
+        ) =>
+          Promise.resolve({
+            publicId,
+            resourceType,
+            bytes: buffer.length + 1,
+          }),
+      );
+
+      mockDocuments.markUploadFailed.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.upload(
+          'project-1',
+          { categoryId: 'category-1' },
+          file,
+          'admin-1',
+        ),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(mockDocuments.markUploadFailed).toHaveBeenCalledTimes(1);
+      expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
     it('preserves Cloudinary bytes after activation failure', async () => {
       mockDocuments.markUploadActive.mockRejectedValue(
         new Error('Database response lost'),
@@ -677,6 +706,18 @@ describe('DocumentService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('rejects downloads for nonexistent documents', async () => {
+      mockDocuments.findActiveById.mockResolvedValue(null);
+
+      await expect(
+        service.download('missing-document', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(
+        mockCloudinary.createAuthenticatedDownloadUrl,
+      ).not.toHaveBeenCalled();
+    });
+
     it('does not expose Cloudinary identifiers in document details', async () => {
       const result = await service.findOne('doc-1', 'admin-1');
 
@@ -725,6 +766,17 @@ describe('DocumentService', () => {
   });
 
   describe('document deletion', () => {
+    it('rejects deletion of nonexistent documents', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(null);
+
+      await expect(
+        service.remove('missing-document', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.beginDelete).not.toHaveBeenCalled();
+      expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
     it('transitions ACTIVE to DELETING and DELETED', async () => {
       await expect(service.remove('doc-1', 'admin-1')).resolves.toEqual({
         message: 'Document deleted successfully.',
@@ -838,6 +890,35 @@ describe('DocumentService', () => {
       );
     });
 
+    it('accepts deletion completed concurrently before storage removal', async () => {
+      mockDocuments.beginDelete.mockResolvedValue({ count: 0 });
+
+      mockDocuments.findByIdForReconciliation
+        .mockResolvedValueOnce(document)
+        .mockResolvedValueOnce({
+          ...document,
+          storageStatus: DocumentStorageStatus.DELETED,
+          deletedAt: timestamp,
+        });
+
+      await expect(service.remove('doc-1', 'admin-1')).resolves.toEqual({
+        message: 'Document deleted successfully.',
+      });
+
+      expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
+    it('reports unresolved metadata after successful storage deletion', async () => {
+      mockDocuments.finishDelete.mockResolvedValue({ count: 0 });
+
+      await expect(service.remove('doc-1', 'admin-1')).rejects.toThrow(
+        ConflictException,
+      );
+
+      expect(mockCloudinary.deleteAuthenticatedAsset).toHaveBeenCalledTimes(1);
+      expect(mockDocuments.finishDelete).toHaveBeenCalledWith('doc-1');
+    });
+
     it('preserves DELETING after metadata finalization fails', async () => {
       mockDocuments.finishDelete.mockRejectedValue(
         new Error('Database timeout'),
@@ -912,6 +993,20 @@ describe('DocumentService', () => {
       await expect(
         service.updateCategory('category-1', {}, 'admin-1'),
       ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.updateCategory).not.toHaveBeenCalled();
+    });
+
+    it('rejects updates to nonexistent categories', async () => {
+      mockDocuments.findCategoryById.mockResolvedValue(null);
+
+      await expect(
+        service.updateCategory(
+          'missing-category',
+          { categoryName: 'Updated Contracts' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
 
       expect(mockDocuments.updateCategory).not.toHaveBeenCalled();
     });
@@ -1005,6 +1100,36 @@ describe('DocumentService', () => {
       ).resolves.toHaveProperty('disabled', true);
 
       expect(mockDocuments.disableCategory).toHaveBeenCalledWith('category-1');
+    });
+
+    it('reports a referenced category removed during deactivation', async () => {
+      mockDocuments.countCategoryDocuments.mockResolvedValue(2);
+      mockDocuments.disableCategory.mockRejectedValue({ code: 'P2025' });
+
+      await expect(
+        service.deleteCategory('category-1', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.disableCategory).toHaveBeenCalledWith('category-1');
+      expect(mockDocuments.deleteUnusedCategory).not.toHaveBeenCalled();
+    });
+
+    it('handles categories removed during conditional deletion', async () => {
+      mockDocuments.deleteUnusedCategory.mockResolvedValue({ count: 0 });
+
+      mockDocuments.findCategoryById
+        .mockResolvedValueOnce({
+          id: 'category-1',
+          categoryName: 'Contracts',
+          isActive: true,
+        })
+        .mockResolvedValueOnce(null);
+
+      await expect(
+        service.deleteCategory('category-1', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.disableCategory).not.toHaveBeenCalled();
     });
 
     it('rejects deletion of nonexistent categories', async () => {

@@ -27,6 +27,45 @@ function makeFile(
   };
 }
 
+function corruptDocxEntry(
+  mutate: (buffer: Buffer, entry: number, end: number) => void,
+): Buffer {
+  const corrupted = Buffer.from(validDocx);
+  const signature = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+  const end = corrupted.lastIndexOf(signature);
+
+  if (end < 0) {
+    throw new Error('DOCX fixture has no ZIP end record.');
+  }
+
+  let entry = corrupted.readUInt32LE(end + 16);
+  const count = corrupted.readUInt16LE(end + 10);
+
+  for (let i = 0; i < count; i++) {
+    if (corrupted.readUInt32LE(entry) !== 0x02014b50) {
+      throw new Error('DOCX fixture has an invalid ZIP directory.');
+    }
+
+    const nameLength = corrupted.readUInt16LE(entry + 28);
+    const extraLength = corrupted.readUInt16LE(entry + 30);
+    const commentLength = corrupted.readUInt16LE(entry + 32);
+    const name = corrupted.toString(
+      'utf8',
+      entry + 46,
+      entry + 46 + nameLength,
+    );
+
+    if (name === '[Content_Types].xml') {
+      mutate(corrupted, entry, end);
+      return corrupted;
+    }
+
+    entry += 46 + nameLength + extraLength + commentLength;
+  }
+
+  throw new Error('DOCX fixture is missing Content_Types.xml.');
+}
+
 describe('Document file validation', () => {
   const pdf = Buffer.from('%PDF-1.7\n1 0 obj\n<<>>\nendobj\n%%EOF\n');
 
@@ -194,6 +233,88 @@ describe('Document file validation', () => {
       validateDocumentFile(
         makeFile('contract.docx', DOCX_MIME, Buffer.from('PK')),
       ),
+    ).toThrow(BadRequestException);
+  });
+
+  it.each([
+    {
+      name: 'encrypted ZIP entries',
+      mutate: (zip: Buffer, entry: number) => {
+        zip.writeUInt16LE(1, entry + 8);
+      },
+    },
+    {
+      name: 'unsupported compression methods',
+      mutate: (zip: Buffer, entry: number) => {
+        zip.writeUInt16LE(99, entry + 10);
+      },
+    },
+    {
+      name: 'path traversal entries',
+      mutate: (zip: Buffer, entry: number) => {
+        Buffer.from('../').copy(zip, entry + 46);
+      },
+    },
+    {
+      name: 'macro-related entries',
+      mutate: (zip: Buffer, entry: number) => {
+        Buffer.from('vbaProject.bin').copy(zip, entry + 46);
+      },
+    },
+    {
+      name: 'excessive uncompressed sizes',
+      mutate: (zip: Buffer, entry: number) => {
+        zip.writeUInt32LE(33 * 1024 * 1024, entry + 24);
+      },
+    },
+    {
+      name: 'corrupted local ZIP headers',
+      mutate: (zip: Buffer, entry: number) => {
+        const local = zip.readUInt32LE(entry + 42);
+        zip.writeUInt32LE(0, local);
+      },
+    },
+    {
+      name: 'mismatched local filenames',
+      mutate: (zip: Buffer, entry: number) => {
+        const local = zip.readUInt32LE(entry + 42);
+        zip[local + 30] ^= 0x01;
+      },
+    },
+    {
+      name: 'incorrect decompressed lengths',
+      mutate: (zip: Buffer, entry: number) => {
+        const size = zip.readUInt32LE(entry + 24);
+        zip.writeUInt32LE(size + 1, entry + 24);
+      },
+    },
+    {
+      name: 'invalid compressed XML data',
+      mutate: (zip: Buffer, entry: number) => {
+        const local = zip.readUInt32LE(entry + 42);
+        const start =
+          local +
+          30 +
+          zip.readUInt16LE(local + 26) +
+          zip.readUInt16LE(local + 28);
+
+        zip.writeUInt16LE(8, entry + 10);
+        zip[start] = 0xff;
+      },
+    },
+    {
+      name: 'incomplete directory entry counts',
+      mutate: (zip: Buffer, _entry: number, end: number) => {
+        const count = zip.readUInt16LE(end + 10);
+        zip.writeUInt16LE(count - 1, end + 8);
+        zip.writeUInt16LE(count - 1, end + 10);
+      },
+    },
+  ])('rejects DOCX archives with $name', ({ mutate }) => {
+    const invalidDocx = corruptDocxEntry(mutate);
+
+    expect(() =>
+      validateDocumentFile(makeFile('invalid.docx', DOCX_MIME, invalidDocx)),
     ).toThrow(BadRequestException);
   });
 

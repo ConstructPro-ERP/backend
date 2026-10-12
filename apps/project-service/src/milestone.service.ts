@@ -12,7 +12,7 @@ import { CreateMilestoneDto } from './dto/create-milestone.dto';
 import { UpdateMilestoneDto } from './dto/update-milestone.dto';
 import { UpdateMilestoneProgressDto } from './dto/update-milestone-progress.dto';
 import { ProjectAccessService } from './project-access.service';
-import type { ProjectAccessActor } from './interfaces/project-access.interface';
+import type { ProjectAccessActor } from '../../../libs/common/src/project-access/project-access.policy';
 import { MilestoneRepository } from './repositories/milestone.repository';
 import type { ProjectTransaction } from './repositories/project.repository';
 import {

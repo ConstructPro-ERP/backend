@@ -4,6 +4,7 @@
   "testEnvironment": "node",
   "setupFiles": ["<rootDir>/jest-e2e.setup.ts"],
   "testRegex": "test/.*\\.(e2e-spec|integration\\.spec|db\\.spec)\\.ts$",
+  "testPathIgnorePatterns": ["document-cloudinary\\.integration\\.spec\\.ts$"],
   "testTimeout": 30000,
   "maxWorkers": 3,
   "transform": {

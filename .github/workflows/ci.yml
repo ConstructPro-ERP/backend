@@ -36,5 +36,5 @@ jobs:
           name: quotation-quality-coverage
           path: coverage/quotation-quality
   backend-ci:
-    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v1
+    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v2.0.0
     secrets: inherit

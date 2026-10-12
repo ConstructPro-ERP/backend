@@ -8,6 +8,7 @@ import { bootstrap as bootstrapQuotationService } from './apps/quotation-service
 import { bootstrap as bootstrapUserService } from './apps/user-service/src/main.js';
 import { bootstrap as bootstrapProjectService } from './apps/project-service/src/main.js';
 import { bootstrap as bootstrapTaskService } from './apps/task-service/src/main.js';
+import { bootstrap as bootstrapDocumentService } from './apps/document-service/src/main.js';
 import { bootstrap as bootstrapCalendarService } from './apps/calender-service/src/main.js';
 
 type DeployableApp =
@@ -21,6 +22,7 @@ type DeployableApp =
   | 'ai-service'
   | 'project-service'
   | 'task-service'
+  | 'document-service'
   | 'calendar-service';
 
 type BootstrapFunction = () => Promise<void>;
@@ -38,6 +40,7 @@ const bootstraps: Record<DeployableApp, BootstrapFunction> = {
   'ai-service': bootstrapAiService,
   'project-service': bootstrapProjectService,
   'task-service': bootstrapTaskService,
+  'document-service': bootstrapDocumentService,
   'calendar-service': bootstrapCalendarService,
 };
 

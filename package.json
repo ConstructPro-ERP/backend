@@ -15,6 +15,7 @@
     "vercel-build": "prisma generate && npm run build:all",
     "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
     "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
+
     "dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
     "dev:quotation-service": "ts-node -r tsconfig-paths/register apps/quotation-service/src/main.ts",
@@ -26,8 +27,10 @@
     "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
     "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
     "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
+    "dev:document-service": "ts-node -r tsconfig-paths/register apps/document-service/src/main.ts",
     "dev:task-service": "ts-node -r tsconfig-paths/register apps/task-service/src/main.ts",
     "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calender-service/src/main.ts",
+
     "start": "node dist/server.js",
     "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
     "start:auth-service": "node dist/apps/auth-service/src/main.js",
@@ -40,12 +43,15 @@
     "start:client-service": "node dist/apps/client-service/src/main.js",
     "start:lead-service": "node dist/apps/lead-service/src/main.js",
     "start:project-service": "node dist/apps/project-service/src/main.js",
+    "start:document-service": "node dist/apps/document-service/src/main.js",
     "start:task-service": "node dist/apps/task-service/src/main.js",
     "start:calendar-service": "node dist/apps/calender-service/src/main.js",
     "start:vercel": "node dist/server.js",
     "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
     "start:prod": "node dist/apps/api-gateway/src/main.js",
+
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"*.ts\" --fix",
+
     "test": "jest",
     "test:unit": "jest --config ./jest.unit.config.js",
     "test:finance-quality": "jest --config ./jest.finance-analytics-ai.config.js --runInBand",
@@ -53,6 +59,7 @@
     "test:finance-workflow": "jest --config ./jest.finance-workflow.config.js --runInBand",
     "test:quality:typecheck": "tsc -p tsconfig.quality.json",
     "test:quality:lint": "eslint apps/ai-service/src/ai-provider.service.ts \"test/{invoice-service,payment-service,analytics-service,ai-service,finance}/**/*.ts\"",
+    "test:quotation-quality": "jest --config ./jest.quotation-quality.config.js --runInBand --coverage",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
@@ -143,7 +150,8 @@
     "testRegex": ".*\\.spec\\.ts$",
     "testPathIgnorePatterns": [
       "\\.e2e-spec\\.ts$",
-      "\\.db\\.spec\\.ts$"
+      "\\.db\\.spec\\.ts$",
+      "document-cloudinary\\.integration\\.spec\\.ts$"
     ],
     "transform": {
       "^.+\\.(t|j)s$": "ts-jest"

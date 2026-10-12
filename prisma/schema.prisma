@@ -264,6 +264,15 @@ enum PaymentMethod {
   ONLINE
 }
 
+// Tracks document operations across PostgreSQL and Cloudinary.
+enum DocumentStorageStatus {
+  PENDING
+  ACTIVE
+  DELETING
+  FAILED
+  DELETED
+}
+
 enum AiKnowledgeSourceType {
   PROJECT
   MILESTONE
@@ -409,6 +418,7 @@ model DocumentCategory {
   id           String   @id @default(uuid())
   categoryName String   @unique
   description  String?
+  isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -416,18 +426,32 @@ model DocumentCategory {
 }
 
 model Document {
-  id           String   @id @default(uuid())
-  projectId    String
-  categoryId   String
-  fileName     String
-  fileUrl      String
-  uploadedById String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String                @id @default(uuid())
+  projectId              String
+  categoryId             String
+  originalName           String
+  fileName               String
+  mimeType               String
+  fileSize               Int
+  storageProvider        String                @default("CLOUDINARY")
+  cloudinaryPublicId     String                @unique
+  cloudinaryResourceType String
+  fileUrl                String?
+  description            String?
+  uploadedById           String?
+  storageStatus          DocumentStorageStatus @default(PENDING)
+  deletedAt              DateTime?
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
 
   project    Project          @relation(fields: [projectId], references: [id])
   category   DocumentCategory @relation(fields: [categoryId], references: [id])
   uploadedBy User?            @relation("UploadedDocuments", fields: [uploadedById], references: [id])
+
+  @@index([projectId, deletedAt, storageStatus, createdAt])
+  @@index([projectId, categoryId, deletedAt])
+  @@index([categoryId])
+  @@index([uploadedById])
 }
 
 model AnalyticsReport {

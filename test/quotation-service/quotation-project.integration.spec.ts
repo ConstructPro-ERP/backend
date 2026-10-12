@@ -427,4 +427,133 @@ describe('Quotation → Project cross-service integration', () => {
 
     expect(projectCount).toBe(1);
   });
+  it('covers the HTTP lifecycle, revision, PDF failure, locks, and duplicate conversion', async () => {
+    const lead = await createLead('workflow');
+    const manager = await createManager('workflow');
+    const created = await request(quotationServer)
+      .post('/quotations')
+      .send({
+        leadId: lead.id,
+        status: 'DRAFT',
+        items: [{ itemName: 'Concrete', quantity: 3, unitPrice: 33.33 }],
+      })
+      .expect(201);
+    const body = created.body as { id: string; totalAmount: string | number };
+    expect(Number(body.totalAmount)).toBe(99.99);
+    const url = `/quotations/${body.id}`;
+    const listStarted = performance.now();
+    await request(quotationServer)
+      .get('/quotations')
+      .query({ leadId: lead.id, limit: 1 })
+      .expect(200);
+    const listMs = performance.now() - listStarted;
+    const detailStarted = performance.now();
+    await request(quotationServer).get(url).expect(200);
+    const detailMs = performance.now() - detailStarted;
+    await request(quotationServer)
+      .patch(`${url}/approve`)
+      .send({ targetProjectId: manager.id })
+      .expect(400);
+    await request(quotationServer)
+      .put(url)
+      .send({
+        notes: 'Workflow test',
+        items: [{ itemName: 'Steel', quantity: 2, unitPrice: 10.05 }],
+      })
+      .expect(200);
+    await request(quotationServer).patch(`${url}/submit`).send({}).expect(200);
+    await request(quotationServer)
+      .patch(`${url}/reject`)
+      .send({ reason: 'Revise scope' })
+      .expect(200);
+    await request(quotationServer).patch(`${url}/revise`).send({}).expect(200);
+    await request(quotationServer).patch(`${url}/submit`).send({}).expect(200);
+    await request(quotationServer)
+      .patch(`${url}/direct-approve`)
+      .send({})
+      .expect(200);
+    await request(quotationServer).get(`${url}/pdf`).expect(502);
+    const conversionStarted = performance.now();
+    const converted = await request(quotationServer)
+      .patch(`${url}/approve`)
+      .send({
+        projectName: `${prefix} Workflow Project`,
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: manager.id,
+      })
+      .expect(200);
+    console.log('Quotation test-environment timings (single sample, ms)', {
+      list: Math.round(listMs),
+      detail: Math.round(detailMs),
+      conversion: Math.round(performance.now() - conversionStarted),
+    });
+    const conversion = parseConversionResponse(converted.body as unknown);
+    const project = await prisma.project.findUniqueOrThrow({
+      where: { id: conversion.projectId },
+    });
+    expect(project.budget).toBe(20.1);
+    await request(quotationServer)
+      .put(url)
+      .send({ notes: 'Forbidden' })
+      .expect(400);
+    await request(quotationServer).patch(`${url}/approve`).send({}).expect(409);
+  });
+
+  it('creates only one project for simultaneous conversion requests', async () => {
+    const lead = await createLead('concurrent');
+    const manager = await createManager('concurrent');
+    const quotation = await prisma.quotation.create({
+      data: {
+        leadId: lead.id,
+        status: 'APPROVED',
+        totalAmount: 100,
+      },
+    });
+    const projectName = `${prefix} Concurrent Project`;
+    const payload = {
+      projectName,
+      startDate: '2026-10-01T00:00:00.000Z',
+      projectManagerId: manager.id,
+    };
+    const responses = await Promise.all(
+      [1, 2].map(() =>
+        request(quotationServer)
+          .patch(`/quotations/${quotation.id}/approve`)
+          .send(payload),
+      ),
+    );
+    expect(responses.some((response) => response.status === 200)).toBe(true);
+    responses.forEach((response) =>
+      expect([200, 409]).toContain(response.status),
+    );
+    const projects = await prisma.project.findMany({ where: { projectName } });
+    expect(projects).toHaveLength(1);
+    const persisted = await prisma.quotation.findUniqueOrThrow({
+      where: { id: quotation.id },
+    });
+    expect(persisted.status).toBe('CONVERTED');
+    expect(persisted.projectId).toBe(projects[0].id);
+  });
+
+  it('keeps approval retryable and creates no project after invalid manager failure', async () => {
+    const lead = await createLead('failure');
+    const quotation = await prisma.quotation.create({
+      data: { leadId: lead.id, status: 'APPROVED', totalAmount: 100 },
+    });
+    const projectName = `${prefix} Failed Project`;
+    const response = await request(quotationServer)
+      .patch(`/quotations/${quotation.id}/approve`)
+      .send({
+        projectName,
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: '550e8400-e29b-41d4-a716-446655440000',
+      });
+    expect([400, 404]).toContain(response.status);
+    const persisted = await prisma.quotation.findUniqueOrThrow({
+      where: { id: quotation.id },
+    });
+    expect(persisted.status).toBe('APPROVED');
+    expect(persisted.projectId).toBeNull();
+    expect(await prisma.project.count({ where: { projectName } })).toBe(0);
+  });
 });

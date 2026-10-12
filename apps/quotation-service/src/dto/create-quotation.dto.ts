@@ -10,6 +10,8 @@ import {
   ValidateNested,
   ArrayMinSize,
   Min,
+  Max,
+  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { QuotationStatus } from '@prisma/client';
@@ -21,10 +23,12 @@ export class CreateQuotationItemDto {
 
   @IsInt()
   @Min(1)
+  @Max(2147483647)
   quantity!: number;
 
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
+  @Max(9999999999.99)
   unitPrice!: number;
 }
 
@@ -44,5 +48,6 @@ export class CreateQuotationDto {
 
   @IsOptional()
   @IsEnum(QuotationStatus)
+  @IsIn([QuotationStatus.DRAFT, QuotationStatus.PENDING_APPROVAL])
   status?: QuotationStatus;
 }

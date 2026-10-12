@@ -12,7 +12,7 @@ import {
   ProjectTransaction,
 } from '../../apps/project-service/src/repositories/project.repository';
 import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
-import { ProjectAccessActor } from '../../apps/project-service/src/interfaces/project-access.interface';
+import type { ProjectAccessActor } from '../../libs/common/src/project-access/project-access.policy';
 import { ProjectLifecycleService } from '../../apps/project-service/src/lifecycle/project-lifecycle.service';
 import {
   ProjectSortField,

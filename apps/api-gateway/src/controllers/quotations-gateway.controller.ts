@@ -140,7 +140,7 @@ export class QuotationsGatewayController {
 
   @Patch(':id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('SALES_MANAGER', 'ADMIN')
   async approveAndConvert(
     @Param('id') id: string,
     @Body() body: ApproveQuotationDto,

@@ -7,6 +7,7 @@ on:
       - main
       - "feature/**"
       - "fix/**"
+      - "sprint8/**"
 
   pull_request:
     branches:
@@ -19,6 +20,21 @@ concurrency:
   queue: max
 
 jobs:
+  quotation-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run test:quotation-quality
+      - uses: actions/upload-artifact@v4
+        with:
+          name: quotation-quality-coverage
+          path: coverage/quotation-quality
   backend-ci:
     uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v1
     secrets: inherit

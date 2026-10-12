@@ -60,6 +60,7 @@ describe('ProjectClient', () => {
     expect(mockHttpService.post).toHaveBeenCalledWith(
       'http://project-service.test/projects/from-quotation',
       payload,
+      { timeout: 10000 },
     );
 
     expect(result).toEqual({
@@ -125,5 +126,34 @@ describe('ProjectClient', () => {
     } finally {
       loggerSpy.mockRestore();
     }
+  });
+
+  it('rejects a malformed success response before quotation persistence', async () => {
+    mockHttpService.post.mockReturnValue(of({ data: { status: 'ACTIVE' } }));
+    await expect(
+      client.createFromQuotation({ quotationId: 'q', leadId: 'l' }),
+    ).rejects.toMatchObject({ response: { code: 'INVALID_PROJECT_RESPONSE' } });
+  });
+
+  it('does not expose downstream server failure details', async () => {
+    mockHttpService.post.mockReturnValue(
+      throwError(() => ({
+        response: {
+          status: 500,
+          data: {
+            message: 'private database credentials',
+            details: 'internal stack',
+          },
+        },
+      })),
+    );
+    await expect(
+      client.createFromQuotation({ quotationId: 'q', leadId: 'l' }),
+    ).rejects.toMatchObject({
+      response: {
+        code: 'PROJECT_SERVICE_UNAVAILABLE',
+        message: 'Project service could not process the quotation conversion.',
+      },
+    });
   });
 });

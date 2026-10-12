@@ -68,7 +68,7 @@
     "test:db:reset": "node scripts/reset-test-db.js",
 
     "test:coverage:unit": "jest --config ./jest.unit.config.js --coverage --coverageDirectory=coverage/unit --maxWorkers=5",
-    "test:coverage:e2e": "jest --config ./test/jest-e2e.json --coverage --coverageDirectory=../coverage/e2e --coverageReporters=json --coverageReporters=json-summary --maxWorkers=3",
+    "test:coverage:e2e": "jest --config ./test/jest-e2e.json --coverage --maxWorkers=3",
     "test:coverage:merge": "node scripts/coverage-report.mjs",
     "test:coverage": "npm run test:coverage:unit && npm run test:coverage:e2e && npm run test:coverage:merge"
   },

@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { join } from 'node:path';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { ClientController } from './client.controller';
+import { ClientPortalAccessService } from './client-portal-access.service';
 import { ClientService } from './client.service';
 import { ClientRepository } from './repository/client.repository';
 
@@ -14,6 +15,11 @@ import { ClientRepository } from './repository/client.repository';
     }),
   ],
   controllers: [ClientController],
-  providers: [ClientService, ClientRepository, PrismaService],
+  providers: [
+    ClientService,
+    ClientPortalAccessService,
+    ClientRepository,
+    PrismaService,
+  ],
 })
 export class ClientModule {}

@@ -32,6 +32,7 @@ import { firstValueFrom, type Observable } from 'rxjs';
 import { AssignTaskDto } from '../../../task-service/src/dto/assign-task.dto';
 import { CreateTaskDto } from '../../../task-service/src/dto/create-task.dto';
 import { TaskQueryDto } from '../../../task-service/src/dto/task-query.dto';
+import { TaskAssigneeQueryDto } from '../../../task-service/src/dto/task-assignee-query.dto';
 import { UpdateTaskStatusDto } from '../../../task-service/src/dto/update-task-status.dto';
 import { UpdateTaskDto } from '../../../task-service/src/dto/update-task.dto';
 import { Roles } from '../decorators/roles.decorator';
@@ -107,6 +108,22 @@ export class TasksGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.get(this.url(`/projects/${projectId}/tasks`), {
+        headers: this.forwardHeaders(req),
+        params: query,
+      }),
+    );
+  }
+
+  @Get('projects/:projectId/task-assignees')
+  @ApiOperation({ summary: 'List active users eligible for task assignment' })
+  @ApiOkResponse({ description: 'Paginated assignee IDs and names' })
+  findAssignees(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query() query: TaskAssigneeQueryDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.get(this.url(`/projects/${projectId}/task-assignees`), {
         headers: this.forwardHeaders(req),
         params: query,
       }),

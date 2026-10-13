@@ -49,6 +49,49 @@ describe('TasksGatewayController', () => {
     'x-user-id': ACTOR_ID,
   };
 
+  it('forwards the assignee directory with pagination and authenticated identity', async () => {
+    const data = {
+      data: [{ id: ASSIGNEE_ID, fullName: 'Team Member' }],
+      meta: { page: 2, limit: 10, total: 11, totalPages: 2 },
+    };
+    mockHttp.get.mockReturnValue(of({ data }));
+    const response = await request(server)
+      .get(`/api/projects/${PROJECT_ID}/task-assignees?page=2&limit=10`)
+      .set('Authorization', AUTHORIZATION)
+      .expect(200);
+    expect(response.body).toEqual(data);
+    expect(mockHttp.get).toHaveBeenCalledWith(
+      `${SERVICE_URL}/projects/${PROJECT_ID}/task-assignees`,
+      { headers: expectedHeaders, params: { page: 2, limit: 10 } },
+    );
+  });
+
+  it.each(['page=0', 'limit=101', 'page=abc'])(
+    'rejects invalid assignee pagination %s',
+    async (query) => {
+      await request(server)
+        .get(`/api/projects/${PROJECT_ID}/task-assignees?${query}`)
+        .expect(400);
+      expect(mockHttp.get).not.toHaveBeenCalled();
+    },
+  );
+
+  it('protects the assignee route and validates project IDs', async () => {
+    await request(server)
+      .get('/api/projects/invalid/task-assignees')
+      .expect(400);
+    authenticated = false;
+    await request(server)
+      .get(`/api/projects/${PROJECT_ID}/task-assignees`)
+      .expect(401);
+    authenticated = true;
+    actorRole = 'CUSTOMER';
+    await request(server)
+      .get(`/api/projects/${PROJECT_ID}/task-assignees`)
+      .expect(403);
+    expect(mockHttp.get).not.toHaveBeenCalled();
+  });
+
   beforeAll(async () => {
     process.env.TASK_SERVICE_URL = SERVICE_URL;
 

@@ -8,7 +8,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 const mockPrisma = {
   $transaction: jest.fn(),
   project: { findUnique: jest.fn() },
-  user: { findUnique: jest.fn() },
+  user: { findUnique: jest.fn(), findMany: jest.fn(), count: jest.fn() },
   task: {
     findUnique: jest.fn(),
     findMany: jest.fn(),
@@ -33,6 +33,27 @@ const transactionClient = mockTx as unknown as TaskTransaction;
 
 describe('TaskRepository', () => {
   let repository: TaskRepository;
+
+  it('lists only active assignees with minimal fields and stable pagination', async () => {
+    mockPrisma.user.findMany.mockResolvedValue([
+      { id: 'user-1', fullName: 'Team Member' },
+    ]);
+    mockPrisma.user.count.mockResolvedValue(3);
+    await expect(repository.findAssigneesAndCount(2, 2)).resolves.toEqual([
+      [{ id: 'user-1', fullName: 'Team Member' }],
+      3,
+    ]);
+    expect(mockPrisma.user.findMany).toHaveBeenCalledWith({
+      where: { status: 'ACTIVE' },
+      select: { id: true, fullName: true },
+      orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+      skip: 2,
+      take: 2,
+    });
+    expect(mockPrisma.user.count).toHaveBeenCalledWith({
+      where: { status: 'ACTIVE' },
+    });
+  });
 
   beforeEach(() => {
     jest.clearAllMocks();

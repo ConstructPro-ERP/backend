@@ -5,6 +5,9 @@ import {
 } from '@nestjs/common';
 import { InvoiceStatus, Prisma } from '@prisma/client';
 import { InvoiceService } from '../../apps/invoice-service/src/invoice.service';
+import { InvoicePdfService } from '../../apps/invoice-service/src/pdf/invoice-pdf.service';
+import { EditableInvoiceStatusDto } from '../../apps/invoice-service/src/dto/invoice-status.dto';
+import { ListInvoicesQueryDto } from '../../apps/invoice-service/src/dto/list-invoices-query.dto';
 import { InvoiceRepository } from '../../apps/invoice-service/src/repositories/invoice.repository';
 import {
   InvoiceSortByDto,
@@ -69,11 +72,204 @@ describe('InvoiceService', () => {
     jest.clearAllMocks();
     service = new InvoiceService(
       repository as unknown as InvoiceRepository,
-      pdfService,
+      pdfService as unknown as InvoicePdfService,
     );
     repository.findProjectWithCustomer.mockResolvedValue(project);
     repository.findCustomer.mockResolvedValue(customer);
     repository.countByInvoiceNumberPrefix.mockResolvedValue(0);
+  });
+
+  it.each([
+    { fromDate: '2026-10-01' },
+    { toDate: '2026-10-31' },
+    { fromDate: '2026-10-01', toDate: '2026-10-31T12:00:00Z' },
+  ])('applies inclusive list dates %j', async (dates) => {
+    repository.findManyAndCount.mockResolvedValue([[], 0]);
+    const query = Object.assign(new ListInvoicesQueryDto(), dates, {
+      sortBy: undefined,
+    });
+    await expect(service.findAll(query)).resolves.toMatchObject({
+      items: [],
+      total: 0,
+      totalPages: 0,
+    });
+    expect(repository.findManyAndCount).toHaveBeenCalledWith({
+      skip: 0,
+      take: 20,
+      orderBy: { createdAt: SortOrderDto.DESC },
+      where: {
+        projectId: undefined,
+        customerId: undefined,
+        status: undefined,
+        invoiceDate: {
+          gte: dates.fromDate ? new Date(dates.fromDate) : undefined,
+          lte: dates.toDate
+            ? new Date(
+                dates.toDate.length === 10
+                  ? `${dates.toDate}T23:59:59.999Z`
+                  : dates.toDate,
+              )
+            : undefined,
+        },
+      },
+    });
+  });
+
+  it('issues a project invoice directly and assigns its sequence', async () => {
+    repository.create.mockResolvedValue({
+      ...baseInvoice,
+      status: InvoiceStatus.ISSUED,
+    });
+    await service.createForProject(project.id, {
+      customerId: customer.id,
+      invoiceDate: '2026-10-01',
+      totalAmount: 1000,
+      status: EditableInvoiceStatusDto.ISSUED,
+    });
+    expect(repository.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceNumber: 'INV-202610-0001',
+        projectId: project.id,
+      }),
+    );
+  });
+
+  it('updates dates and ownership and retains an issued invoice number', async () => {
+    repository.findById.mockResolvedValue({
+      ...baseInvoice,
+      status: InvoiceStatus.ISSUED,
+      invoiceNumber: 'INV-EXISTING',
+      dueDate: null,
+    });
+    repository.update.mockResolvedValue(baseInvoice);
+    await service.update(baseInvoice.id, {
+      projectId: project.id,
+      customerId: customer.id,
+      invoiceDate: '2026-10-01',
+      dueDate: '2026-10-31',
+      totalAmount: 2000,
+    });
+    expect(repository.update).toHaveBeenCalledWith(
+      baseInvoice.id,
+      expect.objectContaining({
+        invoiceNumber: undefined,
+        invoiceDate: new Date('2026-10-01'),
+        dueDate: new Date('2026-10-31'),
+        outstandingAmount: 2000,
+      }),
+    );
+    expect(repository.findProjectWithCustomer).toHaveBeenCalledWith(project.id);
+  });
+
+  it('allows quotations with no customer link', async () => {
+    repository.findProjectWithCustomer.mockResolvedValue({
+      ...project,
+      quotations: [{ lead: { customer: null } }],
+    });
+    repository.create.mockResolvedValue(baseInvoice);
+    await expect(
+      service.create({
+        projectId: project.id,
+        customerId: customer.id,
+        invoiceDate: '2026-10-01',
+        totalAmount: 1000,
+      }),
+    ).resolves.toMatchObject({ id: baseInvoice.id });
+  });
+
+  it('rejects missing invoice lookups', async () => {
+    repository.findById.mockResolvedValue(null);
+    await expect(service.findOne(baseInvoice.id)).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
+
+  it.each([
+    InvoiceStatus.PAID,
+    InvoiceStatus.PARTIALLY_PAID,
+    InvoiceStatus.CANCELLED,
+    InvoiceStatus.OVERDUE,
+  ])('rejects edits to %s invoices', async (status) => {
+    repository.findById.mockResolvedValue({ ...baseInvoice, status });
+    await expect(
+      service.update(baseInvoice.id, { notes: 'changed' }),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty update without writing', async () => {
+    repository.findById.mockResolvedValue(baseInvoice);
+    await expect(service.update(baseInvoice.id, {})).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('treats repeated cancellation as idempotent', async () => {
+    repository.findById.mockResolvedValue({
+      ...baseInvoice,
+      status: InvoiceStatus.CANCELLED,
+    });
+    await expect(service.cancel(baseInvoice.id)).resolves.toMatchObject({
+      status: 'CANCELLED',
+    });
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects PDF generation for cancelled invoices', async () => {
+    repository.findById.mockResolvedValue({
+      ...baseInvoice,
+      status: InvoiceStatus.CANCELLED,
+    });
+    await expect(
+      service.generatePdf(baseInvoice.id, {}),
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(pdfService.generate).not.toHaveBeenCalled();
+  });
+
+  it('reuses cached PDFs unless force regeneration is requested', async () => {
+    const invoice = {
+      ...baseInvoice,
+      invoiceNumber: 'INV-CACHED',
+      pdfUrl: 'https://files.test/cached.pdf',
+    };
+    repository.findById.mockResolvedValue(invoice);
+    await expect(
+      service.generatePdf(baseInvoice.id, {}),
+    ).resolves.toMatchObject({ pdfUrl: invoice.pdfUrl });
+    expect(pdfService.generate).not.toHaveBeenCalled();
+    pdfService.generate.mockResolvedValue({
+      filePath: 'new.pdf',
+      publicUrl: 'https://files.test/new.pdf',
+      generatedAt: new Date(),
+    });
+    repository.update.mockResolvedValue({
+      ...invoice,
+      pdfUrl: 'https://files.test/new.pdf',
+    });
+    await expect(
+      service.generatePdf(baseInvoice.id, { forceRegenerate: true }),
+    ).resolves.toMatchObject({ pdfUrl: 'https://files.test/new.pdf' });
+    expect(pdfService.generate).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not save PDF metadata after storage failure', async () => {
+    repository.findById.mockResolvedValue(baseInvoice);
+    pdfService.generate.mockRejectedValue(new Error('storage unavailable'));
+    await expect(service.generatePdf(baseInvoice.id, {})).rejects.toThrow(
+      'storage unavailable',
+    );
+    expect(repository.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects reversed invoice-list date ranges', async () => {
+    await expect(
+      service.findAll({
+        fromDate: '2026-10-09',
+        toDate: '2026-10-01',
+      } as Parameters<InvoiceService['findAll']>[0]),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repository.findManyAndCount).not.toHaveBeenCalled();
   });
 
   it('creates a DRAFT invoice linked to an existing project and customer', async () => {
@@ -275,7 +471,7 @@ describe('InvoiceService', () => {
 
     const result = await service.update(
       baseInvoice.id,
-      { totalAmount: 1200, status: InvoiceStatus.ISSUED },
+      { totalAmount: 1200, status: EditableInvoiceStatusDto.ISSUED },
       'actor-2',
     );
 
@@ -300,7 +496,7 @@ describe('InvoiceService', () => {
 
     const result = await service.update(
       baseInvoice.id,
-      { status: InvoiceStatus.ISSUED },
+      { status: EditableInvoiceStatusDto.ISSUED },
       'actor-2',
     );
 

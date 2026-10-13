@@ -342,15 +342,12 @@ export class AnalyticsService {
         const completedMilestoneCount = project.milestones.filter(
           (milestone) => milestone.status === 'COMPLETED',
         ).length;
+
         const milestones = project.milestones.map((milestone) => {
           const taskCount = milestone.tasks.length;
           const completedTaskCount = milestone.tasks.filter(
             (task) => task.status === TaskStatus.COMPLETED,
           ).length;
-          const completionPercentage =
-            taskCount === 0
-              ? 0
-              : round2((completedTaskCount / taskCount) * 100);
 
           return {
             id: milestone.id,
@@ -359,7 +356,7 @@ export class AnalyticsService {
             dueDate: milestone.dueDate,
             taskCount,
             completedTaskCount,
-            completionPercentage,
+            completionPercentage: milestone.progressPercentage,
           };
         });
 
@@ -372,10 +369,7 @@ export class AnalyticsService {
           budget: project.budget,
           milestoneCount,
           completedMilestoneCount,
-          completionPercentage:
-            milestoneCount === 0
-              ? 0
-              : round2((completedMilestoneCount / milestoneCount) * 100),
+          completionPercentage: project.progressPercentage,
           milestones,
         };
       }),
@@ -418,7 +412,7 @@ export class AnalyticsService {
       .map((group) => ({
         projectId: group.projectId,
         projectName: projectMap.get(group.projectId) ?? 'Unknown project',
-        totalExpense: round2(group._sum.amount ?? 0),
+        totalExpense: money(group._sum.amount),
         expenseCount: group._count._all,
         firstExpenseAt: group._min.createdAt ?? null,
         lastExpenseAt: group._max.createdAt ?? null,
@@ -438,7 +432,7 @@ export class AnalyticsService {
       limit: query.limit,
       totalPages: totalPages(total, query.limit),
       summary: {
-        totalExpense: round2(aggregate._sum.amount ?? 0),
+        totalExpense: money(aggregate._sum.amount),
         totalExpenseCount: aggregate._count._all,
         fromDate: query.fromDate ?? null,
         toDate: query.toDate ?? null,

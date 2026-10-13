@@ -7,13 +7,46 @@ on:
       - main
       - "feature/**"
       - "fix/**"
+      - "sprint8/**"
 
   pull_request:
     branches:
       - develop
       - main
 
+concurrency:
+  group: backend-neon-test-database
+  cancel-in-progress: false
+  queue: max
+
 jobs:
+  quotation-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Run quotation quality tests
+        run: npm run test:quotation-quality
+
+      - name: Upload quotation quality coverage
+        uses: actions/upload-artifact@v7
+        with:
+          name: quotation-quality-coverage
+          path: coverage/quotation-quality
+
   backend-ci:
-    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v1
+    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v2.0.0
     secrets: inherit

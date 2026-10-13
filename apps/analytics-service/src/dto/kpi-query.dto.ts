@@ -5,6 +5,7 @@ export class KpiQueryDto {
   @ApiPropertyOptional({
     description: 'Inclusive start date for KPI aggregation',
     example: '2026-06-01',
+    format: 'date',
   })
   @IsOptional()
   @IsDateString()
@@ -13,6 +14,7 @@ export class KpiQueryDto {
   @ApiPropertyOptional({
     description: 'Inclusive end date for KPI aggregation',
     example: '2026-06-30',
+    format: 'date',
   })
   @IsOptional()
   @IsDateString()

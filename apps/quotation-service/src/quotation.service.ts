@@ -13,8 +13,19 @@ import { ProjectClient } from './project.client';
 import { NotificationClient } from './notification.client';
 import { CreateQuotationDto } from './dto/create-quotation.dto';
 import { ApproveQuotationDto } from './dto/approve-quotation.dto';
-import { GetQuotationsQueryDto } from './dto/get-quotations-query.dto';
+import {
+  GetQuotationsQueryDto,
+  QuotationSortBy,
+  SortOrder,
+} from './dto/get-quotations-query.dto';
 import { UpdateQuotationDto } from './dto/update-quotation.dto';
+
+export const quotationLeadSelect = {
+  id: true,
+  customerName: true,
+  email: true,
+  phone: true,
+};
 
 @Injectable()
 export class QuotationService {
@@ -28,6 +39,12 @@ export class QuotationService {
   ) {}
 
   async create(dto: CreateQuotationDto) {
+    if (dto.status && !['DRAFT', 'PENDING_APPROVAL'].includes(dto.status)) {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: 'New quotations must be draft or pending approval.',
+      });
+    }
     const lead = await this.prisma.lead.findUnique({
       where: { id: dto.leadId },
     });
@@ -39,18 +56,19 @@ export class QuotationService {
     }
 
     const itemsWithAmounts = dto.items.map((item) => {
-      const amount = round2(item.quantity * item.unitPrice);
+      const amount = calculateAmount(item.quantity, item.unitPrice);
       return { ...item, amount };
     });
 
-    const totalAmount = round2(
-      itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
-    );
+    const totalAmount = sumAmounts(itemsWithAmounts.map((item) => item.amount));
+
+    const status = dto.status ?? 'PENDING_APPROVAL';
 
     const quotation = await this.prisma.$transaction(async (tx) => {
       return tx.quotation.create({
         data: {
           leadId: dto.leadId,
+          status,
           totalAmount: totalAmount,
           notes: dto.notes,
           items: {
@@ -62,7 +80,7 @@ export class QuotationService {
             })),
           },
         },
-        include: { items: true },
+        include: { items: true, lead: { select: quotationLeadSelect } },
       });
     });
 
@@ -82,6 +100,12 @@ export class QuotationService {
     const page = Math.max(1, query?.page ?? 1);
     const limit = Math.max(1, Math.min(100, query?.limit ?? 20));
     const skip = (page - 1) * limit;
+
+    const sortBy = query?.sortBy ?? QuotationSortBy.CREATED_AT;
+    const sortOrder = query?.sortOrder ?? SortOrder.DESC;
+    const orderBy: Prisma.QuotationOrderByWithRelationInput = {
+      [sortBy]: sortOrder,
+    };
 
     const where: Prisma.QuotationWhereInput = {
       ...(query?.leadId ? { leadId: query.leadId } : {}),
@@ -114,8 +138,8 @@ export class QuotationService {
         where,
         skip,
         take: limit,
-        orderBy: { createdAt: 'desc' },
-        include: { items: true },
+        orderBy,
+        include: { items: true, lead: { select: quotationLeadSelect } },
       }),
     ]);
 
@@ -131,7 +155,7 @@ export class QuotationService {
   async findOne(id: string) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
     if (!quotation) {
       throw new NotFoundException({
@@ -145,7 +169,7 @@ export class QuotationService {
   async update(id: string, dto: UpdateQuotationDto) {
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     if (!quotation) {
@@ -164,12 +188,12 @@ export class QuotationService {
 
     if (dto.items && dto.items.length > 0) {
       const itemsWithAmounts = dto.items.map((item) => {
-        const amount = round2(item.quantity * item.unitPrice);
+        const amount = calculateAmount(item.quantity, item.unitPrice);
         return { ...item, amount };
       });
 
-      const totalAmount = round2(
-        itemsWithAmounts.reduce((sum, i) => sum + i.amount, 0),
+      const totalAmount = sumAmounts(
+        itemsWithAmounts.map((item) => item.amount),
       );
 
       return this.prisma.$transaction(async (tx) => {
@@ -182,6 +206,7 @@ export class QuotationService {
           data: {
             notes: dto.notes !== undefined ? dto.notes : quotation.notes,
             totalAmount,
+            pdfUrl: null, // Invalidate cached Cloudinary URL so next request regenerates
             items: {
               create: itemsWithAmounts.map((i) => ({
                 itemName: i.itemName,
@@ -191,7 +216,7 @@ export class QuotationService {
               })),
             },
           },
-          include: { items: true },
+          include: { items: true, lead: { select: quotationLeadSelect } },
         });
       });
     }
@@ -199,18 +224,68 @@ export class QuotationService {
     if (dto.notes !== undefined) {
       return this.prisma.quotation.update({
         where: { id },
-        data: { notes: dto.notes },
-        include: { items: true },
+        data: {
+          notes: dto.notes,
+          pdfUrl: null, // Invalidate cached Cloudinary URL so next request regenerates
+        },
+        include: { items: true, lead: { select: quotationLeadSelect } },
       });
     }
 
     return quotation;
   }
 
+  async directApprove(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status === 'CONVERTED') {
+      throw new ConflictException({
+        code: 'ALREADY_CONVERTED',
+        message: 'Quotation has already been converted to a project.',
+        details: {
+          projectId: quotation.projectId,
+        },
+      });
+    }
+
+    if (quotation.status === 'REJECTED') {
+      throw new BadRequestException({
+        code: 'QUOTATION_REJECTED',
+        message: 'A rejected quotation cannot be approved. Revise it first.',
+      });
+    }
+
+    if (quotation.status === 'APPROVED') {
+      return quotation;
+    }
+
+    if (quotation.status !== 'PENDING_APPROVAL') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot approve quotation with status ${quotation.status}. Only PENDING_APPROVAL quotations can be approved.`,
+      });
+    }
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: { status: 'APPROVED', pdfUrl: null },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+  }
+
   async approveAndConvert(id: string, dto: ApproveQuotationDto) {
+    if (dto?.directApproveOnly) {
+      const approved = await this.directApprove(id);
+      return {
+        quotation: approved,
+        projectId: approved.projectId ?? null,
+        projectStatus: 'ACTIVE',
+      };
+    }
+
     const quotation = await this.prisma.quotation.findUnique({
       where: { id },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     if (!quotation) {
@@ -224,6 +299,9 @@ export class QuotationService {
       throw new ConflictException({
         code: 'ALREADY_CONVERTED',
         message: 'Quotation has already been converted to a project.',
+        details: {
+          projectId: quotation.projectId,
+        },
       });
     }
 
@@ -231,6 +309,13 @@ export class QuotationService {
       throw new BadRequestException({
         code: 'QUOTATION_REJECTED',
         message: 'A rejected quotation cannot be converted.',
+      });
+    }
+
+    if (!['PENDING_APPROVAL', 'APPROVED'].includes(quotation.status)) {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: 'Submit the quotation for approval before converting it.',
       });
     }
 
@@ -261,7 +346,7 @@ export class QuotationService {
     if (quotation.status !== 'APPROVED') {
       await this.prisma.quotation.update({
         where: { id },
-        data: { status: 'APPROVED' },
+        data: { status: 'APPROVED', pdfUrl: null },
       });
     }
 
@@ -279,16 +364,17 @@ export class QuotationService {
           startDate: dto.startDate,
           endDate: dto.endDate,
           projectManagerId: dto.projectManagerId,
-          budget: dto.budget,
+          budget: dto.budget ?? Number(quotation.totalAmount),
         });
 
     const converted = await this.prisma.quotation.update({
       where: { id },
       data: {
         status: 'CONVERTED',
+        pdfUrl: null,
         projectId: projectResult.projectId,
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
 
     try {
@@ -329,9 +415,10 @@ export class QuotationService {
       where: { id },
       data: {
         status: 'REJECTED',
+        pdfUrl: null,
         notes,
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   }
 
@@ -349,8 +436,29 @@ export class QuotationService {
       where: { id },
       data: {
         status: 'DRAFT',
+        pdfUrl: null, // Force regeneration upon next submission
       },
-      include: { items: true },
+      include: { items: true, lead: { select: quotationLeadSelect } },
+    });
+  }
+
+  async submit(id: string) {
+    const quotation = await this.findOne(id);
+
+    if (quotation.status !== 'DRAFT') {
+      throw new BadRequestException({
+        code: 'INVALID_STATUS_TRANSITION',
+        message: `Cannot submit quotation with status ${quotation.status}. Only DRAFT quotations can be submitted for approval.`,
+      });
+    }
+
+    return this.prisma.quotation.update({
+      where: { id },
+      data: {
+        status: 'PENDING_APPROVAL',
+        pdfUrl: null,
+      },
+      include: { items: true, lead: { select: quotationLeadSelect } },
     });
   }
 
@@ -366,7 +474,7 @@ export class QuotationService {
       throw new BadGatewayException({
         code: 'PDF_GENERATION_FAILED',
         message:
-          'Quotation PDF generation failed or document service is unavailable.',
+          'Quotation PDF generation failed or cloud storage is unavailable.',
       });
     }
 
@@ -380,5 +488,50 @@ export class QuotationService {
 }
 
 export function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+  return new Prisma.Decimal(n)
+    .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP)
+    .toNumber();
+}
+
+// Match the database Decimal(12, 2) limit before attempting persistence.
+function checkedAmount(amount: Prisma.Decimal): number {
+  if (
+    !amount.isFinite() ||
+    amount.isNegative() ||
+    amount.greaterThan('9999999999.99')
+  ) {
+    throw new BadRequestException({
+      code: 'INVALID_QUOTATION_AMOUNT',
+      message:
+        'Quotation amounts must be non-negative and within the supported monetary range.',
+    });
+  }
+  return amount.toNumber();
+}
+
+export function calculateAmount(quantity: number, unitPrice: number): number {
+  if (
+    !Number.isInteger(quantity) ||
+    quantity < 1 ||
+    quantity > 2147483647 ||
+    !Number.isFinite(unitPrice) ||
+    unitPrice < 0
+  ) {
+    throw new BadRequestException({
+      code: 'INVALID_QUOTATION_ITEM',
+      message:
+        'Items require a positive integer quantity and a finite non-negative unit price.',
+    });
+  }
+  return checkedAmount(
+    new Prisma.Decimal(unitPrice)
+      .mul(quantity)
+      .toDecimalPlaces(2, Prisma.Decimal.ROUND_HALF_UP),
+  );
+}
+
+export function sumAmounts(amounts: number[]): number {
+  return checkedAmount(
+    amounts.reduce((sum, amount) => sum.plus(amount), new Prisma.Decimal(0)),
+  );
 }

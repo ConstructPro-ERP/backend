@@ -166,10 +166,17 @@ describe('Role and Permission', () => {
 
     // Assert
     expect(found).not.toBeNull();
-    expect(found!.role.roleName).toBe('VIEWER');
-    expect(found!.role.permissions).toHaveLength(1);
-    expect(found!.role.permissions[0].permission.action).toBe('read');
-    expect(found!.role.permissions[0].permission.resource).toBe('reports');
+
+    // Prisma allows the user's role relation to be null.
+    // Explicitly narrow it before accessing its properties.
+    if (!found?.role) {
+      throw new Error('Expected user to have an assigned role.');
+    }
+
+    expect(found.role.roleName).toBe('VIEWER');
+    expect(found.role.permissions).toHaveLength(1);
+    expect(found.role.permissions[0].permission.action).toBe('read');
+    expect(found.role.permissions[0].permission.resource).toBe('reports');
   });
 });
 
@@ -409,8 +416,16 @@ describe('Project and Milestone', () => {
 
     await prisma.milestone.createMany({
       data: [
-        { projectId: project.id, milestoneName: 'Phase 1' },
-        { projectId: project.id, milestoneName: 'Phase 2' },
+        {
+          projectId: project.id,
+          milestoneName: 'Phase 1',
+          weight: 50,
+        },
+        {
+          projectId: project.id,
+          milestoneName: 'Phase 2',
+          weight: 50,
+        },
       ],
     });
 

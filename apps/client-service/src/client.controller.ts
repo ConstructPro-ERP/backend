@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { ClientService } from './client.service';
 import { CreateClientDto, UpdateClientDto } from './dto/client.dto';
+import { LinkClientPortalUserDto } from './dto/link-client-portal-user.dto';
 import { ClientEntity } from './entities/client.entity';
 
 @ApiTags('Clients')
@@ -59,6 +60,20 @@ export class ClientController {
     @Body() dto: UpdateClientDto,
   ) {
     return this.clientService.update(id, dto);
+  }
+
+  @Patch(':id/portal-user')
+  @ApiOperation({
+    summary: 'Link an existing Customer to a Client Portal User',
+  })
+  @ApiOkResponse({
+    description: 'Customer account association created or confirmed',
+  })
+  linkPortalUser(
+    @Param('id', new ParseUUIDPipe()) id: string,
+    @Body() dto: LinkClientPortalUserDto,
+  ) {
+    return this.clientService.linkPortalUser(id, dto.userId);
   }
 
   @Delete(':id')

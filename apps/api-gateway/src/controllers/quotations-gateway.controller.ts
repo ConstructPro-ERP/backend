@@ -140,7 +140,7 @@ export class QuotationsGatewayController {
 
   @Patch(':id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('ADMIN')
+  @Roles('SALES_MANAGER', 'ADMIN')
   async approveAndConvert(
     @Param('id') id: string,
     @Body() body: ApproveQuotationDto,
@@ -150,6 +150,35 @@ export class QuotationsGatewayController {
       this.httpService.patch(
         `${QUOTATION_SERVICE_URL}/quotations/${id}/approve`,
         body,
+        { headers: { authorization: req.headers.authorization } },
+      ),
+    );
+  }
+
+  @Patch(':id/direct-approve')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async directApprove(
+    @Param('id') id: string,
+    @Req() req: Request,
+  ): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/direct-approve`,
+        {},
+        { headers: { authorization: req.headers.authorization } },
+      ),
+    );
+  }
+
+  @Patch(':id/submit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('SALES_MANAGER', 'ADMIN')
+  async submit(@Param('id') id: string, @Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.patch(
+        `${QUOTATION_SERVICE_URL}/quotations/${id}/submit`,
+        {},
         { headers: { authorization: req.headers.authorization } },
       ),
     );

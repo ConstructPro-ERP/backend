@@ -248,9 +248,8 @@ export class AiForecastingService {
     const totalOutstanding = sumMoney(
       project.invoices.map((invoice) => invoice.outstandingAmount),
     );
-    const totalExpenses = project.expenses.reduce(
-      (sum, expense) => sum + (expense.amount ?? 0),
-      0,
+    const totalExpenses = sumMoney(
+      project.expenses.map((expense) => expense.amount),
     );
     const overdueRatio = project.invoices.length
       ? overdueInvoices / project.invoices.length

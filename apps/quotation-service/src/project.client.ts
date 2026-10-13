@@ -41,16 +41,32 @@ export class ProjectClient {
         this.httpService.post<CreateProjectFromQuotationResponse>(
           `${this.baseUrl}/projects/from-quotation`,
           payload,
+          { timeout: 10000 },
         ),
       );
 
-      return response.data;
+      const result = response.data;
+      if (
+        !result ||
+        typeof result.projectId !== 'string' ||
+        !result.projectId ||
+        !['PLANNING', 'ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED'].includes(
+          result.status,
+        )
+      ) {
+        throw new BadGatewayException({
+          code: 'INVALID_PROJECT_RESPONSE',
+          message: 'Project service returned an invalid conversion response.',
+        });
+      }
+      return result;
     } catch (err: unknown) {
+      if (err instanceof BadGatewayException) throw err;
       const axiosError = err as AxiosErrorShape;
       const status = axiosError.response?.status;
       const downstream = axiosError.response?.data;
 
-      if (status && downstream) {
+      if (status && status >= 400 && status < 500 && downstream) {
         throw new HttpException(
           {
             code: downstream.code ?? 'PROJECT_SERVICE_ERROR',

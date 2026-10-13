@@ -55,6 +55,31 @@ describe('ClientGatewayController roles', () => {
   it('rejects a request with no authenticated user', () => {
     expect(() => guard.canActivate(contextFor())).toThrow(ForbiddenException);
   });
+
+  it('allows only Admin to link a client portal account', () => {
+    const linkContext = (role: string) =>
+      ({
+        switchToHttp: () => ({
+          getRequest: () => ({ user: { role } }),
+        }),
+        getHandler: () =>
+          Object.getOwnPropertyDescriptor(
+            ClientGatewayController.prototype,
+            'linkPortalUser',
+          )?.value as ClientGatewayController['linkPortalUser'],
+        getClass: () => ClientGatewayController,
+      }) as unknown as ExecutionContext;
+
+    expect(guard.canActivate(linkContext('ADMIN'))).toBe(true);
+
+    expect(() => guard.canActivate(linkContext('SALES_MANAGER'))).toThrow(
+      ForbiddenException,
+    );
+
+    expect(() => guard.canActivate(linkContext('CLIENT_PORTAL_USER'))).toThrow(
+      ForbiddenException,
+    );
+  });
 });
 
 describe('ClientGatewayController', () => {
@@ -149,6 +174,41 @@ describe('ClientGatewayController', () => {
         headers: { authorization: 'Bearer test-token', 'x-user-id': 'user-1' },
       },
     );
+  });
+
+  it('forwards Admin portal linking to Client Service', async () => {
+    const body = { userId: 'user-1' };
+
+    httpService.patch.mockReturnValue(
+      of({
+        data: {
+          customerId: 'customer-1',
+          userId: 'user-1',
+        },
+      }),
+    );
+
+    const result = await controller.linkPortalUser(
+      'customer-1',
+      body,
+      reqWith(),
+    );
+
+    expect(httpService.patch).toHaveBeenCalledWith(
+      'http://client-service.test/clients/customer-1/portal-user',
+      body,
+      {
+        headers: {
+          authorization: 'Bearer test-token',
+          'x-user-id': 'user-1',
+        },
+      },
+    );
+
+    expect(result).toEqual({
+      customerId: 'customer-1',
+      userId: 'user-1',
+    });
   });
 
   it('forwards remove() to DELETE /clients/:id', async () => {

@@ -15,6 +15,42 @@ describe('AiPromptService', () => {
     });
   });
 
+  it.each([undefined, 'invalid', '-1'])(
+    'bounds prompt size with configuration %s',
+    (setting) => {
+      configService.get.mockImplementation(() => setting);
+      const service = new AiPromptService(
+        configService as unknown as ConfigService,
+      );
+      const result = service.buildRiskPredictionPrompt({
+        projectId: 'short',
+        projectName: 'Tower'.repeat(5000),
+        projectStatus: 'ACTIVE',
+        paymentCount: 0,
+        milestoneCount: 0,
+        invoiceCount: 0,
+        expenseCount: 0,
+        retrievedChunks: [
+          {
+            id: 'chunk-1',
+            sourceType: 'project',
+            sourceId: null,
+            summary: 'Project context',
+            relatedProjectId: 'short',
+            similarityScore: null,
+          },
+        ],
+      });
+      expect(result.userPrompt.length).toBeLessThanOrEqual(
+        setting === '-1' ? 2000 : 16000,
+      );
+      expect(result.warnings).toEqual(
+        expect.arrayContaining([expect.stringContaining('truncated')]),
+      );
+      expect(result.chunks[0].sourceId).toBeNull();
+    },
+  );
+
   it('limits context chunks and sanitizes identifiers', () => {
     const service = new AiPromptService(
       configService as unknown as ConfigService,

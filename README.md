@@ -279,6 +279,17 @@ This README is intended to support developer onboarding, repository maintenance,
 
 Feature implementation details, API specifications, database schema documentation, and testing documentation are maintained separately within project documentation repositories.
 
+## Finance, analytics and AI verification
+
+Run `npm run test:finance-quality` for deterministic unit tests and business-service coverage,
+`npm run test:quality-routes` for HTTP validation and authorization tests, and
+`npm run test:finance-workflow` for persisted workflows against an isolated,
+migrated database configured through `DATABASE_URL_TEST`.
+
+Run `npm run test:quality:typecheck` and `npm run test:quality:lint` for the affected
+test scope. Results, coverage boundaries, environment prerequisites, and open
+verification blockers are recorded in [the finance, analytics and AI verification register](docs/testing/finance-analytics-ai-verification.md).
+
 ---
 
 ## License

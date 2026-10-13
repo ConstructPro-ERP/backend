@@ -8,7 +8,13 @@ import {
 import { AnalyticsService } from '../../apps/analytics-service/src/analytics.service';
 import {
   ActivityTypeDto,
+  ExpenseReportQueryDto,
   ExpenseReportSortByDto,
+  OverdueInvoiceSortByDto,
+  ProjectCompletionSortByDto,
+  ProjectCompletionReportQueryDto,
+  OverdueInvoiceReportQueryDto,
+  RecentActivityQueryDto,
   SortOrderDto,
 } from '../../apps/analytics-service/src/dto/reporting-query.dto';
 import { AnalyticsRepository } from '../../apps/analytics-service/src/repositories/analytics.repository';
@@ -44,6 +50,320 @@ describe('AnalyticsService', () => {
     service = new AnalyticsService(
       repository as unknown as AnalyticsRepository,
     );
+  });
+
+  function emptyRepository() {
+    repository.aggregateInvoices.mockResolvedValue({
+      _sum: { totalAmount: null, paidAmount: null, outstandingAmount: null },
+    });
+    repository.countProjects.mockResolvedValue(0);
+    repository.groupInvoiceStatuses.mockResolvedValue([]);
+    repository.countLeads.mockResolvedValue(0);
+    repository.countConvertedLeads.mockResolvedValue(0);
+    repository.groupQuotationStatuses.mockResolvedValue([]);
+    for (const method of [
+      repository.findRecentInvoices,
+      repository.findRecentPayments,
+      repository.findRecentProjects,
+      repository.findRecentLeads,
+      repository.findRecentQuotations,
+      repository.findRecentDocuments,
+      repository.findRecentMilestones,
+      repository.findProjectsForCompletionReport,
+      repository.groupExpensesByProject,
+      repository.findProjectsByIds,
+      repository.findOverdueInvoices,
+    ])
+      method.mockResolvedValue([]);
+    repository.countProjectsForReport.mockResolvedValue(0);
+    repository.countOverdueInvoices.mockResolvedValue(0);
+    repository.aggregateExpenses.mockResolvedValue({
+      _sum: { amount: null },
+      _count: { _all: 0 },
+    });
+  }
+
+  it.each([true, false])(
+    'merges every activity category and handles optional project links (%s)',
+    async (hasProject) => {
+      emptyRepository();
+      const project = { id: 'p1', projectName: 'Tower' };
+      const createdAt = new Date('2026-10-01');
+      repository.findRecentInvoices.mockResolvedValue([
+        {
+          id: 'i1',
+          invoiceNumber: null,
+          status: InvoiceStatus.DRAFT,
+          totalAmount: null,
+          createdAt,
+          project,
+        },
+      ]);
+      repository.findRecentPayments.mockResolvedValue([
+        {
+          id: 'pay1',
+          referenceNumber: 'PAY1',
+          amount: 10,
+          createdAt,
+          invoice: hasProject ? { project } : null,
+        },
+      ]);
+      repository.findRecentProjects.mockResolvedValue([
+        { ...project, status: ProjectStatus.ACTIVE, createdAt },
+      ]);
+      repository.findRecentLeads.mockResolvedValue([
+        { id: 'l1', customerName: 'Client', status: 'NEW', createdAt },
+      ]);
+      repository.findRecentQuotations.mockResolvedValue([
+        {
+          id: 'q1',
+          status: QuotationStatus.PENDING_APPROVAL,
+          totalAmount: 12.34,
+          createdAt,
+          project: hasProject ? project : null,
+        },
+      ]);
+      repository.findRecentDocuments.mockResolvedValue([
+        {
+          id: 'd1',
+          fileName: 'plan.pdf',
+          category: { categoryName: 'Plans' },
+          createdAt,
+          project,
+        },
+      ]);
+      repository.findRecentMilestones.mockResolvedValue([
+        {
+          id: 'm1',
+          milestoneName: 'Foundation',
+          status: MilestoneStatus.IN_PROGRESS,
+          createdAt,
+          project,
+        },
+      ]);
+      const result = await service.recentActivity(
+        Object.assign(new RecentActivityQueryDto(), { activityTypes: [] }),
+      );
+      expect(result.total).toBe(7);
+      expect(new Set(result.items.map((item) => item.type))).toEqual(
+        new Set(Object.values(ActivityTypeDto)),
+      );
+      expect(
+        result.items.find((item) => item.type === ActivityTypeDto.INVOICE)
+          ?.title,
+      ).toBe('Invoice created');
+      expect(
+        result.items.find((item) => item.type === ActivityTypeDto.DOCUMENT)
+          ?.description,
+      ).toBe('Plans uploaded');
+      for (const type of [ActivityTypeDto.QUOTATION, ActivityTypeDto.PAYMENT]) {
+        expect(
+          result.items.find((item) => item.type === type)?.relatedProjectId,
+        ).toBe(hasProject ? 'p1' : null);
+      }
+    },
+  );
+
+  it('does not query excluded activity categories and paginates newest records first', async () => {
+    emptyRepository();
+    repository.findRecentProjects.mockResolvedValue([
+      {
+        id: 'old',
+        projectName: 'Older',
+        status: ProjectStatus.ACTIVE,
+        createdAt: new Date('2026-09-01'),
+      },
+      {
+        id: 'new',
+        projectName: 'Newer',
+        status: ProjectStatus.ACTIVE,
+        createdAt: new Date('2026-10-01'),
+      },
+    ]);
+    const result = await service.recentActivity({
+      page: 2,
+      limit: 1,
+      activityTypes: [ActivityTypeDto.PROJECT],
+    });
+    expect(result).toMatchObject({
+      total: 2,
+      totalPages: 2,
+      items: [{ entityId: 'old' }],
+    });
+    expect(repository.findRecentInvoices).not.toHaveBeenCalled();
+    expect(repository.findRecentPayments).not.toHaveBeenCalled();
+    expect(repository.findRecentLeads).not.toHaveBeenCalled();
+    expect(repository.findRecentQuotations).not.toHaveBeenCalled();
+    expect(repository.findRecentDocuments).not.toHaveBeenCalled();
+    expect(repository.findRecentMilestones).not.toHaveBeenCalled();
+  });
+
+  it('keeps expense groups without recorded dates sortable', async () => {
+    emptyRepository();
+    repository.groupExpensesByProject.mockResolvedValue(
+      ['p1', 'p2'].map((projectId) => ({
+        projectId,
+        _sum: { amount: null },
+        _count: { _all: 1 },
+        _min: { createdAt: null },
+        _max: { createdAt: null },
+      })),
+    );
+    const result = await service.expenseReport(new ExpenseReportQueryDto());
+    expect(result.items).toHaveLength(2);
+    expect(result.items.every((item) => item.lastExpenseAt === null)).toBe(
+      true,
+    );
+  });
+
+  it('returns zero overdue days for invoices with an absent or future due date', async () => {
+    emptyRepository();
+    repository.findOverdueInvoices.mockResolvedValue(
+      [null, new Date('2099-01-01')].map((dueDate, index) => ({
+        id: `i${index}`,
+        invoiceNumber: null,
+        status: InvoiceStatus.OVERDUE,
+        invoiceDate: new Date('2026-10-01'),
+        dueDate,
+        totalAmount: 10,
+        paidAmount: 0,
+        outstandingAmount: 10,
+        customer: { id: 'c1', fullName: 'Client' },
+        project: { id: 'p1', projectName: 'Tower' },
+      })),
+    );
+    repository.countOverdueInvoices.mockResolvedValue(2);
+    const result = await service.overdueInvoiceReport(
+      new OverdueInvoiceReportQueryDto(),
+    );
+    expect(result.items.map((item) => item.daysOverdue)).toEqual([0, 0]);
+  });
+
+  it.each([
+    {},
+    { fromDate: '2026-10-01' },
+    { toDate: '2026-10-31' },
+    { fromDate: '2026-10-01', toDate: '2026-10-31T12:00:00Z' },
+  ])('returns empty reports and applies date boundaries %j', async (dates) => {
+    emptyRepository();
+    await service.dashboardSummary(dates);
+    const reports = await Promise.all([
+      service.recentActivity(
+        Object.assign(new RecentActivityQueryDto(), dates),
+      ),
+      service.projectCompletionReport(
+        Object.assign(new ProjectCompletionReportQueryDto(), dates),
+      ),
+      service.expenseReport(Object.assign(new ExpenseReportQueryDto(), dates)),
+      service.overdueInvoiceReport(
+        Object.assign(new OverdueInvoiceReportQueryDto(), dates),
+      ),
+    ]);
+    for (const report of reports)
+      expect(report).toMatchObject({ items: [], total: 0, totalPages: 0 });
+    expect(repository.aggregateInvoices).toHaveBeenCalledWith({
+      invoiceDate:
+        dates.fromDate || dates.toDate
+          ? {
+              gte: dates.fromDate ? new Date(dates.fromDate) : undefined,
+              lte: dates.toDate
+                ? new Date(
+                    dates.toDate.length === 10
+                      ? `${dates.toDate}T23:59:59.999Z`
+                      : dates.toDate,
+                  )
+                : undefined,
+            }
+          : undefined,
+    });
+  });
+
+  it.each(Object.values(ExpenseReportSortByDto))(
+    'sorts grouped expenses by %s in both directions',
+    async (sortBy) => {
+      repository.aggregateExpenses.mockResolvedValue({
+        _sum: { amount: 120 },
+        _count: { _all: 3 },
+      });
+      repository.groupExpensesByProject.mockResolvedValue([
+        {
+          projectId: 'p1',
+          _sum: { amount: null },
+          _count: { _all: 1 },
+          _min: { createdAt: null },
+          _max: { createdAt: null },
+        },
+        {
+          projectId: 'p2',
+          _sum: { amount: 120 },
+          _count: { _all: 2 },
+          _min: { createdAt: new Date('2026-10-01') },
+          _max: { createdAt: new Date('2026-10-02') },
+        },
+      ]);
+      repository.findProjectsByIds.mockResolvedValue([
+        { id: 'p2', projectName: 'Alpha' },
+      ]);
+      const asc = await service.expenseReport(
+        Object.assign(new ExpenseReportQueryDto(), {
+          sortBy,
+          sortOrder: SortOrderDto.ASC,
+        }),
+      );
+      const desc = await service.expenseReport(
+        Object.assign(new ExpenseReportQueryDto(), {
+          sortBy,
+          sortOrder: SortOrderDto.DESC,
+        }),
+      );
+      expect(asc.items.map((item) => item.projectId)).toEqual(
+        sortBy === ExpenseReportSortByDto.PROJECT_NAME
+          ? ['p2', 'p1']
+          : ['p1', 'p2'],
+      );
+      expect(desc.items.map((item) => item.projectId)).toEqual(
+        [...asc.items.map((item) => item.projectId)].reverse(),
+      );
+      expect(asc.summary).toMatchObject({
+        totalExpense: 120,
+        totalExpenseCount: 3,
+      });
+      expect(asc.items.find((item) => item.projectId === 'p1')).toMatchObject({
+        projectName: 'Unknown project',
+        totalExpense: 0,
+        firstExpenseAt: null,
+        lastExpenseAt: null,
+      });
+    },
+  );
+
+  it('returns zero-valued dashboard KPIs for an empty database', async () => {
+    repository.aggregateInvoices.mockResolvedValue({
+      _sum: { totalAmount: null, paidAmount: null, outstandingAmount: null },
+    });
+    repository.countProjects.mockResolvedValue(0);
+    repository.groupInvoiceStatuses.mockResolvedValue([]);
+    repository.countLeads.mockResolvedValue(0);
+    repository.countConvertedLeads.mockResolvedValue(0);
+    repository.groupQuotationStatuses.mockResolvedValue([]);
+    const summary = await service.dashboardSummary({});
+    expect(summary.revenue).toMatchObject({
+      totalRevenue: 0,
+      paidAmount: 0,
+      outstandingBalance: 0,
+    });
+    expect(summary.projects).toMatchObject({
+      totalProjects: 0,
+      completionRate: 0,
+      overdueProjectCount: 0,
+    });
+    expect(summary.invoices).toMatchObject({ totalInvoices: 0, paidCount: 0 });
+    expect(summary.sales).toMatchObject({
+      totalLeads: 0,
+      leadConversionRate: 0,
+      totalQuotations: 0,
+    });
+    expect(JSON.stringify(summary)).not.toContain('NaN');
   });
 
   it('returns revenue KPIs from invoice aggregates', async () => {
@@ -172,12 +492,13 @@ describe('AnalyticsService', () => {
     });
   });
 
-  it('returns project completion report items with milestone percentages', async () => {
+  it('uses canonical progress instead of milestone and task completion ratios', async () => {
     repository.findProjectsForCompletionReport.mockResolvedValue([
       {
         id: 'proj-1',
         projectName: 'Alpha',
         status: ProjectStatus.ACTIVE,
+        progressPercentage: 75,
         startDate: new Date('2026-06-01T00:00:00Z'),
         endDate: null,
         budget: 100000,
@@ -186,40 +507,126 @@ describe('AnalyticsService', () => {
             id: 'ms-1',
             milestoneName: 'Foundation',
             status: MilestoneStatus.COMPLETED,
+            progressPercentage: 100,
+            weight: 5,
             dueDate: null,
-            tasks: [
-              { id: 't-1', status: 'COMPLETED' },
-              { id: 't-2', status: 'COMPLETED' },
-            ],
+            tasks: [{ id: 't-1', status: 'TODO' }],
           },
           {
             id: 'ms-2',
             milestoneName: 'Finishing',
             status: MilestoneStatus.IN_PROGRESS,
+            progressPercentage: 50,
+            weight: 5,
             dueDate: null,
-            tasks: [
-              { id: 't-3', status: 'COMPLETED' },
-              { id: 't-4', status: 'TODO' },
-            ],
+            tasks: [{ id: 't-2', status: 'COMPLETED' }],
           },
         ],
       },
     ]);
+
     repository.countProjectsForReport.mockResolvedValue(1);
 
-    await expect(
-      service.projectCompletionReport({ page: 1, limit: 10 }),
-    ).resolves.toMatchObject({
-      total: 1,
-      items: [
-        expect.objectContaining({
-          projectId: 'proj-1',
-          milestoneCount: 2,
-          completedMilestoneCount: 1,
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.total).toBe(1);
+
+    expect(report.items[0]).toMatchObject({
+      projectId: 'proj-1',
+      milestoneCount: 2,
+      completedMilestoneCount: 1,
+      completionPercentage: 75,
+      milestones: [
+        {
+          id: 'ms-1',
+          taskCount: 1,
+          completedTaskCount: 0,
+          completionPercentage: 100,
+        },
+        {
+          id: 'ms-2',
+          taskCount: 1,
+          completedTaskCount: 1,
           completionPercentage: 50,
-        }),
+        },
       ],
     });
+  });
+
+  it('returns zero completion for a project without milestones', async () => {
+    repository.findProjectsForCompletionReport.mockResolvedValue([
+      {
+        id: 'proj-empty',
+        projectName: 'New Project',
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 0,
+        startDate: new Date('2026-06-01T00:00:00Z'),
+        endDate: null,
+        budget: null,
+        milestones: [],
+      },
+    ]);
+
+    repository.countProjectsForReport.mockResolvedValue(1);
+
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.items[0]).toMatchObject({
+      projectId: 'proj-empty',
+      completionPercentage: 0,
+      milestoneCount: 0,
+      completedMilestoneCount: 0,
+      milestones: [],
+    });
+  });
+
+  it('preserves the precision of persisted progress values', async () => {
+    const progress = 66.6666666667;
+
+    repository.findProjectsForCompletionReport.mockResolvedValue([
+      {
+        id: 'proj-precise',
+        projectName: 'Precision Project',
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: progress,
+        startDate: new Date('2026-06-01T00:00:00Z'),
+        endDate: null,
+        budget: null,
+        milestones: [
+          {
+            id: 'ms-precise',
+            milestoneName: 'Progress',
+            status: MilestoneStatus.IN_PROGRESS,
+            progressPercentage: progress,
+            weight: 3,
+            dueDate: null,
+            tasks: [],
+          },
+        ],
+      },
+    ]);
+
+    repository.countProjectsForReport.mockResolvedValue(1);
+
+    const report = await service.projectCompletionReport({
+      page: 1,
+      limit: 10,
+      sortBy: ProjectCompletionSortByDto.CREATED_AT,
+      sortOrder: SortOrderDto.DESC,
+    });
+
+    expect(report.items[0].completionPercentage).toBe(progress);
+    expect(report.items[0].milestones[0].completionPercentage).toBe(progress);
   });
 
   it('returns grouped expense report totals', async () => {
@@ -288,7 +695,12 @@ describe('AnalyticsService', () => {
     repository.countOverdueInvoices.mockResolvedValue(1);
 
     await expect(
-      service.overdueInvoiceReport({ page: 1, limit: 10 }),
+      service.overdueInvoiceReport({
+        page: 1,
+        limit: 10,
+        sortBy: OverdueInvoiceSortByDto.DUE_DATE,
+        sortOrder: SortOrderDto.ASC,
+      }),
     ).resolves.toMatchObject({
       total: 1,
       items: [

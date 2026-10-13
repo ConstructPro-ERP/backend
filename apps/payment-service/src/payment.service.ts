@@ -173,7 +173,7 @@ export class PaymentService {
             message: 'A payment with this reference number already exists.',
           });
         }
-        if (isPrismaError(error, 'P2034')) {
+        if (isSerializationConflict(error)) {
           if (attempt < 3) continue;
           throw new ConflictException({
             code: 'PAYMENT_CONCURRENCY_CONFLICT',
@@ -232,4 +232,39 @@ function isPrismaError(error: unknown, code: string): boolean {
   return (
     error instanceof Prisma.PrismaClientKnownRequestError && error.code === code
   );
+}
+
+function isSerializationConflict(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return false;
+  }
+
+  if (error.code === 'P2034') {
+    return true;
+  }
+
+  // Neon can surface PostgreSQL serialization failures from raw queries as P2010.
+  if (error.code !== 'P2010' || !isRecord(error.meta)) {
+    return false;
+  }
+
+  if (error.meta.code === '40001') {
+    return true;
+  }
+
+  const driverAdapterError = error.meta.driverAdapterError;
+  if (!isRecord(driverAdapterError) || !isRecord(driverAdapterError.cause)) {
+    return false;
+  }
+
+  const cause = driverAdapterError.cause;
+  return (
+    cause.originalCode === '40001' ||
+    cause.code === '40001' ||
+    cause.kind === 'TransactionWriteConflict'
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
 }

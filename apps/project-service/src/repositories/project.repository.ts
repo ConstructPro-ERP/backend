@@ -66,6 +66,16 @@ export class ProjectRepository {
     `;
   }
 
+  // Serialize lifecycle transitions with milestone updates.
+  lockProject(tx: ProjectTransaction, projectId: string) {
+    return tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "Project"
+    WHERE "id" = ${projectId}
+    FOR UPDATE
+  `;
+  }
+
   findQuotation(tx: ProjectTransaction, quotationId: string) {
     return tx.quotation.findUnique({
       where: { id: quotationId },
@@ -119,7 +129,6 @@ export class ProjectRepository {
   findProjectInTransaction(tx: ProjectTransaction, projectId: string) {
     return tx.project.findUnique({
       where: { id: projectId },
-      include: projectInclude,
     });
   }
 
@@ -134,6 +143,40 @@ export class ProjectRepository {
       select: {
         id: true,
         status: true,
+      },
+    });
+  }
+
+  findApprovedQuotationInTransaction(
+    tx: ProjectTransaction,
+    projectId: string,
+  ) {
+    return tx.quotation.findFirst({
+      where: {
+        projectId,
+        status: {
+          in: [QuotationStatus.APPROVED, QuotationStatus.CONVERTED],
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+      },
+    });
+  }
+
+  // Read milestone completion state within the lifecycle transaction.
+  findMilestonesForCompletionInTransaction(
+    tx: ProjectTransaction,
+    projectId: string,
+  ) {
+    return tx.milestone.findMany({
+      where: { projectId },
+      select: {
+        id: true,
+        status: true,
+        progressPercentage: true,
+        completedAt: true,
       },
     });
   }

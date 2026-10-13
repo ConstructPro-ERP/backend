@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsDateString,
   IsNumber,
   IsOptional,
@@ -36,4 +37,8 @@ export class ApproveQuotationDto {
   @IsNumber()
   @Min(0)
   budget?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  directApproveOnly?: boolean;
 }

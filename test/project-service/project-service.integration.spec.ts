@@ -133,6 +133,18 @@ describe('ProjectService — integration', () => {
       });
     }
 
+    await prisma.milestone.deleteMany({
+      where: {
+        project: {
+          is: {
+            projectName: {
+              startsWith: prefix,
+            },
+          },
+        },
+      },
+    });
+
     await prisma.project.deleteMany({
       where: {
         projectName: {
@@ -224,25 +236,14 @@ describe('ProjectService — integration', () => {
 
     prisma = module.get<PrismaService>(PrismaService);
 
-    const projectManagerRole = await prisma.role.upsert({
-      where: {
-        roleName: 'PROJECT_MANAGER',
-      },
-      update: {},
-      create: {
-        roleName: 'PROJECT_MANAGER',
-      },
-    });
-
-    const adminRole = await prisma.role.upsert({
-      where: {
-        roleName: 'ADMIN',
-      },
-      update: {},
-      create: {
-        roleName: 'ADMIN',
-      },
-    });
+    const [projectManagerRole, adminRole] = await Promise.all([
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'PROJECT_MANAGER' },
+      }),
+      prisma.role.findUniqueOrThrow({
+        where: { roleName: 'ADMIN' },
+      }),
+    ]);
 
     projectManagerRoleId = projectManagerRole.id;
     adminRoleId = adminRole.id;
@@ -481,6 +482,109 @@ describe('ProjectService — integration', () => {
     expect(existingProject).not.toBeNull();
   });
 
+  it('rejects project completion below 100% progress', async () => {
+    // Arrange
+    const manager = await createManager('completion-incomplete');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Incomplete Project`,
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 80,
+      },
+    });
+
+    await prisma.milestone.create({
+      data: {
+        projectId: project.id,
+        milestoneName: 'Foundation',
+        weight: 5,
+        progressPercentage: 80,
+        status: 'IN_PROGRESS',
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({ status: ProjectStatus.COMPLETED })
+      .expect(400);
+
+    // Assert
+    const error = parseProjectDomainErrorResponse(response.body as unknown);
+
+    expect(error.code).toBe(ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET);
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: { id: project.id },
+    });
+
+    expect(unchangedProject?.status).toBe(ProjectStatus.ACTIVE);
+    expect(unchangedProject?.progressPercentage).toBe(80);
+  });
+
+  it('completes a project when all milestones are completed', async () => {
+    // Arrange
+    const manager = await createManager('completion-success');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Completed Project`,
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 100,
+      },
+    });
+
+    await prisma.milestone.createMany({
+      data: [
+        {
+          projectId: project.id,
+          milestoneName: 'Foundation',
+          weight: 5,
+          progressPercentage: 100,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+        {
+          projectId: project.id,
+          milestoneName: 'Structure',
+          weight: 8,
+          progressPercentage: 100,
+          status: 'COMPLETED',
+          completedAt: new Date(),
+        },
+      ],
+    });
+
+    // Act
+    await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({ status: ProjectStatus.COMPLETED })
+      .expect((response) => {
+        if (response.status !== 200) {
+          throw new Error(
+            `Expected HTTP 200, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
+      })
+      .expect(200);
+
+    // Assert
+    const completedProject = await prisma.project.findUnique({
+      where: { id: project.id },
+    });
+
+    expect(completedProject?.status).toBe(ProjectStatus.COMPLETED);
+    expect(completedProject?.progressPercentage).toBe(100);
+  });
+
   it('allows ACTIVE to ON_HOLD for the assigned Project Manager', async () => {
     // Arrange
     const manager = await createManager('status-on-hold');
@@ -513,6 +617,123 @@ describe('ProjectService — integration', () => {
 
     expect(updatedProject).not.toBeNull();
     expect(updatedProject!.status).toBe(ProjectStatus.ON_HOLD);
+  });
+
+  it('rejects project completion when no milestones exist', async () => {
+    // Arrange
+    const manager = await createManager('completion-no-milestones');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} No Milestones Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 0,
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.COMPLETED,
+      })
+      .expect(400);
+
+    // Assert
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
+    expect(responseBody.code).toBe(
+      ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+    );
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.ACTIVE);
+    expect(unchangedProject!.progressPercentage).toBe(0);
+
+    const milestones = await prisma.milestone.findMany({
+      where: {
+        projectId: project.id,
+      },
+    });
+
+    expect(milestones).toHaveLength(0);
+  });
+
+  it('rejects project completion when stored progress is 100 but a milestone is incomplete', async () => {
+    // Arrange
+    const manager = await createManager('completion-stale-progress');
+
+    const project = await prisma.project.create({
+      data: {
+        projectName: `${prefix} Stale Progress Project`,
+        location: 'Colombo',
+        startDate: new Date('2026-10-01T00:00:00.000Z'),
+        projectManagerId: manager.id,
+        status: ProjectStatus.ACTIVE,
+        progressPercentage: 100,
+      },
+    });
+
+    const milestone = await prisma.milestone.create({
+      data: {
+        projectId: project.id,
+        milestoneName: 'Foundation',
+        weight: 5,
+        progressPercentage: 50,
+        status: 'IN_PROGRESS',
+      },
+    });
+
+    // Act
+    const response = await request(httpServer)
+      .patch(`/projects/${project.id}/status`)
+      .set('x-user-id', manager.id)
+      .send({
+        status: ProjectStatus.COMPLETED,
+      })
+      .expect(400);
+
+    // Assert
+    const responseBody = parseProjectDomainErrorResponse(
+      response.body as unknown,
+    );
+
+    expect(responseBody.code).toBe(
+      ErrorCode.PROJECT_COMPLETION_REQUIREMENTS_NOT_MET,
+    );
+
+    const unchangedProject = await prisma.project.findUnique({
+      where: {
+        id: project.id,
+      },
+    });
+
+    expect(unchangedProject).not.toBeNull();
+    expect(unchangedProject!.status).toBe(ProjectStatus.ACTIVE);
+    expect(unchangedProject!.progressPercentage).toBe(100);
+
+    const unchangedMilestone = await prisma.milestone.findUnique({
+      where: {
+        id: milestone.id,
+      },
+    });
+
+    expect(unchangedMilestone).not.toBeNull();
+    expect(unchangedMilestone!.status).toBe('IN_PROGRESS');
+    expect(unchangedMilestone!.progressPercentage).toBe(50);
+    expect(unchangedMilestone!.completedAt).toBeNull();
   });
 
   it('cancels a Project without deleting its related quotation', async () => {
@@ -672,22 +893,12 @@ describe('ProjectService — integration', () => {
       'activation-role-change',
     );
 
-    const adminRole = await prisma.role.upsert({
-      where: {
-        roleName: 'ADMIN',
-      },
-      update: {},
-      create: {
-        roleName: 'ADMIN',
-      },
-    });
-
     await prisma.user.update({
       where: {
         id: manager.id,
       },
       data: {
-        roleId: adminRole.id,
+        roleId: adminRoleId,
       },
     });
 
@@ -792,6 +1003,14 @@ describe('ProjectService — integration', () => {
         projectManagerId: manager.id,
         budget: 10000000,
       })
+      .expect((response) => {
+        if (response.status !== 201) {
+          throw new Error(
+            `Expected HTTP 201, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
+      })
       .expect(201);
 
     const responseBody = parseProjectConversionResponse(res.body as unknown);
@@ -886,6 +1105,14 @@ describe('ProjectService — integration', () => {
         quotationId: approvedQuotation.id,
         leadId: lead.id,
         targetProjectId: project.id,
+      })
+      .expect((response) => {
+        if (response.status !== 201) {
+          throw new Error(
+            `Expected HTTP 201, received ${response.status}: ` +
+              JSON.stringify(response.body),
+          );
+        }
       })
       .expect(201);
 

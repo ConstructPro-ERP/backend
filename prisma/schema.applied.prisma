@@ -62,6 +62,7 @@ model User {
   assignedTasks            Task[]                    @relation("AssignedTasks")
   recordedExpenses         Expense[]                 @relation("RecordedBy")
   uploadedDocuments        Document[]                @relation("UploadedDocuments")
+  customer                 Customer?
   authoredLeadNotes        LeadNote[]                @relation("LeadNoteAuthor")
   googleCalendarConnection GoogleCalendarConnection?
 }
@@ -177,11 +178,14 @@ model LeadContact {
 model Customer {
   id        String   @id @default(uuid())
   leadId    String?  @unique
+  userId    String?  @unique
   fullName  String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  lead     Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead Lead? @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
   // Migration 3 back-relations
   invoices Invoice[]
   payments Payment[]

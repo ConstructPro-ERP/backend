@@ -1,15 +1,17 @@
-import { bootstrap as bootstrapAiService } from './apps/ai-service/src/main.js';
-import { bootstrap as bootstrapAnalyticsService } from './apps/analytics-service/src/main.js';
-import { bootstrap as bootstrapApiGateway } from './apps/api-gateway/src/main.js';
-import { bootstrap as bootstrapAuthService } from './apps/auth-service/src/main.js';
-import { bootstrap as bootstrapInvoiceService } from './apps/invoice-service/src/main.js';
-import { bootstrap as bootstrapPaymentService } from './apps/payment-service/src/main.js';
-import { bootstrap as bootstrapQuotationService } from './apps/quotation-service/src/main.js';
-import { bootstrap as bootstrapUserService } from './apps/user-service/src/main.js';
-import { bootstrap as bootstrapProjectService } from './apps/project-service/src/main.js';
-import { bootstrap as bootstrapTaskService } from './apps/task-service/src/main.js';
-import { bootstrap as bootstrapDocumentService } from './apps/document-service/src/main.js';
-import { bootstrap as bootstrapCalendarService } from './apps/calender-service/src/main.js';
+import { bootstrap as bootstrapAiService } from './apps/ai-service/src/main';
+import { bootstrap as bootstrapAnalyticsService } from './apps/analytics-service/src/main';
+import { bootstrap as bootstrapApiGateway } from './apps/api-gateway/src/main';
+import { bootstrap as bootstrapAuthService } from './apps/auth-service/src/main';
+import { bootstrap as bootstrapInvoiceService } from './apps/invoice-service/src/main';
+import { bootstrap as bootstrapPaymentService } from './apps/payment-service/src/main';
+import { bootstrap as bootstrapQuotationService } from './apps/quotation-service/src/main';
+import { bootstrap as bootstrapUserService } from './apps/user-service/src/main';
+import { bootstrap as bootstrapProjectService } from './apps/project-service/src/main';
+import { bootstrap as bootstrapTaskService } from './apps/task-service/src/main';
+import { bootstrap as bootstrapDocumentService } from './apps/document-service/src/main';
+import { bootstrap as bootstrapClientService } from './apps/client-service/src/main';
+import { bootstrap as bootstrapCalendarService } from './apps/calender-service/src/main';
+import { bootstrap as bootstrapLeadService } from './apps/lead-service/src/main';
 
 type DeployableApp =
   | 'api-gateway'
@@ -23,7 +25,9 @@ type DeployableApp =
   | 'project-service'
   | 'task-service'
   | 'document-service'
-  | 'calendar-service';
+  | 'client-service'
+  | 'calendar-service'
+  | 'lead-service';
 
 type BootstrapFunction = () => Promise<void>;
 
@@ -41,7 +45,9 @@ const bootstraps: Record<DeployableApp, BootstrapFunction> = {
   'project-service': bootstrapProjectService,
   'task-service': bootstrapTaskService,
   'document-service': bootstrapDocumentService,
+  'client-service': bootstrapClientService,
   'calendar-service': bootstrapCalendarService,
+  'lead-service': bootstrapLeadService,
 };
 
 function isDeployableApp(value: string): value is DeployableApp {

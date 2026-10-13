@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import { DocumentStorageStatus } from '@prisma/client';
 import { DocumentReconciliationService } from '../../apps/document-service/src/document-reconciliation.service';
 import { DocumentRepository } from '../../apps/document-service/src/repositories/document.repository';
@@ -33,6 +34,7 @@ describe('DocumentReconciliationService', () => {
 
   beforeEach(() => {
     jest.resetAllMocks();
+    jest.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined);
 
     service = new DocumentReconciliationService(
       mockRepository as unknown as DocumentRepository,
@@ -52,6 +54,10 @@ describe('DocumentReconciliationService', () => {
     });
 
     mockCloudinary.deleteAuthenticatedAsset.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('activates recovered uploads with matching Cloudinary metadata', async () => {

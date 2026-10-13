@@ -28,6 +28,33 @@ export class ClientRepository {
     return this.prisma.customer.findUnique({ where: { leadId } });
   }
 
+  findPortalUserCandidate(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        status: true,
+        role: {
+          select: { roleName: true },
+        },
+        customer: {
+          select: { id: true },
+        },
+      },
+    });
+  }
+
+  linkPortalUserIfUnlinked(customerId: string, userId: string) {
+    return this.prisma.customer.updateMany({
+      where: {
+        id: customerId,
+        userId: null,
+        leadId: { not: null },
+      },
+      data: { userId },
+    });
+  }
+
   update(id: string, data: { fullName?: string }) {
     return this.prisma.customer.update({ where: { id }, data });
   }

@@ -72,6 +72,52 @@ describe('DocumentRepository', () => {
     });
   });
 
+  it('retrieves the linked customer for a client portal user', async () => {
+    await repository.findClientPortalUser('client-user-1');
+
+    expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: 'client-user-1' },
+      select: {
+        id: true,
+        status: true,
+        role: {
+          select: { roleName: true },
+        },
+        customer: {
+          select: { id: true },
+        },
+      },
+    });
+  });
+
+  it('restricts downloads to active documents in exclusively owned projects', async () => {
+    await repository.findActiveForClient('doc-1', 'customer-1');
+
+    const ownedQuotation = {
+      lead: {
+        customer: {
+          is: { id: 'customer-1' },
+        },
+      },
+    };
+
+    expect(mockPrisma.document.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'doc-1',
+        storageStatus: DocumentStorageStatus.ACTIVE,
+        deletedAt: null,
+        project: {
+          is: {
+            quotations: {
+              some: ownedQuotation,
+              every: ownedQuotation,
+            },
+          },
+        },
+      },
+    });
+  });
+
   it('lists only active, non-deleted project documents', async () => {
     mockPrisma.document.findMany.mockResolvedValue([{ id: 'doc-1' }]);
     mockPrisma.document.count.mockResolvedValue(1);

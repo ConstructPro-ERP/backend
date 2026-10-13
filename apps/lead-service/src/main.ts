@@ -4,7 +4,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { HttpExceptionFilter } from './filters/http-exception.filter';
 import { LeadModule } from './lead.module';
 
-async function bootstrap() {
+export async function bootstrap() {
   const app = await NestFactory.create(LeadModule);
   app.useGlobalPipes(
     new ValidationPipe({
@@ -39,4 +39,6 @@ async function bootstrap() {
   console.log(`Lead service listening on http://localhost:${port}`);
 }
 
-void bootstrap();
+if (require.main === module) {
+  void bootstrap();
+}

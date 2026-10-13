@@ -20,6 +20,7 @@ const mockDocuments = {
   findAll: jest.fn(),
   findOne: jest.fn(),
   download: jest.fn(),
+  downloadForClient: jest.fn(),
   remove: jest.fn(),
   createCategory: jest.fn(),
   listCategories: jest.fn(),
@@ -71,6 +72,10 @@ describe('DocumentController', () => {
     });
     mockDocuments.findOne.mockResolvedValue({ id: documentId });
     mockDocuments.download.mockResolvedValue({
+      downloadUrl: 'https://example.com/signed',
+      expiresInSeconds: 300,
+    });
+    mockDocuments.downloadForClient.mockResolvedValue({
       downloadUrl: 'https://example.com/signed',
       expiresInSeconds: 300,
     });
@@ -205,6 +210,25 @@ describe('DocumentController', () => {
       .expect(200);
 
     expect(mockDocuments.download).toHaveBeenCalledWith(documentId, actorId);
+  });
+
+  it('forwards client portal download requests', async () => {
+    const clientActorId = 'client-1';
+
+    const response = await request(server)
+      .get(`/client-portal/documents/${documentId}/download`)
+      .set('x-user-id', clientActorId)
+      .expect(200);
+
+    expect(response.body).toEqual({
+      downloadUrl: 'https://example.com/signed',
+      expiresInSeconds: 300,
+    });
+
+    expect(mockDocuments.downloadForClient).toHaveBeenCalledWith(
+      documentId,
+      clientActorId,
+    );
   });
 
   it('deletes a document', async () => {

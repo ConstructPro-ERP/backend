@@ -90,6 +90,50 @@ export class DocumentRepository {
     });
   }
 
+  // Resolve a portal user and their linked customer.
+  findClientPortalUser(userId: string) {
+    return this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        status: true,
+        role: {
+          select: { roleName: true },
+        },
+        customer: {
+          select: { id: true },
+        },
+      },
+    });
+  }
+
+  // Only return active documents from exclusively owned projects.
+  findActiveForClient(id: string, customerId: string) {
+    const ownedQuotation = {
+      lead: {
+        customer: {
+          is: { id: customerId },
+        },
+      },
+    };
+
+    return this.prisma.document.findFirst({
+      where: {
+        id,
+        storageStatus: DocumentStorageStatus.ACTIVE,
+        deletedAt: null,
+        project: {
+          is: {
+            quotations: {
+              some: ownedQuotation,
+              every: ownedQuotation,
+            },
+          },
+        },
+      },
+    });
+  }
+
   // Only ACTIVE and non-deleted documents are visible to users.
   // The caller must also verify project authorization.
   findActiveById(id: string) {

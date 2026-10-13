@@ -6,11 +6,13 @@ import {
   Logger,
   NotFoundException,
   ServiceUnavailableException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   DocumentStorageStatus,
   ProjectStatus,
   UserStatus,
+  type Document,
 } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { extname } from 'node:path';
@@ -241,28 +243,47 @@ export class DocumentService {
       assertCanReadProject(projectActor, project);
     }
 
-    const resourceType = this.getResourceType(document.cloudinaryResourceType);
-    const format = extname(document.originalName).slice(1).toLowerCase();
+    return this.createSignedDownload(document, id);
+  }
 
-    try {
-      return {
-        downloadUrl: this.cloudinary.createAuthenticatedDownloadUrl(
-          document.cloudinaryPublicId,
-          format,
-          resourceType,
-        ),
-        expiresInSeconds: 300,
-      };
-    } catch (error: unknown) {
-      this.logFailure(
-        `Unable to generate an authenticated download for document ${id}`,
-        error,
-      );
+  async downloadForClient(id: string, actorId?: string) {
+    const userId = requireProjectActorId(actorId);
+    const user = await this.documents.findClientPortalUser(userId);
 
-      throw new ServiceUnavailableException(
-        'Document download is temporarily unavailable.',
-      );
+    if (!user) {
+      throw new UnauthorizedException({
+        code: ErrorCode.TOKEN_INVALID,
+        message: 'Authenticated user was not found.',
+      });
     }
+
+    if (
+      user.status !== UserStatus.ACTIVE ||
+      user.role?.roleName !== 'CLIENT_PORTAL_USER'
+    ) {
+      throw new ForbiddenException({
+        code: ErrorCode.CLIENT_PORTAL_ACCESS_DENIED,
+        message: 'Client portal access is not permitted.',
+      });
+    }
+
+    if (!user.customer) {
+      throw new ForbiddenException({
+        code: ErrorCode.CLIENT_PROFILE_NOT_LINKED,
+        message: 'No customer profile is linked to this account.',
+      });
+    }
+
+    const document = await this.documents.findActiveForClient(
+      id,
+      user.customer.id,
+    );
+
+    if (!document) {
+      this.throwDocumentNotFound();
+    }
+
+    return this.createSignedDownload(document, id);
   }
 
   async remove(id: string, actorId?: string) {
@@ -549,6 +570,37 @@ export class DocumentService {
     if (actor.role !== 'ADMIN') {
       throw new ForbiddenException(
         'Only administrators can manage document categories.',
+      );
+    }
+  }
+
+  private createSignedDownload(
+    document: Pick<
+      Document,
+      'originalName' | 'cloudinaryPublicId' | 'cloudinaryResourceType'
+    >,
+    id: string,
+  ) {
+    const resourceType = this.getResourceType(document.cloudinaryResourceType);
+    const format = extname(document.originalName).slice(1).toLowerCase();
+
+    try {
+      return {
+        downloadUrl: this.cloudinary.createAuthenticatedDownloadUrl(
+          document.cloudinaryPublicId,
+          format,
+          resourceType,
+        ),
+        expiresInSeconds: 300,
+      };
+    } catch (error: unknown) {
+      this.logFailure(
+        `Unable to generate an authenticated download for document ${id}`,
+        error,
+      );
+
+      throw new ServiceUnavailableException(
+        'Document download is temporarily unavailable.',
       );
     }
   }

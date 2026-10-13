@@ -15,6 +15,7 @@ import { RagGatewayController } from './controllers/rag-gateway.controller';
 import { UsersGatewayController } from './controllers/users-gateway.controller';
 import { LeadGatewayController } from './controllers/lead-gateway.controller';
 import { ClientGatewayController } from './controllers/client-gateway.controller';
+import { ClientPortalGatewayController } from './controllers/client-portal-gateway.controller';
 import { CalendarGatewayController } from './controllers/calendar-gateway.controller';
 import { ExpensesGatewayController } from './controllers/expenses-gateway.controller';
 import { DocumentsGatewayController } from './controllers/documents-gateway.controller';
@@ -41,6 +42,7 @@ import { DocumentsGatewayController } from './controllers/documents-gateway.cont
     UsersGatewayController,
     LeadGatewayController,
     ClientGatewayController,
+    ClientPortalGatewayController,
     CalendarGatewayController,
     ExpensesGatewayController,
     DocumentsGatewayController,

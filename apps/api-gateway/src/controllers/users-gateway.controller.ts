@@ -71,9 +71,21 @@ export class UsersGatewayController {
   }
 
   /**
-   * GET /users/:id
-   * Admin or the user themselves can fetch a profile.
+   * GET /users/project-managers
+   * Admin-only: list active project managers and admins for assignment.
    */
+  @Get('project-managers')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('ADMIN')
+  async findProjectManagers(@Req() req: Request): Promise<unknown> {
+    return this.forward(() =>
+      this.httpService.get(`${USER_SERVICE_URL}/users/project-managers`, {
+        headers: { authorization: req.headers.authorization },
+      }),
+    );
+  }
+
+  /** GET /users/:id: fetch a user profile. */
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('ADMIN', 'SALES_MANAGER', 'PROJECT_MANAGER', 'ACCOUNTANT')

@@ -18,6 +18,10 @@ const BCRYPT_SALT_ROUNDS = 12;
 export class UserService {
   constructor(private readonly userRepository: UserRepository) {}
 
+  findProjectManagers() {
+    return this.userRepository.findProjectManagers();
+  }
+
   async findAll(): Promise<SafeUser[]> {
     const users = await this.userRepository.findAll();
     return toSafeUsers(users);

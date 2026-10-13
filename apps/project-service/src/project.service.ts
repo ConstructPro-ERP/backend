@@ -429,10 +429,10 @@ export class ProjectService {
       });
     }
 
-    if (manager.role?.roleName !== 'PROJECT_MANAGER') {
+    if (!['PROJECT_MANAGER', 'ADMIN'].includes(manager.role?.roleName ?? '')) {
       throw new BadRequestException({
         code: ErrorCode.INVALID_PROJECT_MANAGER_ROLE,
-        message: 'Selected user must have the PROJECT_MANAGER role.',
+        message: 'Selected user must have the PROJECT_MANAGER or ADMIN role.',
       });
     }
   }

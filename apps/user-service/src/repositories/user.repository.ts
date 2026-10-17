@@ -10,6 +10,22 @@ import {
 export class UserRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  findProjectManagers() {
+    return this.prisma.user.findMany({
+      where: {
+        status: UserStatus.ACTIVE,
+        role: { is: { roleName: { in: ['PROJECT_MANAGER', 'ADMIN'] } } },
+      },
+      select: {
+        id: true,
+        fullName: true,
+        email: true,
+        role: { select: { roleName: true } },
+      },
+      orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+    });
+  }
+
   findAll(): Promise<UserWithRole[]> {
     return this.prisma.user.findMany({
       include: USER_WITH_ROLE_INCLUDE,

@@ -249,25 +249,46 @@ describe('ProjectService', () => {
       expect(result.status).toBe(ProjectStatus.PLANNING);
     });
 
-    it('rejects project creation with a non-Project-Manager user', async () => {
+    it('creates a project assigned to an active admin', async () => {
       mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
         adminUser,
       );
-
-      await expect(
-        service.create({
-          projectName: 'House Project',
-          startDate: '2026-10-01T00:00:00.000Z',
-          projectManagerId: 'admin-1',
-        }),
-      ).rejects.toMatchObject({
-        response: {
-          code: 'INVALID_PROJECT_MANAGER_ROLE',
-        },
+      mockProjectRepository.create.mockResolvedValue({
+        ...planningProject,
+        projectManagerId: 'admin-1',
       });
-
-      expect(mockProjectRepository.create).not.toHaveBeenCalled();
+      const result = await service.create({
+        projectName: 'House Project',
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: 'admin-1',
+      });
+      expect(result.projectManagerId).toBe('admin-1');
+      expect(mockProjectRepository.create).toHaveBeenCalled();
     });
+
+    it.each(['ACCOUNTANT', 'SALES_MANAGER', null])(
+      'rejects project creation with ineligible role %s',
+      async (roleName) => {
+        mockProjectRepository.findProjectManagerCandidate.mockResolvedValue({
+          ...adminUser,
+          role: roleName ? { roleName } : null,
+        });
+
+        await expect(
+          service.create({
+            projectName: 'House Project',
+            startDate: '2026-10-01T00:00:00.000Z',
+            projectManagerId: 'admin-1',
+          }),
+        ).rejects.toMatchObject({
+          response: {
+            code: 'INVALID_PROJECT_MANAGER_ROLE',
+          },
+        });
+
+        expect(mockProjectRepository.create).not.toHaveBeenCalled();
+      },
+    );
   });
 
   describe('updateStatus', () => {
@@ -1106,7 +1127,7 @@ describe('ProjectService', () => {
       expect(mockProjectRepository.update).not.toHaveBeenCalled();
     });
 
-    it.each(['ADMIN', 'SALES_MANAGER', 'ACCOUNTANT', 'CLIENT_PORTAL_USER'])(
+    it.each(['SALES_MANAGER', 'ACCOUNTANT', 'CLIENT_PORTAL_USER'])(
       'rejects user with %s role as Project Manager',
       async (roleName) => {
         mockProjectRepository.findById.mockResolvedValue(planningProject);
@@ -1818,7 +1839,7 @@ describe('ProjectService', () => {
       expect(mockProjectRepository.createInTransaction).not.toHaveBeenCalled();
     });
 
-    it('rejects new project conversion when assigned user is not a Project Manager', async () => {
+    it('rejects new project conversion when assigned user has an ineligible role', async () => {
       mockProjectRepository.findQuotation.mockResolvedValue({
         id: 'quotation-1',
         leadId: 'lead-1',
@@ -1830,7 +1851,7 @@ describe('ProjectService', () => {
         {
           ...adminUser,
           role: {
-            roleName: 'ADMIN',
+            roleName: 'ACCOUNTANT',
           },
         },
       );

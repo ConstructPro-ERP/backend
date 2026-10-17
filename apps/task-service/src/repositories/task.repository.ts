@@ -95,6 +95,21 @@ export class TaskRepository {
     });
   }
 
+  findAssigneesAndCount(skip: number, take: number) {
+    // Match task assignment eligibility; expose only dropdown fields.
+    const where: Prisma.UserWhereInput = { status: 'ACTIVE' };
+    return this.prisma.$transaction([
+      this.prisma.user.findMany({
+        where,
+        select: { id: true, fullName: true },
+        orderBy: [{ fullName: 'asc' }, { id: 'asc' }],
+        skip,
+        take,
+      }),
+      this.prisma.user.count({ where }),
+    ]);
+  }
+
   findById(id: string) {
     return this.prisma.task.findUnique({
       where: { id },

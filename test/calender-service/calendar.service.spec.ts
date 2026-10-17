@@ -196,7 +196,7 @@ describe('CalendarService', () => {
           extendedProperties: {
             private: { constructProProjectId: 'project-1' },
           },
-        }),
+        }) as unknown,
       }),
     );
   });

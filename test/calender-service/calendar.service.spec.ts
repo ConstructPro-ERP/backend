@@ -176,4 +176,92 @@ describe('CalendarService', () => {
     expect(f.rows.size).toBe(0);
     expect(f.google.revokeToken).toHaveBeenCalledTimes(1);
   });
+  it('filters project events and tags newly created events', async () => {
+    await f.connect();
+    await f.service.listEvents('user-1', { projectId: 'project-1' });
+    expect(f.events.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateExtendedProperty: ['constructProProjectId=project-1'],
+      }),
+    );
+    await f.service.createEvent('user-1', {
+      ...eventInput,
+      projectId: 'project-1',
+      eventId: 'abcdef0123',
+    });
+    expect(f.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestBody: expect.objectContaining({
+          id: 'abcdef0123',
+          extendedProperties: {
+            private: { constructProProjectId: 'project-1' },
+          },
+        }),
+      }),
+    );
+  });
+
+  it('denies project access to unassigned managers before contacting Google', async () => {
+    f.prisma.project.findUnique.mockResolvedValue({
+      id: 'project-1',
+      projectManagerId: 'other-user',
+      status: 'ACTIVE',
+    });
+    await expect(
+      f.service.listEvents('user-1', { projectId: 'project-1' }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(f.events.list).not.toHaveBeenCalled();
+  });
+
+  it('keeps closed projects read-only on the server', async () => {
+    f.prisma.project.findUnique.mockResolvedValue({
+      id: 'project-1',
+      projectManagerId: 'user-1',
+      status: 'COMPLETED',
+    });
+    await expect(
+      f.service.createEvent('user-1', {
+        ...eventInput,
+        projectId: 'project-1',
+      }),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(f.events.insert).not.toHaveBeenCalled();
+  });
+
+  it('rejects scoped edits and deletes of an event belonging to another project', async () => {
+    await f.connect();
+    f.events.get.mockResolvedValue({
+      data: {
+        id: 'event-1',
+        extendedProperties: {
+          private: { constructProProjectId: 'other-project' },
+        },
+      },
+    });
+    await expect(
+      f.service.updateEvent(
+        'user-1',
+        'event-1',
+        { summary: 'Changed' },
+        'project-1',
+      ),
+    ).rejects.toMatchObject({ status: 404 });
+    await expect(
+      f.service.deleteEvent('user-1', 'event-1', 'project-1'),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(f.events.patch).not.toHaveBeenCalled();
+    expect(f.events.delete).not.toHaveBeenCalled();
+  });
+
+  it('recovers a retried creation without creating a duplicate event', async () => {
+    await f.connect();
+    f.events.insert.mockRejectedValue({ response: { status: 409 } });
+    await expect(
+      f.service.createEvent('user-1', {
+        ...eventInput,
+        projectId: 'project-1',
+        eventId: 'abcdef0123',
+      }),
+    ).resolves.toMatchObject({ id: 'event-1' });
+  });
 });

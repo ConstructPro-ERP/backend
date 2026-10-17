@@ -5,12 +5,19 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  Optional,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import type { SignOptions } from 'jsonwebtoken';
 import { randomUUID } from 'node:crypto';
+import { PrismaService } from '../../../prisma/prisma.service';
+import {
+  assertCanReadProject,
+  assertCanModifyProject,
+  resolveProjectActor,
+} from '../../../libs/common/src/project-access/project-access.policy';
 import { ErrorCode } from '../../../shared/error-codes';
 import { CalendarEventsQueryDto } from './dto/calendar-events-query.dto';
 import { CreateCalendarEventDto } from './dto/create-calendar-event.dto';
@@ -50,6 +57,7 @@ export class CalendarService {
     private readonly tokenEncryption: TokenEncryptionService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    @Optional() private readonly prisma?: PrismaService,
   ) {}
 
   getHealth() {
@@ -190,6 +198,8 @@ export class CalendarService {
 
   async listEvents(userId: string, query: CalendarEventsQueryDto) {
     this.validateOptionalDateRange(query.timeMin, query.timeMax);
+    if (query.projectId)
+      await this.assertProjectAccess(userId, query.projectId, false);
 
     const { calendar, calendarId } =
       await this.getAuthenticatedCalendar(userId);
@@ -200,11 +210,34 @@ export class CalendarService {
         singleEvents: true,
         orderBy: 'startTime',
         maxResults: query.maxResults ?? 50,
+        ...(query.projectId
+          ? {
+              privateExtendedProperty: [
+                `constructProProjectId=${query.projectId}`,
+              ],
+            }
+          : {}),
         ...(query.timeMin ? { timeMin: query.timeMin } : {}),
         ...(query.timeMax ? { timeMax: query.timeMax } : {}),
       });
 
-      return response.data.items ?? [];
+      const items = [...(response.data.items ?? [])];
+      let pageToken = response.data.nextPageToken;
+      while (query.projectId && pageToken) {
+        const page = await calendar.events.list({
+          calendarId,
+          singleEvents: true,
+          orderBy: 'startTime',
+          maxResults: query.maxResults ?? 50,
+          privateExtendedProperty: [`constructProProjectId=${query.projectId}`],
+          ...(query.timeMin ? { timeMin: query.timeMin } : {}),
+          ...(query.timeMax ? { timeMax: query.timeMax } : {}),
+          pageToken,
+        });
+        items.push(...(page.data.items ?? []));
+        pageToken = page.data.nextPageToken;
+      }
+      return items;
     } catch (error: unknown) {
       this.throwGoogleApiError(error);
     }
@@ -212,6 +245,8 @@ export class CalendarService {
 
   async createEvent(userId: string, dto: CreateCalendarEventDto) {
     this.validateDateRange(dto.startDateTime, dto.endDateTime);
+    if (dto.projectId)
+      await this.assertProjectAccess(userId, dto.projectId, true);
 
     const { calendar, calendarId } =
       await this.getAuthenticatedCalendar(userId);
@@ -220,7 +255,15 @@ export class CalendarService {
       const response = await calendar.events.insert({
         calendarId,
         requestBody: {
+          ...(dto.eventId ? { id: dto.eventId } : {}),
           summary: dto.summary,
+          ...(dto.projectId
+            ? {
+                extendedProperties: {
+                  private: { constructProProjectId: dto.projectId },
+                },
+              }
+            : {}),
           ...(dto.description !== undefined
             ? {
                 description: dto.description,
@@ -252,6 +295,21 @@ export class CalendarService {
 
       return response.data;
     } catch (error: unknown) {
+      if (
+        dto.eventId &&
+        ((error as GoogleApiErrorShape).response?.status === 409 ||
+          (error as GoogleApiErrorShape).code === 409)
+      ) {
+        const existing = await calendar.events.get({
+          calendarId,
+          eventId: dto.eventId,
+        });
+        if (
+          existing.data.extendedProperties?.private?.constructProProjectId ===
+          dto.projectId
+        )
+          return existing.data;
+      }
       this.throwGoogleApiError(error);
     }
   }
@@ -260,7 +318,9 @@ export class CalendarService {
     userId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
+    projectId?: string,
   ) {
+    if (projectId) await this.assertProjectAccess(userId, projectId, true);
     const hasStart = dto.startDateTime !== undefined;
 
     const hasEnd = dto.endDateTime !== undefined;
@@ -289,6 +349,17 @@ export class CalendarService {
       await this.getAuthenticatedCalendar(userId);
 
     try {
+      if (projectId) {
+        const existing = await calendar.events.get({ calendarId, eventId });
+        if (
+          existing.data.extendedProperties?.private?.constructProProjectId !==
+          projectId
+        ) {
+          throw new NotFoundException(
+            'Calendar event does not belong to this project.',
+          );
+        }
+      }
       const response = await calendar.events.patch({
         calendarId,
         eventId,
@@ -337,11 +408,23 @@ export class CalendarService {
     }
   }
 
-  async deleteEvent(userId: string, eventId: string) {
+  async deleteEvent(userId: string, eventId: string, projectId?: string) {
+    if (projectId) await this.assertProjectAccess(userId, projectId, true);
     const { calendar, calendarId } =
       await this.getAuthenticatedCalendar(userId);
 
     try {
+      if (projectId) {
+        const existing = await calendar.events.get({ calendarId, eventId });
+        if (
+          existing.data.extendedProperties?.private?.constructProProjectId !==
+          projectId
+        ) {
+          throw new NotFoundException(
+            'Calendar event does not belong to this project.',
+          );
+        }
+      }
       await calendar.events.delete({
         calendarId,
         eventId,
@@ -351,7 +434,41 @@ export class CalendarService {
         deleted: true,
       };
     } catch (error: unknown) {
+      if (
+        projectId &&
+        ((error as GoogleApiErrorShape).response?.status === 404 ||
+          (error as GoogleApiErrorShape).code === 404)
+      )
+        return { deleted: true };
       this.throwGoogleApiError(error);
+    }
+  }
+
+  private async assertProjectAccess(
+    userId: string,
+    projectId: string,
+    write: boolean,
+  ) {
+    if (!this.prisma)
+      throw new BadGatewayException('Project access is unavailable.');
+    const [user, project] = await Promise.all([
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        include: { role: true },
+      }),
+      this.prisma.project.findUnique({ where: { id: projectId } }),
+    ]);
+    const actor = resolveProjectActor(user);
+    if (!project) throw new NotFoundException('Project not found.');
+    if (write) {
+      assertCanModifyProject(actor, project);
+      if (project.status === 'COMPLETED' || project.status === 'CANCELLED') {
+        throw new ForbiddenException(
+          'Closed project calendar events are read-only.',
+        );
+      }
+    } else {
+      assertCanReadProject(actor, project);
     }
   }
 
@@ -436,6 +553,7 @@ export class CalendarService {
   }
 
   private throwGoogleApiError(error: unknown): never {
+    if (error instanceof NotFoundException) throw error;
     const googleError = error as GoogleApiErrorShape;
 
     const status = googleError.response?.status;

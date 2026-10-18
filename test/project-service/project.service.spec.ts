@@ -1331,6 +1331,49 @@ describe('ProjectService', () => {
       });
     });
 
+    it('creates a project from an approved quotation with an active ADMIN assigned', async () => {
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: null,
+      });
+
+      mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
+        adminUser,
+      );
+
+      mockProjectRepository.createInTransaction.mockResolvedValue({
+        ...activeProject,
+        projectManagerId: 'admin-1',
+      });
+
+      const result = await service.createFromQuotation({
+        quotationId: 'quotation-1',
+        leadId: 'lead-1',
+        projectName: 'House Project',
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: 'admin-1',
+      });
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidateInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'admin-1');
+
+      expect(mockProjectRepository.createInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        expect.objectContaining({
+          projectManagerId: 'admin-1',
+          status: ProjectStatus.ACTIVE,
+        }),
+      );
+
+      expect(result).toEqual({
+        projectId: 'project-1',
+        status: ProjectStatus.ACTIVE,
+      });
+    });
+
     it('attaches an approved quotation to a PLANNING project and activates it', async () => {
       mockProjectRepository.findQuotation.mockResolvedValue({
         id: 'quotation-1',

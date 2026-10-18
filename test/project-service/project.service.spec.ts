@@ -1083,6 +1083,33 @@ describe('ProjectService', () => {
       });
     });
 
+    it('assigns an active ADMIN user as Project Manager', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        adminUser,
+      );
+
+      mockProjectRepository.update.mockResolvedValue({
+        ...planningProject,
+        projectManagerId: 'admin-1',
+      });
+
+      const result = await service.assignManager(
+        'project-1',
+        {
+          projectManagerId: 'admin-1',
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
+        projectManagerId: 'admin-1',
+      });
+
+      expect(result.projectManagerId).toBe('admin-1');
+    });
+
     it('rejects a missing project manager user', async () => {
       mockProjectRepository.findById.mockResolvedValue(planningProject);
       mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(null);

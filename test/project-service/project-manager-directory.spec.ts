@@ -60,16 +60,30 @@ describe('Project manager directory', () => {
   it.each(['ADMIN', 'PROJECT_MANAGER', 'ACCOUNTANT', undefined])(
     'enforces directory access for %s',
     (role) => {
+      const handler: unknown = Object.getOwnPropertyDescriptor(
+        UsersGatewayController.prototype,
+        'findProjectManagers',
+      )?.value;
+
+      if (typeof handler !== 'function') {
+        throw new Error('Project manager directory handler not found.');
+      }
+
       const context = {
         switchToHttp: () => ({
           getRequest: () => ({ user: role ? { role } : undefined }),
         }),
-        getHandler: () => UsersGatewayController.prototype.findProjectManagers,
+        getHandler: () => handler,
         getClass: () => UsersGatewayController,
       } as unknown as ExecutionContext;
+
       const guard = new RolesGuard(new Reflector());
-      if (role === 'ADMIN') expect(guard.canActivate(context)).toBe(true);
-      else expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+
+      if (role === 'ADMIN') {
+        expect(guard.canActivate(context)).toBe(true);
+      } else {
+        expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+      }
     },
   );
 });

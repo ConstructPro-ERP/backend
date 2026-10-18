@@ -107,13 +107,20 @@ describe('Create project access', () => {
     'SALES_MANAGER',
     undefined,
   ])('enforces gateway creation access for %s', (role) => {
+    const handler: unknown = Object.getOwnPropertyDescriptor(
+      ProjectsGatewayController.prototype,
+      'create',
+    )?.value;
+
+    if (typeof handler !== 'function') {
+      throw new Error('Project creation handler not found.');
+    }
+
     const context = {
       switchToHttp: () => ({
         getRequest: () => ({ user: role ? { role } : undefined }),
       }),
-      // Reflector needs the original decorated handler; it is never invoked here.
-      // eslint-disable-next-line @typescript-eslint/unbound-method
-      getHandler: () => ProjectsGatewayController.prototype.create,
+      getHandler: () => handler,
       getClass: () => ProjectsGatewayController,
     } as unknown as ExecutionContext;
     const guard = new RolesGuard(new Reflector());

@@ -18,6 +18,7 @@ import {
 } from '../../../shared/utils/transaction-error.util';
 import type { TransactionRetryDelayOptions } from '../../../shared/utils/transaction-error.util';
 import { CreateTaskDto } from './dto/create-task.dto';
+import { TaskAssigneeQueryDto } from './dto/task-assignee-query.dto';
 import { AssignTaskDto } from './dto/assign-task.dto';
 import {
   TaskQueryDto,
@@ -55,6 +56,27 @@ export class TaskService {
     return {
       service: 'task-service',
       status: 'ok',
+    };
+  }
+
+  async findAssignees(
+    projectId: string,
+    query: TaskAssigneeQueryDto,
+    actorId?: string,
+  ) {
+    const actor = await this.resolveActor(actorId);
+    const project = await this.getProjectOrThrow(projectId);
+    this.assertCanReadProject(actor, project);
+
+    const page = query.page ?? 1;
+    const limit = query.limit ?? 10;
+    const [data, total] = await this.tasks.findAssigneesAndCount(
+      (page - 1) * limit,
+      limit,
+    );
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
     };
   }
 

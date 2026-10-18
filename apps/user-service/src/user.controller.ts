@@ -35,6 +35,11 @@ export class UserController {
     return this.userService.create(dto);
   }
 
+  @Get('project-managers')
+  findProjectManagers() {
+    return this.userService.findProjectManagers();
+  }
+
   @Get(':id')
   async findOne(@Param('id') id: string) {
     const user = await this.userService.findById(id);

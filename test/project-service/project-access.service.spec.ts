@@ -264,14 +264,17 @@ describe('ProjectAccessService', () => {
       ).not.toThrow();
     });
 
-    it('rejects PROJECT_MANAGER from project creation', () => {
-      expect(() =>
-        service.assertCanCreateProject({
-          id: 'manager-1',
-          role: 'PROJECT_MANAGER',
-        }),
-      ).toThrow(ForbiddenException);
-    });
+    it.each(['PROJECT_MANAGER', 'ACCOUNTANT'] as const)(
+      'rejects %s from project creation',
+      (role) => {
+        expect(() =>
+          service.assertCanCreateProject({
+            id: 'manager-1',
+            role,
+          }),
+        ).toThrow(ForbiddenException);
+      },
+    );
 
     it('allows ADMIN to assign project manager', () => {
       expect(() =>

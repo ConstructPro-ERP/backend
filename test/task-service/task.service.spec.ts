@@ -56,6 +56,7 @@ const mockTasks = {
   findById: jest.fn(),
   findByIdInTransaction: jest.fn(),
   findManyAndCount: jest.fn(),
+  findAssigneesAndCount: jest.fn(),
   createInTransaction: jest.fn(),
   updateInTransaction: jest.fn(),
   updateStatusInTransaction: jest.fn(),
@@ -71,6 +72,44 @@ const createDto = {
 
 describe('TaskService', () => {
   let service: TaskService;
+
+  it.each([manager, admin, accountant])(
+    'lists assignees for authorized $id',
+    async (actor) => {
+      mockTasks.findActor.mockResolvedValue(actor);
+      mockTasks.findAssigneesAndCount.mockResolvedValue([
+        [{ id: 'user-1', fullName: 'Team Member' }],
+        3,
+      ]);
+      await expect(
+        service.findAssignees(project.id, { page: 2, limit: 2 }, actor.id),
+      ).resolves.toEqual({
+        data: [{ id: 'user-1', fullName: 'Team Member' }],
+        meta: { page: 2, limit: 2, total: 3, totalPages: 2 },
+      });
+      expect(mockTasks.findAssigneesAndCount).toHaveBeenCalledWith(2, 2);
+    },
+  );
+
+  it('denies the assignee directory for another manager project', async () => {
+    mockTasks.findProject.mockResolvedValue({
+      ...project,
+      projectManagerId: 'other-manager',
+    });
+    await expect(
+      service.findAssignees(project.id, {}, manager.id),
+    ).rejects.toThrow();
+    expect(mockTasks.findAssigneesAndCount).not.toHaveBeenCalled();
+  });
+
+  it('does not list assignees for a missing project or unauthenticated caller', async () => {
+    await expect(service.findAssignees(project.id, {})).rejects.toThrow();
+    mockTasks.findProject.mockResolvedValue(null);
+    await expect(
+      service.findAssignees(project.id, {}, manager.id),
+    ).rejects.toThrow();
+    expect(mockTasks.findAssigneesAndCount).not.toHaveBeenCalled();
+  });
 
   beforeEach(() => {
     jest.resetAllMocks();

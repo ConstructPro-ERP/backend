@@ -24,6 +24,7 @@ import {
 import { AssignTaskDto } from './dto/assign-task.dto';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { TaskQueryDto } from './dto/task-query.dto';
+import { TaskAssigneeQueryDto } from './dto/task-assignee-query.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { TaskService } from './task.service';
@@ -80,6 +81,18 @@ export class TaskController {
     @Headers('x-user-id') actorId?: string,
   ) {
     return this.tasks.findByProject(projectId, query, actorId);
+  }
+
+  @Get('projects/:projectId/task-assignees')
+  @ApiOperation({ summary: 'List active users eligible for task assignment' })
+  @ApiOkResponse({ description: 'Paginated assignee IDs and names' })
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  findAssignees(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query() query: TaskAssigneeQueryDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.tasks.findAssignees(projectId, query, actorId);
   }
 
   @Get('tasks/:id')

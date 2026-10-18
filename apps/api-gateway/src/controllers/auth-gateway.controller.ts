@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpException,
   HttpStatus,
+  Logger,
   Post,
   Req,
   Res,
@@ -67,6 +68,7 @@ class RefreshDto {
 
 @Controller('auth')
 export class AuthGatewayController {
+  private readonly logger = new Logger(AuthGatewayController.name);
   constructor(private readonly httpService: HttpService) {}
 
   @Post('login')
@@ -151,6 +153,7 @@ export class AuthGatewayController {
   }
 
   private async forwardOAuth(path: string, res: import('express').Response) {
+    let stage = 'upstream-request';
     try {
       const response = await firstValueFrom(
         this.httpService.get(`${AUTH_SERVICE_URL}${path}`, {
@@ -160,6 +163,7 @@ export class AuthGatewayController {
           validateStatus: (status) => status >= 200 && status < 400,
         }),
       );
+      stage = 'redirect-validation';
       const location: unknown = response.headers.location;
       if (
         ![302, 303, 307, 308].includes(response.status) ||
@@ -168,12 +172,15 @@ export class AuthGatewayController {
         throw new Error('Expected an OAuth redirect');
       }
       const destination = new URL(location);
-      const expectedOrigin =
-        path === '/auth/google'
-          ? 'https://accounts.google.com'
-          : new URL(process.env.FRONTEND_URL ?? 'http://localhost:5173').origin;
+      // Auth-service owns FRONTEND_URL. Do not require a duplicate gateway
+      // setting: a missing/stale value would reject an already completed login.
       if (
-        destination.origin !== expectedOrigin ||
+        !['https:', 'http:'].includes(destination.protocol) ||
+        destination.username ||
+        destination.password ||
+        (path === '/auth/google'
+          ? destination.origin !== 'https://accounts.google.com'
+          : destination.pathname !== '/auth/callback') ||
         destination.origin === new URL(AUTH_SERVICE_URL).origin
       ) {
         throw new Error('Unexpected OAuth redirect destination');
@@ -191,7 +198,16 @@ export class AuthGatewayController {
       }
       res.setHeader('Cache-Control', 'no-store');
       res.redirect(response.status, location);
-    } catch {
+    } catch (error: unknown) {
+      const upstreamStatus = (error as AxiosError | undefined)?.response
+        ?.status;
+      // Never log the request URL, authorization code, Location/token, or body.
+      this.logger.warn({
+        event: 'oauth_gateway_failure',
+        flow: path === '/auth/google' ? 'login' : 'callback',
+        stage,
+        upstreamStatus,
+      });
       // Downstream error bodies/headers can contain internal URLs and credentials.
       throw new HttpException(
         {

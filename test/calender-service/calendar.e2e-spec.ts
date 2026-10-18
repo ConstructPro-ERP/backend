@@ -32,7 +32,7 @@ describe('Calendar HTTP E2E (external dependencies mocked)', () => {
       .overrideProvider(HttpService)
       .useValue(auth)
       .overrideProvider(PrismaService)
-      .useValue({})
+      .useValue(f.prisma)
       .compile();
     app = module.createNestApplication();
     app.useGlobalPipes(
@@ -344,4 +344,49 @@ describe('Calendar HTTP E2E (external dependencies mocked)', () => {
       expect(response.body.code).toBe(code);
     },
   );
+  it('validates and forwards project scope for event CRUD over HTTP', async () => {
+    await f.connect();
+    const projectId = 'a4d36b83-9b02-4a5a-b126-e6941d516055';
+    f.events.get.mockResolvedValue({
+      data: {
+        id: 'event-1',
+        extendedProperties: { private: { constructProProjectId: projectId } },
+      },
+    });
+    const server = app.getHttpServer();
+    await request(server)
+      .post('/calendar/events')
+      .set('Authorization', bearer)
+      .send({ ...eventInput, projectId, eventId: 'abcdef0123' })
+      .expect(201);
+    expect(f.events.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        requestBody: expect.objectContaining({
+          extendedProperties: { private: { constructProProjectId: projectId } },
+        }),
+      }),
+    );
+    await request(server)
+      .get('/calendar/events')
+      .set('Authorization', bearer)
+      .query({ projectId })
+      .expect(200);
+    expect(f.events.list).toHaveBeenCalledWith(
+      expect.objectContaining({
+        privateExtendedProperty: [`constructProProjectId=${projectId}`],
+      }),
+    );
+    await request(server)
+      .patch('/calendar/events/event-1')
+      .set('Authorization', bearer)
+      .query({ projectId })
+      .send({ summary: 'Updated' })
+      .expect(200);
+    await request(server)
+      .delete('/calendar/events/event-1')
+      .set('Authorization', bearer)
+      .query({ projectId })
+      .expect(200);
+    expect(f.events.get).toHaveBeenCalledTimes(2);
+  });
 });

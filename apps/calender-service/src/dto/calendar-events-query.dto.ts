@@ -2,7 +2,9 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsDateString, IsInt, IsOptional, Max, Min } from 'class-validator';
 
-export class CalendarEventsQueryDto {
+import { CalendarEventScopeDto } from './calendar-event-scope.dto';
+
+export class CalendarEventsQueryDto extends CalendarEventScopeDto {
   @ApiPropertyOptional({
     example: '2026-10-01T00:00:00+05:30',
   })

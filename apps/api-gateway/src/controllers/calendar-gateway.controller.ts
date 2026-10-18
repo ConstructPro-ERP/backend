@@ -19,6 +19,7 @@ import type { AxiosResponse } from 'axios';
 import type { CookieOptions, Request, Response } from 'express';
 import { timingSafeEqual } from 'node:crypto';
 import { firstValueFrom, type Observable } from 'rxjs';
+import { CalendarEventScopeDto } from '../../../calender-service/src/dto/calendar-event-scope.dto';
 import { CalendarEventsQueryDto } from '../../../calender-service/src/dto/calendar-events-query.dto';
 import { CreateCalendarEventDto } from '../../../calender-service/src/dto/create-calendar-event.dto';
 import { UpdateCalendarEventDto } from '../../../calender-service/src/dto/update-calendar-event.dto';
@@ -202,11 +203,17 @@ export class CalendarGatewayController {
     eventId: string,
     @Body()
     body: UpdateCalendarEventDto,
+    @Query() scope: CalendarEventScopeDto,
   ) {
     return this.forward(() =>
-      this.httpService.patch(this.url(`/calendar/events/${eventId}`), body, {
-        headers: this.authorizationHeaders(req),
-      }),
+      this.httpService.patch(
+        this.url(`/calendar/events/${encodeURIComponent(eventId)}`),
+        body,
+        {
+          params: scope,
+          headers: this.authorizationHeaders(req),
+        },
+      ),
     );
   }
 
@@ -220,11 +227,16 @@ export class CalendarGatewayController {
     @Req() req: Request,
     @Param('eventId')
     eventId: string,
+    @Query() scope: CalendarEventScopeDto,
   ) {
     return this.forward(() =>
-      this.httpService.delete(this.url(`/calendar/events/${eventId}`), {
-        headers: this.authorizationHeaders(req),
-      }),
+      this.httpService.delete(
+        this.url(`/calendar/events/${encodeURIComponent(eventId)}`),
+        {
+          params: scope,
+          headers: this.authorizationHeaders(req),
+        },
+      ),
     );
   }
 

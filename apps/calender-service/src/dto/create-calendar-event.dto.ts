@@ -1,12 +1,23 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
+  Matches,
   IsNotEmpty,
   IsOptional,
   IsString,
 } from 'class-validator';
 
-export class CreateCalendarEventDto {
+import { CalendarEventScopeDto } from './calendar-event-scope.dto';
+
+export class CreateCalendarEventDto extends CalendarEventScopeDto {
+  @ApiPropertyOptional({
+    description: 'Client-generated Google event ID for safe retries',
+  })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9a-v]{5,1024}$/)
+  eventId?: string;
+
   @ApiProperty({
     example: 'Site Progress Meeting',
   })

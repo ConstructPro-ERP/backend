@@ -874,7 +874,7 @@ describe('ProjectService — integration', () => {
     },
   );
 
-  it('rejects activation when the assigned user is no longer a Project Manager', async () => {
+  it('allows activation when the assigned Project Manager becomes an active Admin', async () => {
     // Arrange
     const manager = await createManager('activation-role-change');
 
@@ -909,17 +909,17 @@ describe('ProjectService — integration', () => {
       .send({
         status: ProjectStatus.ACTIVE,
       })
-      .expect(400);
+      .expect(200);
 
     // Assert
-    const unchangedProject = await prisma.project.findUnique({
+    const updatedProject = await prisma.project.findUnique({
       where: {
         id: project.id,
       },
     });
 
-    expect(unchangedProject).not.toBeNull();
-    expect(unchangedProject!.status).toBe(ProjectStatus.PLANNING);
+    expect(updatedProject).not.toBeNull();
+    expect(updatedProject!.status).toBe(ProjectStatus.ACTIVE);
   });
 
   it('rejects activation when the stored Project date range is invalid', async () => {

@@ -20,6 +20,7 @@ import {
 } from '@nestjs/swagger';
 import { ErrorCode } from '../../../shared/error-codes';
 import { CalendarService } from './calendar.service';
+import { CalendarEventScopeDto } from './dto/calendar-event-scope.dto';
 import { CalendarEventsQueryDto } from './dto/calendar-events-query.dto';
 import { CreateCalendarEventDto } from './dto/create-calendar-event.dto';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto';
@@ -149,8 +150,14 @@ export class CalendarController {
     eventId: string,
     @Body()
     dto: UpdateCalendarEventDto,
+    @Query() scope: CalendarEventScopeDto,
   ) {
-    return this.calendarService.updateEvent(this.getUserId(req), eventId, dto);
+    return this.calendarService.updateEvent(
+      this.getUserId(req),
+      eventId,
+      dto,
+      scope.projectId,
+    );
   }
 
   @Delete('events/:eventId')
@@ -164,8 +171,13 @@ export class CalendarController {
     req: calendarAuthGuard.CalendarAuthenticatedRequest,
     @Param('eventId')
     eventId: string,
+    @Query() scope: CalendarEventScopeDto,
   ) {
-    return this.calendarService.deleteEvent(this.getUserId(req), eventId);
+    return this.calendarService.deleteEvent(
+      this.getUserId(req),
+      eventId,
+      scope.projectId,
+    );
   }
 
   private getUserId(

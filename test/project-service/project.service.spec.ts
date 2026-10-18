@@ -1083,6 +1083,33 @@ describe('ProjectService', () => {
       });
     });
 
+    it('assigns an active ADMIN user as Project Manager', async () => {
+      mockProjectRepository.findById.mockResolvedValue(planningProject);
+
+      mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(
+        adminUser,
+      );
+
+      mockProjectRepository.update.mockResolvedValue({
+        ...planningProject,
+        projectManagerId: 'admin-1',
+      });
+
+      const result = await service.assignManager(
+        'project-1',
+        {
+          projectManagerId: 'admin-1',
+        },
+        'admin-1',
+      );
+
+      expect(mockProjectRepository.update).toHaveBeenCalledWith('project-1', {
+        projectManagerId: 'admin-1',
+      });
+
+      expect(result.projectManagerId).toBe('admin-1');
+    });
+
     it('rejects a missing project manager user', async () => {
       mockProjectRepository.findById.mockResolvedValue(planningProject);
       mockProjectRepository.findProjectManagerCandidate.mockResolvedValue(null);
@@ -1296,6 +1323,49 @@ describe('ProjectService', () => {
         fakeTransaction,
         'quotation-1',
         'project-1',
+      );
+
+      expect(result).toEqual({
+        projectId: 'project-1',
+        status: ProjectStatus.ACTIVE,
+      });
+    });
+
+    it('creates a project from an approved quotation with an active ADMIN assigned', async () => {
+      mockProjectRepository.findQuotation.mockResolvedValue({
+        id: 'quotation-1',
+        leadId: 'lead-1',
+        status: QuotationStatus.APPROVED,
+        projectId: null,
+      });
+
+      mockProjectRepository.findProjectManagerCandidateInTransaction.mockResolvedValue(
+        adminUser,
+      );
+
+      mockProjectRepository.createInTransaction.mockResolvedValue({
+        ...activeProject,
+        projectManagerId: 'admin-1',
+      });
+
+      const result = await service.createFromQuotation({
+        quotationId: 'quotation-1',
+        leadId: 'lead-1',
+        projectName: 'House Project',
+        startDate: '2026-10-01T00:00:00.000Z',
+        projectManagerId: 'admin-1',
+      });
+
+      expect(
+        mockProjectRepository.findProjectManagerCandidateInTransaction,
+      ).toHaveBeenCalledWith(fakeTransaction, 'admin-1');
+
+      expect(mockProjectRepository.createInTransaction).toHaveBeenCalledWith(
+        fakeTransaction,
+        expect.objectContaining({
+          projectManagerId: 'admin-1',
+          status: ProjectStatus.ACTIVE,
+        }),
       );
 
       expect(result).toEqual({

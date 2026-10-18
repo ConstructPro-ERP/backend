@@ -1,3 +1,4 @@
+import { PrismaService } from '../../prisma/prisma.service';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { CalendarService } from '../../apps/calender-service/src/calendar.service';
@@ -41,7 +42,31 @@ export function createFixture() {
       Promise.resolve({ count: Number(rows.delete(id)) }),
     ),
   };
+  const prisma = {
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'user-1',
+        status: 'ACTIVE',
+        role: { roleName: 'PROJECT_MANAGER' },
+      }),
+    },
+    project: {
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'project-1',
+        projectManagerId: 'user-1',
+        status: 'ACTIVE',
+      }),
+    },
+  };
   const events = {
+    get: jest.fn().mockResolvedValue({
+      data: {
+        id: 'event-1',
+        extendedProperties: {
+          private: { constructProProjectId: 'project-1' },
+        },
+      },
+    }),
     list: jest.fn().mockResolvedValue({ data: { items: [] } }),
     insert: jest.fn().mockResolvedValue({ data: { id: 'event-1' } }),
     patch: jest
@@ -67,6 +92,7 @@ export function createFixture() {
     encryption,
     jwt,
     config,
+    prisma as unknown as PrismaService,
   );
   async function connect(id = 'user-1') {
     const { state } = await service.createAuthorization(id);
@@ -74,6 +100,7 @@ export function createFixture() {
   }
   return {
     config,
+    prisma,
     jwt,
     encryption,
     rows,

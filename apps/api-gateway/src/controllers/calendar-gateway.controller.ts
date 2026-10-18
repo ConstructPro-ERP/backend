@@ -6,6 +6,7 @@ import {
   Get,
   HttpException,
   HttpStatus,
+  Logger,
   Param,
   Patch,
   Post,
@@ -52,6 +53,7 @@ interface AxiosErrorShape {
 @ApiTags('Google Calendar')
 @Controller('calendar')
 export class CalendarGatewayController {
+  private readonly logger = new Logger(CalendarGatewayController.name);
   constructor(private readonly httpService: HttpService) {}
 
   @Post('connect')
@@ -93,9 +95,14 @@ export class CalendarGatewayController {
     @Query('state') state?: string,
     @Query('error') oauthError?: string,
   ) {
-    const storedState = req.cookies[CALENDAR_STATE_COOKIE];
+    const storedState = req.cookies?.[CALENDAR_STATE_COOKIE];
 
     if (!state || !storedState || !this.statesMatch(state, storedState)) {
+      this.logger.warn({
+        event: 'calendar_oauth_state_rejected',
+        hasState: !!state,
+        hasCookie: !!storedState,
+      });
       this.clearOAuthCookie(res);
 
       return res.redirect(this.frontendRedirectUrl('error'));
@@ -119,7 +126,11 @@ export class CalendarGatewayController {
       this.clearOAuthCookie(res);
 
       return res.redirect(this.frontendRedirectUrl('connected'));
-    } catch {
+    } catch (error: unknown) {
+      this.logger.warn({
+        event: 'calendar_oauth_callback_failed',
+        status: error instanceof HttpException ? error.getStatus() : 500,
+      });
       this.clearOAuthCookie(res);
 
       return res.redirect(this.frontendRedirectUrl('error'));
@@ -256,7 +267,9 @@ export class CalendarGatewayController {
     return {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      // Production frontend and gateway can be on different sites. The state
+      // cookie is set by a credentialed API call before navigating to Google.
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 10 * 60 * 1000,
       path: '/api/calendar/oauth/callback',
     };

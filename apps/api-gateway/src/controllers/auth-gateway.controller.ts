@@ -137,18 +137,69 @@ export class AuthGatewayController {
   }
   @Get('google')
   googleLogin(@Res() res: import('express').Response) {
-    // Redirect browser directly to auth-service Google initiation URL
-    res.redirect(`${AUTH_SERVICE_URL}/auth/google`);
+    return this.forwardOAuth('/auth/google', res);
   }
 
   @Get('google/callback')
   googleCallback(@Req() req: Request, @Res() res: import('express').Response) {
-    // auth-service handles the callback and redirects to frontend;
-    // gateway just passes the request through transparently
+    // Preserve Google's encoded parameters without sending the browser downstream.
     const queryIndex = req.originalUrl.indexOf('?');
     const queryString =
       queryIndex >= 0 ? req.originalUrl.slice(queryIndex) : '';
 
-    res.redirect(`${AUTH_SERVICE_URL}/auth/google/callback${queryString}`);
+    return this.forwardOAuth(`/auth/google/callback${queryString}`, res);
+  }
+
+  private async forwardOAuth(path: string, res: import('express').Response) {
+    try {
+      const response = await firstValueFrom(
+        this.httpService.get(`${AUTH_SERVICE_URL}${path}`, {
+          // Return the Location header instead of following Google or the frontend.
+          maxRedirects: 0,
+          timeout: 15000,
+          validateStatus: (status) => status >= 200 && status < 400,
+        }),
+      );
+      const location: unknown = response.headers.location;
+      if (
+        ![302, 303, 307, 308].includes(response.status) ||
+        typeof location !== 'string'
+      ) {
+        throw new Error('Expected an OAuth redirect');
+      }
+      const destination = new URL(location);
+      const expectedOrigin =
+        path === '/auth/google'
+          ? 'https://accounts.google.com'
+          : new URL(process.env.FRONTEND_URL ?? 'http://localhost:5173').origin;
+      if (
+        destination.origin !== expectedOrigin ||
+        destination.origin === new URL(AUTH_SERVICE_URL).origin
+      ) {
+        throw new Error('Unexpected OAuth redirect destination');
+      }
+      if (path === '/auth/google') {
+        const callback = new URL(
+          destination.searchParams.get('redirect_uri') ?? '',
+        );
+        if (
+          callback.origin === new URL(AUTH_SERVICE_URL).origin ||
+          callback.pathname !== '/api/auth/google/callback'
+        ) {
+          throw new Error('Google callback must use the public gateway');
+        }
+      }
+      res.setHeader('Cache-Control', 'no-store');
+      res.redirect(response.status, location);
+    } catch {
+      // Downstream error bodies/headers can contain internal URLs and credentials.
+      throw new HttpException(
+        {
+          code: 'OAUTH_FAILED',
+          message: 'Google sign-in could not be completed.',
+        },
+        HttpStatus.BAD_GATEWAY,
+      );
+    }
   }
 }

@@ -74,6 +74,43 @@ describe('Gateway Google OAuth redirects', () => {
     },
   );
 
+  it.each([undefined, 'https://stale-frontend.example'])(
+    'uses the auth-service frontend redirect when gateway FRONTEND_URL is %s',
+    async (gatewayFrontend) => {
+      const previous = process.env.FRONTEND_URL;
+      try {
+        if (gatewayFrontend === undefined) delete process.env.FRONTEND_URL;
+        else process.env.FRONTEND_URL = gatewayFrontend;
+        const location =
+          'https://actual-frontend.example/auth/callback#token=test';
+        get.mockReturnValue(of({ status: 302, headers: { location } }));
+        await controller.googleCallback(
+          { originalUrl: '/api/auth/google/callback?code=test' } as Request,
+          res,
+        );
+        expect(redirect).toHaveBeenCalledWith(302, location);
+      } finally {
+        if (previous === undefined) delete process.env.FRONTEND_URL;
+        else process.env.FRONTEND_URL = previous;
+      }
+    },
+  );
+
+  it.each([
+    `${service}/auth/callback#token=test`,
+    'javascript:alert(1)',
+    'https://frontend.example/unexpected',
+  ])('rejects unsafe callback destinations: %s', async (location) => {
+    get.mockReturnValue(of({ status: 302, headers: { location } }));
+    await expect(
+      controller.googleCallback(
+        { originalUrl: '/api/auth/google/callback?code=test' } as Request,
+        res,
+      ),
+    ).rejects.toMatchObject({ status: 502 });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
   it('sanitizes downstream failures', async () => {
     get.mockReturnValue(
       throwError(() => new Error(`${service}/private?secret=value`)),

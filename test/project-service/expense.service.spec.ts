@@ -351,8 +351,8 @@ describe('ExpenseService', () => {
     });
 
     // Expense updates must never change the original creator.
-    const updateData = mockExpenses.updateInTransaction.mock
-      .calls[0][3] as Record<string, unknown>;
+    const call = mockExpenses.updateInTransaction.mock.calls[0] as unknown[];
+    const updateData = call[3] as Record<string, unknown>;
 
     expect(updateData).not.toHaveProperty('recordedById');
     expect(updateData).not.toHaveProperty('recordedBy');

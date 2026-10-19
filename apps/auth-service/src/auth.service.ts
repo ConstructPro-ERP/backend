@@ -199,11 +199,19 @@ export class AuthService {
     });
   }
 
-  // Issues a signed JWT for a Google-authenticated user (reused in controller)
+  // Google establishes identity; our own tokens maintain the application session.
   issueTokenForUser(user: { id: string; fullName: string }) {
     const payload = { sub: user.id, username: user.fullName };
     return {
-      accessToken: this.jwtService.sign(payload),
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+          '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+          '7d') as SignOptions['expiresIn'],
+      }),
       user: { id: user.id, username: user.fullName },
     };
   }

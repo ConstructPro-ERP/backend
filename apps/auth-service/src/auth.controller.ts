@@ -99,11 +99,14 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   googleCallback(@Req() req: GoogleAuthenticatedRequest, @Res() res: Response) {
     // req.user is set by GoogleStrategy.validate()
-    const { accessToken } = this.authService.issueTokenForUser(req.user);
+    const { accessToken, refreshToken } = this.authService.issueTokenForUser(
+      req.user,
+    );
 
     // Redirect the frontend to a deep-link that carries the token
     // Frontend reads the hash and stores it (avoids token in server logs)
     const frontendUrl = process.env.FRONTEND_URL ?? 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/auth/callback#token=${accessToken}`);
+    const fragment = new URLSearchParams({ token: accessToken, refreshToken });
+    res.redirect(`${frontendUrl}/auth/callback#${fragment.toString()}`);
   }
 }

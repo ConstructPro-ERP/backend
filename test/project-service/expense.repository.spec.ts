@@ -120,6 +120,12 @@ describe('ExpenseRepository', () => {
             status: true,
           },
         },
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
       },
     });
   });
@@ -174,6 +180,14 @@ describe('ExpenseRepository', () => {
       skip: 10,
       take: 10,
       orderBy,
+      include: {
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
     });
 
     expect(mockPrisma.expense.count).toHaveBeenCalledWith({
@@ -203,6 +217,14 @@ describe('ExpenseRepository', () => {
       skip: 0,
       take: 10,
       orderBy: [{ expenseDate: 'desc' }, { id: 'asc' }],
+      include: {
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
     });
 
     expect(mockPrisma.expense.count).toHaveBeenCalledWith({
@@ -273,6 +295,14 @@ describe('ExpenseRepository', () => {
 
     expect(mockTx.expense.create).toHaveBeenCalledWith({
       data,
+      include: {
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
     });
 
     expect(data.amount.toFixed(2)).toBe('12500.75');
@@ -299,6 +329,14 @@ describe('ExpenseRepository', () => {
         projectId: 'project-1',
       },
       data,
+      include: {
+        recordedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
     });
   });
 

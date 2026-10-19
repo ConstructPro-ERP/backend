@@ -27,6 +27,10 @@ const expense = {
   id: 'expense-1',
   projectId: project.id,
   recordedById: 'accountant-1',
+  recordedBy: {
+    id: 'accountant-1',
+    fullName: 'Test Accountant',
+  },
   amount: new Prisma.Decimal('12500.75'),
   category: 'MATERIAL',
   description: null,
@@ -112,6 +116,23 @@ describe('ExpenseService', () => {
     expect(result.amount).toBe('12500.75');
 
     expect(mockExpenses.lockProject).toHaveBeenCalledWith(tx, project.id);
+  });
+
+  it('returns only the original creator ID and full name', async () => {
+    const result = await service.create(
+      project.id,
+      validCreate,
+      'accountant-1',
+    );
+
+    expect(result.recordedById).toBe('accountant-1');
+
+    expect(result.recordedBy).toEqual({
+      id: 'accountant-1',
+      fullName: 'Test Accountant',
+    });
+
+    expect(Object.keys(result.recordedBy)).toEqual(['id', 'fullName']);
   });
 
   it('allows an Admin to create expenses', async () => {
@@ -309,6 +330,32 @@ describe('ExpenseService', () => {
     expect(data.amount.toFixed(2)).toBe('100.10');
     expect(data.category).toBeNull();
     expect(data.description).toBeNull();
+  });
+
+  it('preserves the original creator when another authorized user edits', async () => {
+    mockAccess.resolveActor.mockResolvedValue({
+      id: 'admin-1',
+      role: 'ADMIN',
+    });
+
+    const result = await service.update(
+      expense.id,
+      { amount: '100.10' },
+      'admin-1',
+    );
+
+    expect(result.recordedById).toBe('accountant-1');
+    expect(result.recordedBy).toEqual({
+      id: 'accountant-1',
+      fullName: 'Test Accountant',
+    });
+
+    // Expense updates must never change the original creator.
+    const call = mockExpenses.updateInTransaction.mock.calls[0] as unknown[];
+    const updateData = call[3] as Record<string, unknown>;
+
+    expect(updateData).not.toHaveProperty('recordedById');
+    expect(updateData).not.toHaveProperty('recordedBy');
   });
 
   it('denies updates to Project Managers', async () => {

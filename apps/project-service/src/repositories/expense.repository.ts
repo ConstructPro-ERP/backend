@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, type Expense } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../../prisma/prisma.service';
 import type { ProjectTransaction } from './project.repository';
 
@@ -36,6 +36,27 @@ const projectSelect = {
   endDate: true,
   status: true,
 } as const;
+
+/**
+ * Include only the creator information needed by the frontend.
+ * Sensitive User fields must not be exposed in expense responses.
+ */
+const recordedByInclude = {
+  recordedBy: {
+    select: {
+      id: true,
+      fullName: true,
+    },
+  },
+} as const;
+
+/**
+ * Expense record with its original creator's public identity.
+ * This keeps repository return types aligned with the Prisma query.
+ */
+type ExpenseWithCreator = Prisma.ExpenseGetPayload<{
+  include: typeof recordedByInclude;
+}>;
 
 @Injectable()
 export class ExpenseRepository {
@@ -78,6 +99,7 @@ export class ExpenseRepository {
         project: {
           select: projectSelect,
         },
+        ...recordedByInclude,
       },
     });
   }
@@ -88,7 +110,9 @@ export class ExpenseRepository {
     });
   }
 
-  async findManyAndCount(args: ExpenseListArgs): Promise<[Expense[], number]> {
+  async findManyAndCount(
+    args: ExpenseListArgs,
+  ): Promise<[ExpenseWithCreator[], number]> {
     const where: Prisma.ExpenseWhereInput = {
       projectId: args.projectId,
       category: args.category,
@@ -107,6 +131,7 @@ export class ExpenseRepository {
         skip: args.skip,
         take: args.take,
         orderBy: args.orderBy,
+        include: recordedByInclude,
       }),
       this.prisma.expense.count({ where }),
     ]);
@@ -124,6 +149,7 @@ export class ExpenseRepository {
   createInTransaction(tx: ProjectTransaction, data: CreateExpenseData) {
     return tx.expense.create({
       data,
+      include: recordedByInclude,
     });
   }
 
@@ -136,6 +162,7 @@ export class ExpenseRepository {
     return tx.expense.update({
       where: { id, projectId },
       data,
+      include: recordedByInclude,
     });
   }
 

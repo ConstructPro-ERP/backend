@@ -14,6 +14,10 @@ type ExpenseBody = {
   id: string;
   projectId: string;
   recordedById: string;
+  recordedBy: {
+    id: string;
+    fullName: string;
+  };
   amount: string;
   category: string | null;
   description: string | null;
@@ -176,6 +180,10 @@ describe('Expense Service — database integration', () => {
 
     expect(record.amount).toBe('12500.75');
     expect(record.recordedById).toBe(accountantId);
+    expect(record.recordedBy).toEqual({
+      id: accountantId,
+      fullName: 'Expense Integration accountant',
+    });
 
     const saved = await prisma.expense.findUniqueOrThrow({
       where: { id: record.id },
@@ -195,9 +203,13 @@ describe('Expense Service — database integration', () => {
       .expect(200);
 
     expect((detail.body as ExpenseBody).amount).toBe('12500.75');
+    expect((detail.body as ExpenseBody).recordedBy).toEqual({
+      id: accountantId,
+      fullName: 'Expense Integration accountant',
+    });
 
     // Accountant can update the amount and clear nullable fields.
-    await request(server)
+    const updateResponse = await request(server)
       .patch(`/expenses/${record.id}`)
       .set('x-user-id', accountantId)
       .send({
@@ -206,6 +218,11 @@ describe('Expense Service — database integration', () => {
         description: null,
       })
       .expect(200);
+
+    expect((updateResponse.body as ExpenseBody).recordedBy).toEqual({
+      id: accountantId,
+      fullName: 'Expense Integration accountant',
+    });
 
     const updated = await prisma.expense.findUniqueOrThrow({
       where: { id: record.id },
@@ -331,6 +348,10 @@ describe('Expense Service — database integration', () => {
       limit: 1,
       total: 2,
       totalPages: 2,
+    });
+    expect(page1.data[0]?.recordedBy).toEqual({
+      id: accountantId,
+      fullName: 'Expense Integration accountant',
     });
 
     const second = await request(server)

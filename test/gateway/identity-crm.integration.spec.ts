@@ -20,7 +20,7 @@ const roles = [
   'SALES_MANAGER',
   'PROJECT_MANAGER',
   'ACCOUNTANT',
-  'CLIENT',
+  'CLIENT_PORTAL_USER',
 ];
 const staff = roles.slice(0, 5);
 const sales = roles.slice(0, 3);

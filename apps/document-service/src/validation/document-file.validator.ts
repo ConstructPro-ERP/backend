@@ -41,6 +41,107 @@ const DOCUMENT_TYPES: Record<string, DocumentTypeRule> = {
   },
 };
 
+const OPAQUE_RAW_EXTENSIONS = new Set([
+  '.dwg',
+  '.dxf',
+  '.dwt',
+  '.dws',
+  '.dgn',
+  '.sat',
+  '.step',
+  '.stp',
+  '.iges',
+  '.igs',
+  '.rvt',
+  '.rfa',
+  '.rte',
+  '.rft',
+  '.ifc',
+  '.ifcxml',
+  '.ifczip',
+  '.nwd',
+  '.nwc',
+  '.nwf',
+  '.max',
+  '.3ds',
+  '.fbx',
+  '.obj',
+  '.stl',
+  '.dae',
+  '.skp',
+  '.3dm',
+  '.blend',
+  '.blend1',
+  '.glb',
+  '.gltf',
+  '.lsf',
+  '.pln',
+  '.pla',
+  '.las',
+  '.laz',
+  '.e57',
+  '.rcp',
+  '.rcs',
+  '.doc',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.txt',
+  '.csv',
+  '.rtf',
+  '.odt',
+  '.ods',
+  '.odp',
+  '.zip',
+  '.7z',
+  '.rar',
+]);
+
+const OPAQUE_IMAGE_MIME_TYPES: Record<string, string> = {
+  '.webp': 'image/webp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+};
+
+const MIME_TYPE_PATTERN = /^[a-z][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+_-]*$/i;
+
+function resolveDocumentType(
+  extension: string,
+  mimeType: string,
+): DocumentTypeRule | null {
+  const strict = DOCUMENT_TYPES[extension];
+
+  if (strict) {
+    return mimeType === strict.mimeType ? strict : null;
+  }
+
+  const imageMimeType = OPAQUE_IMAGE_MIME_TYPES[extension];
+
+  if (imageMimeType) {
+    if (mimeType !== imageMimeType && mimeType !== 'application/octet-stream') {
+      return null;
+    }
+
+    return { mimeType, resourceType: 'image' };
+  }
+
+  const isLegacyLumion = /^\.ls(?:[1-9]|1[0-2])$/.test(extension);
+
+  if (
+    (OPAQUE_RAW_EXTENSIONS.has(extension) || isLegacyLumion) &&
+    MIME_TYPE_PATTERN.test(mimeType)
+  ) {
+    return { mimeType, resourceType: 'raw' };
+  }
+
+  return null;
+}
+
+export function requiresDocumentContentInspection(extension: string): boolean {
+  return Object.hasOwn(DOCUMENT_TYPES, extension.toLowerCase());
+}
+
 export interface UploadedDocumentFile {
   originalname: string;
   mimetype: string;
@@ -295,23 +396,25 @@ export function validateDocumentFile(
   validateDocumentName(name);
 
   const extension = extname(name).toLowerCase();
-  const rule = DOCUMENT_TYPES[extension];
+  const rule = resolveDocumentType(extension, file.mimetype);
 
-  if (!rule || file.mimetype !== rule.mimeType) {
+  if (!rule) {
     return invalidFile('Unsupported or mismatched document file type.');
   }
 
-  const validContent =
-    extension === '.pdf'
-      ? isPdf(file.buffer)
-      : extension === '.png'
-        ? isPng(file.buffer)
-        : extension === '.jpg' || extension === '.jpeg'
-          ? isJpeg(file.buffer)
-          : isDocx(file.buffer);
+  if (requiresDocumentContentInspection(extension)) {
+    const validContent =
+      extension === '.pdf'
+        ? isPdf(file.buffer)
+        : extension === '.png'
+          ? isPng(file.buffer)
+          : extension === '.jpg' || extension === '.jpeg'
+            ? isJpeg(file.buffer)
+            : isDocx(file.buffer);
 
-  if (!validContent) {
-    return invalidFile('Document content does not match its file type.');
+    if (!validContent) {
+      return invalidFile('Document content does not match its file type.');
+    }
   }
 
   return {
@@ -347,9 +450,9 @@ export function validateDocumentUploadMetadata(
   validateDocumentName(name);
 
   const extension = extname(name).toLowerCase();
-  const rule = DOCUMENT_TYPES[extension];
+  const rule = resolveDocumentType(extension, metadata.mimeType);
 
-  if (!rule || metadata.mimeType !== rule.mimeType) {
+  if (!rule) {
     return invalidFile('Unsupported or mismatched document file type.');
   }
 

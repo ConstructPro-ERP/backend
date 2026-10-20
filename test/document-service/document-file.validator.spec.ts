@@ -439,3 +439,90 @@ describe('Direct document upload metadata validation', () => {
     ).toHaveProperty('resourceType', 'image');
   });
 });
+
+describe('Opaque construction file validation', () => {
+  const constructionFiles = [
+    ['drawing.dwg', 'application/octet-stream', 'raw'],
+    ['drawing.dxf', 'application/dxf', 'raw'],
+    ['revit-model.rvt', 'application/octet-stream', 'raw'],
+    ['revit-family.rfa', 'application/octet-stream', 'raw'],
+    ['bim-model.ifc', 'application/octet-stream', 'raw'],
+    ['project.max', 'application/octet-stream', 'raw'],
+    ['scene.lsf', 'application/octet-stream', 'raw'],
+    ['legacy-scene.ls12', 'application/octet-stream', 'raw'],
+    ['model.skp', 'application/octet-stream', 'raw'],
+    ['model.fbx', 'application/octet-stream', 'raw'],
+    ['model.glb', 'model/gltf-binary', 'raw'],
+    ['survey.las', 'application/octet-stream', 'raw'],
+    ['spreadsheet.xlsx', 'application/octet-stream', 'raw'],
+    ['presentation.pptx', 'application/octet-stream', 'raw'],
+    ['archive.zip', 'application/zip', 'raw'],
+    ['render.webp', 'image/webp', 'image'],
+    ['site-image.tiff', 'image/tiff', 'image'],
+  ] as const;
+
+  it.each(constructionFiles)(
+    'accepts metadata for %s',
+    (fileName, mimeType, resourceType) => {
+      expect(
+        validateDocumentUploadMetadata({
+          fileName,
+          mimeType,
+          fileSize: 1024,
+        }),
+      ).toMatchObject({
+        resourceType,
+        mimeType,
+        fileSize: 1024,
+      });
+    },
+  );
+
+  it('accepts proprietary file bytes without structure parsing', () => {
+    const file = makeFile(
+      'project.rvt',
+      'application/octet-stream',
+      Buffer.from('opaque project attachment'),
+    );
+
+    expect(validateDocumentFile(file)).toMatchObject({
+      extension: '.rvt',
+      resourceType: 'raw',
+      fileSize: file.buffer.length,
+    });
+  });
+
+  it('rejects unapproved extensions', () => {
+    for (const fileName of ['program.exe', 'script.js', 'shell.bat']) {
+      expect(() =>
+        validateDocumentUploadMetadata({
+          fileName,
+          mimeType: 'application/octet-stream',
+          fileSize: 100,
+        }),
+      ).toThrow(BadRequestException);
+    }
+  });
+
+  it('preserves strict PDF content validation', () => {
+    expect(() =>
+      validateDocumentFile(
+        makeFile(
+          'invalid.pdf',
+          'application/pdf',
+          Buffer.from('not a valid PDF'),
+        ),
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('preserves the 50 MiB direct-upload limit for native project files', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        fileName: 'large-model.rvt',
+        mimeType: 'application/octet-stream',
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES + 1,
+      }),
+    ).toThrow(PayloadTooLargeException);
+  });
+});

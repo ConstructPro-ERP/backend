@@ -4,7 +4,9 @@ import { extname } from 'node:path';
 import { CloudinaryService } from '../../../../libs/common/src/cloudinary/cloudinary.service';
 import {
   MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES,
+  requiresDocumentContentInspection,
   validateDocumentFile,
+  validateDocumentUploadMetadata,
 } from './document-file.validator';
 
 export type StoredDocumentVerification = 'valid' | 'invalid' | 'missing';
@@ -43,6 +45,31 @@ export async function verifyStoredDocument(
     asset.bytes > MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES
   ) {
     return 'invalid';
+  }
+
+  try {
+    const validated = validateDocumentUploadMetadata({
+      fileName: document.originalName,
+      mimeType: document.mimeType,
+      fileSize: document.fileSize,
+    });
+
+    if (validated.resourceType !== resourceType) {
+      return 'invalid';
+    }
+
+    if (!requiresDocumentContentInspection(validated.extension)) {
+      return 'valid';
+    }
+  } catch (error: unknown) {
+    if (
+      error instanceof BadRequestException ||
+      error instanceof PayloadTooLargeException
+    ) {
+      return 'invalid';
+    }
+
+    throw error;
   }
 
   const format = extname(document.originalName).slice(1).toLowerCase();

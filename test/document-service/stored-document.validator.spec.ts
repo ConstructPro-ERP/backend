@@ -83,4 +83,74 @@ describe('Stored document verification', () => {
       'Cloudinary temporarily unavailable',
     );
   });
+
+  it('verifies an opaque Revit asset without downloading its contents', async () => {
+    const revit = {
+      ...document,
+      originalName: 'building.rvt',
+      mimeType: 'application/octet-stream',
+      cloudinaryPublicId: 'constructpro/projects/project-1/doc-1.rvt',
+    };
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue({
+      publicId: revit.cloudinaryPublicId,
+      resourceType: 'raw',
+      bytes: revit.fileSize,
+    });
+
+    await expect(
+      verifyStoredDocument(
+        mockCloudinary as unknown as CloudinaryService,
+        revit,
+      ),
+    ).resolves.toBe('valid');
+
+    expect(mockCloudinary.findAuthenticatedAsset).toHaveBeenCalledWith(
+      revit.cloudinaryPublicId,
+      'raw',
+    );
+
+    expect(
+      mockCloudinary.downloadAuthenticatedAssetBytes,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('rejects opaque files when Cloudinary reports a different size', async () => {
+    const revit = {
+      ...document,
+      originalName: 'building.rvt',
+      mimeType: 'application/octet-stream',
+    };
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue({
+      publicId: revit.cloudinaryPublicId,
+      resourceType: 'raw',
+      bytes: revit.fileSize + 1,
+    });
+
+    await expect(
+      verifyStoredDocument(
+        mockCloudinary as unknown as CloudinaryService,
+        revit,
+      ),
+    ).resolves.toBe('invalid');
+
+    expect(
+      mockCloudinary.downloadAuthenticatedAssetBytes,
+    ).not.toHaveBeenCalled();
+  });
+
+  it('rejects unsupported opaque document extensions', async () => {
+    await expect(
+      verifyStoredDocument(mockCloudinary as unknown as CloudinaryService, {
+        ...document,
+        originalName: 'program.exe',
+        mimeType: 'application/octet-stream',
+      }),
+    ).resolves.toBe('invalid');
+
+    expect(
+      mockCloudinary.downloadAuthenticatedAssetBytes,
+    ).not.toHaveBeenCalled();
+  });
 });

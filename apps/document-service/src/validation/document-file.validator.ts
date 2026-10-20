@@ -8,6 +8,10 @@ export const MAX_DOCUMENT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 export const MAX_DOCUMENT_FILE_SIZE_MIB =
   MAX_DOCUMENT_FILE_SIZE_BYTES / (1024 * 1024);
 
+export const MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_DIRECT_DOCUMENT_FILE_SIZE_MIB =
+  MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES / (1024 * 1024);
+
 interface DocumentTypeRule {
   mimeType: string;
   resourceType: DocumentResourceType;
@@ -50,6 +54,12 @@ export interface ValidatedDocumentFile {
   fileSize: number;
   extension: string;
   resourceType: DocumentResourceType;
+}
+
+export interface DocumentUploadMetadata {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
 }
 
 function invalidFile(message: string): never {
@@ -236,6 +246,23 @@ function isDocx(buffer: Buffer): boolean {
   }
 }
 
+function validateDocumentName(name: string): void {
+  if (
+    typeof name !== 'string' ||
+    name.length === 0 ||
+    name.length > 255 ||
+    name !== name.trim() ||
+    name.includes('/') ||
+    name.includes('\\') ||
+    [...name].some((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127;
+    })
+  ) {
+    invalidFile('Document filename is invalid.');
+  }
+}
+
 export function validateDocumentFile(
   file: UploadedDocumentFile | undefined,
 ): ValidatedDocumentFile {
@@ -262,19 +289,7 @@ export function validateDocumentFile(
 
   const name = file.originalname;
 
-  if (
-    name.length === 0 ||
-    name.length > 255 ||
-    name !== name.trim() ||
-    name.includes('/') ||
-    name.includes('\\') ||
-    [...name].some((char) => {
-      const code = char.charCodeAt(0);
-      return code <= 31 || code === 127;
-    })
-  ) {
-    return invalidFile('Document filename is invalid.');
-  }
+  validateDocumentName(name);
 
   const extension = extname(name).toLowerCase();
   const rule = DOCUMENT_TYPES[extension];
@@ -300,6 +315,45 @@ export function validateDocumentFile(
     originalName: name,
     mimeType: rule.mimeType,
     fileSize: file.buffer.length,
+    extension,
+    resourceType: rule.resourceType,
+  };
+}
+
+export function validateDocumentUploadMetadata(
+  metadata: DocumentUploadMetadata | undefined,
+): ValidatedDocumentFile {
+  if (
+    !metadata ||
+    typeof metadata.fileName !== 'string' ||
+    typeof metadata.mimeType !== 'string' ||
+    !Number.isSafeInteger(metadata.fileSize) ||
+    metadata.fileSize <= 0
+  ) {
+    return invalidFile('Valid document metadata is required.');
+  }
+
+  if (metadata.fileSize > MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES) {
+    throw new PayloadTooLargeException({
+      code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
+      message: `Document exceeds the ${MAX_DIRECT_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
+    });
+  }
+
+  const name = metadata.fileName;
+  validateDocumentName(name);
+
+  const extension = extname(name).toLowerCase();
+  const rule = DOCUMENT_TYPES[extension];
+
+  if (!rule || metadata.mimeType !== rule.mimeType) {
+    return invalidFile('Unsupported or mismatched document file type.');
+  }
+
+  return {
+    originalName: name,
+    mimeType: rule.mimeType,
+    fileSize: metadata.fileSize,
     extension,
     resourceType: rule.resourceType,
   };

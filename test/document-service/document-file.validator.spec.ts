@@ -2,8 +2,10 @@ import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES,
   MAX_DOCUMENT_FILE_SIZE_BYTES,
   validateDocumentFile,
+  validateDocumentUploadMetadata,
   type UploadedDocumentFile,
 } from '../../apps/document-service/src/validation/document-file.validator';
 
@@ -328,5 +330,112 @@ describe('Document file validation', () => {
         ),
       ),
     ).toThrow(BadRequestException);
+  });
+});
+
+describe('Direct document upload metadata validation', () => {
+  const valid = {
+    fileName: 'structural-plan.pdf',
+    mimeType: 'application/pdf',
+    fileSize: 10 * 1024 * 1024,
+  };
+
+  it('accepts valid file metadata above the legacy 4 MiB limit', () => {
+    expect(validateDocumentUploadMetadata(valid)).toEqual({
+      originalName: 'structural-plan.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10 * 1024 * 1024,
+      extension: '.pdf',
+      resourceType: 'raw',
+    });
+  });
+
+  it('accepts files at exactly the 50 MiB limit', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES,
+      }),
+    ).toHaveProperty('fileSize', MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES);
+  });
+
+  it('rejects files larger than 50 MiB', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES + 1,
+      }),
+    ).toThrow(PayloadTooLargeException);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    'rejects invalid file size %s',
+    (fileSize) => {
+      expect(() =>
+        validateDocumentUploadMetadata({
+          ...valid,
+          fileSize,
+        }),
+      ).toThrow(BadRequestException);
+    },
+  );
+
+  it('rejects missing metadata', () => {
+    expect(() => validateDocumentUploadMetadata(undefined)).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it.each([
+    '../drawing.pdf',
+    'folder\\drawing.pdf',
+    ' drawing.pdf',
+    'drawing.pdf\n',
+    `${'a'.repeat(252)}.pdf`,
+  ])('rejects unsafe filename %s', (fileName) => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName,
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects unsupported file types', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName: 'malware.exe',
+        mimeType: 'application/octet-stream',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects mismatched MIME types', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        mimeType: 'image/png',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('normalizes supported filename extensions', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName: 'DRAWING.PDF',
+      }),
+    ).toHaveProperty('extension', '.pdf');
+  });
+
+  it('maps image uploads to Cloudinary image resources', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        fileName: 'site.png',
+        mimeType: 'image/png',
+        fileSize: 2048,
+      }),
+    ).toHaveProperty('resourceType', 'image');
   });
 });

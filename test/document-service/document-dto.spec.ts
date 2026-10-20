@@ -8,6 +8,7 @@ import {
 } from '../../apps/document-service/src/dto/document-query.dto';
 import { CreateDocumentCategoryDto } from '../../apps/document-service/src/dto/create-document-category.dto';
 import { UpdateDocumentCategoryDto } from '../../apps/document-service/src/dto/update-document-category.dto';
+import { AuthorizeDocumentUploadDto } from '../../apps/document-service/src/dto/authorize-document-upload.dto';
 
 const categoryId = 'b390c2c8-86f5-484f-ad9f-170bca22703d';
 
@@ -72,6 +73,99 @@ describe('Document DTO validation', () => {
           'storageStatus',
         ]),
       );
+    });
+  });
+
+  describe('AuthorizeDocumentUploadDto', () => {
+    const valid = {
+      categoryId,
+      fileName: 'structural-plan.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10485760,
+      description: 'Approved structural drawing',
+    };
+
+    it('accepts valid authorization metadata', () => {
+      expect(errors(AuthorizeDocumentUploadDto, valid)).toEqual([]);
+    });
+
+    it('accepts optional descriptions', () => {
+      const withoutDescription = {
+        categoryId: valid.categoryId,
+        fileName: valid.fileName,
+        mimeType: valid.mimeType,
+        fileSize: valid.fileSize,
+      };
+
+      expect(errors(AuthorizeDocumentUploadDto, withoutDescription)).toEqual(
+        [],
+      );
+
+      expect(
+        errors(AuthorizeDocumentUploadDto, {
+          ...withoutDescription,
+          description: null,
+        }),
+      ).toEqual([]);
+    });
+
+    it('rejects missing required metadata', () => {
+      expect(errors(AuthorizeDocumentUploadDto, {})).toEqual(
+        expect.arrayContaining([
+          'categoryId',
+          'fileName',
+          'mimeType',
+          'fileSize',
+        ]),
+      );
+    });
+
+    it('rejects invalid filenames and MIME types', () => {
+      expect(
+        errors(AuthorizeDocumentUploadDto, {
+          ...valid,
+          fileName: ' ',
+          mimeType: '',
+        }),
+      ).toEqual(expect.arrayContaining(['fileName', 'mimeType']));
+    });
+
+    it('rejects invalid file sizes', () => {
+      for (const fileSize of [0, -1, 1.5, '10485760']) {
+        expect(
+          errors(AuthorizeDocumentUploadDto, {
+            ...valid,
+            fileSize,
+          }),
+        ).toContain('fileSize');
+      }
+    });
+
+    it('rejects unsupported client-controlled storage fields', () => {
+      expect(
+        errors(AuthorizeDocumentUploadDto, {
+          ...valid,
+          uploadedById: categoryId,
+          cloudinaryPublicId: 'forged',
+          storageStatus: 'ACTIVE',
+        }),
+      ).toEqual(
+        expect.arrayContaining([
+          'uploadedById',
+          'cloudinaryPublicId',
+          'storageStatus',
+        ]),
+      );
+    });
+
+    it('inherits the existing category and description validation', () => {
+      expect(
+        errors(AuthorizeDocumentUploadDto, {
+          ...valid,
+          categoryId: 'invalid',
+          description: ' ',
+        }),
+      ).toEqual(expect.arrayContaining(['categoryId', 'description']));
     });
   });
 

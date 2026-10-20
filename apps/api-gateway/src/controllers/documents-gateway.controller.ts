@@ -35,6 +35,7 @@ import {
 import { isAxiosError, type AxiosResponse } from 'axios';
 import type { Request } from 'express';
 import { firstValueFrom, type Observable } from 'rxjs';
+import { AuthorizeDocumentUploadDto } from '../../../document-service/src/dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from '../../../document-service/src/dto/create-document-category.dto';
 import { DocumentQueryDto } from '../../../document-service/src/dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from '../../../document-service/src/dto/update-document-category.dto';
@@ -73,6 +74,27 @@ interface AuthenticatedRequest extends Request {
 @Controller()
 export class DocumentsGatewayController {
   constructor(private readonly httpService: HttpService) {}
+
+  @Post('projects/:projectId/documents/upload-authorizations')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Authorize a direct project document upload' })
+  @ApiCreatedResponse({
+    description: 'Signed Cloudinary upload authorization',
+  })
+  @ApiConflictResponse({ description: 'Project does not accept new documents' })
+  authorizeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AuthorizeDocumentUploadDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.post<unknown>(
+        this.url(`/projects/${projectId}/documents/upload-authorizations`),
+        dto,
+        { headers: this.forwardHeaders(req) },
+      ),
+    );
+  }
 
   @Post('projects/:projectId/documents')
   @Roles(...DOCUMENT_WRITE_ROLES)

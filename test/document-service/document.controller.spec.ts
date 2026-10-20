@@ -16,6 +16,7 @@ const categoryId = 'b649b52f-69e5-43e1-8a56-f81c5f8f5a92';
 const actorId = 'admin-1';
 
 const mockDocuments = {
+  authorizeUpload: jest.fn(),
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
@@ -60,6 +61,10 @@ describe('DocumentController', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
+    mockDocuments.authorizeUpload.mockResolvedValue({
+      documentId,
+      signature: 'test-signature',
+    });
     mockDocuments.upload.mockResolvedValue({ id: documentId });
     mockDocuments.findAll.mockResolvedValue({
       data: [],
@@ -95,6 +100,42 @@ describe('DocumentController', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it('accepts valid direct upload authorization requests', async () => {
+    const payload = {
+      categoryId,
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10485760,
+    };
+
+    await request(server)
+      .post(`/projects/${projectId}/documents/upload-authorizations`)
+      .set('x-user-id', actorId)
+      .send(payload)
+      .expect(201);
+
+    expect(mockDocuments.authorizeUpload).toHaveBeenCalledWith(
+      projectId,
+      payload,
+      actorId,
+    );
+  });
+
+  it('rejects invalid direct upload authorization metadata', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/upload-authorizations`)
+      .set('x-user-id', actorId)
+      .send({
+        categoryId,
+        fileName: 'contract.pdf',
+        mimeType: 'application/pdf',
+        fileSize: -1,
+      })
+      .expect(400);
+
+    expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
   });
 
   it('accepts multipart document uploads', async () => {

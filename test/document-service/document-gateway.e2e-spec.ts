@@ -36,6 +36,7 @@ const actors: Record<string, { id: string; role: string }> = {
 };
 
 const mockDocuments = {
+  authorizeUpload: jest.fn(),
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
@@ -158,6 +159,10 @@ describe('Documents — Gateway to Document Service E2E', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
+    mockDocuments.authorizeUpload.mockResolvedValue({
+      documentId,
+      signature: 'test-signature',
+    });
     mockDocuments.upload.mockResolvedValue({ id: documentId });
     mockDocuments.findAll.mockResolvedValue({
       data: [{ id: documentId }],
@@ -215,6 +220,62 @@ describe('Documents — Gateway to Document Service E2E', () => {
     } else {
       process.env.AUTH_SERVICE_URL = originalAuthUrl;
     }
+  });
+
+  it('forwards signed upload authorization with the verified actor', async () => {
+    const payload = {
+      categoryId,
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10485760,
+    };
+
+    const response = await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/upload-authorizations`)
+      .set('authorization', token('manager'))
+      .set('x-user-id', actors.admin.id)
+      .send(payload)
+      .expect(201);
+
+    const body = response.body as GatewayBody<{ documentId: string }>;
+
+    expect(body.success).toBe(true);
+    expect(body.data.documentId).toBe(documentId);
+
+    expect(mockDocuments.authorizeUpload).toHaveBeenCalledWith(
+      projectId,
+      payload,
+      actors.manager.id,
+    );
+  });
+
+  it('rejects accountant upload authorization requests', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/upload-authorizations`)
+      .set('authorization', token('accountant'))
+      .send({
+        categoryId,
+        fileName: 'contract.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 10485760,
+      })
+      .expect(403);
+
+    expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated upload authorization requests', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/upload-authorizations`)
+      .send({
+        categoryId,
+        fileName: 'contract.pdf',
+        mimeType: 'application/pdf',
+        fileSize: 10485760,
+      })
+      .expect(401);
+
+    expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
   });
 
   it('forwards multipart bytes and the verified manager identity', async () => {

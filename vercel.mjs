@@ -6,6 +6,7 @@ export const config = {
     deploymentEnabled: {
       '**': false,
       develop: true,
+      main: true,
     },
   },
 

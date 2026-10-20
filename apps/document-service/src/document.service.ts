@@ -20,6 +20,7 @@ import {
   CloudinaryService,
   type AuthenticatedUploadResult,
   type DocumentResourceType,
+  type SignedDocumentUpload,
 } from '../../../libs/common/src/cloudinary/cloudinary.service';
 import {
   assertCanModifyProject,
@@ -29,6 +30,7 @@ import {
   type ProjectAccessActor,
 } from '../../../libs/common/src/project-access/project-access.policy';
 import { ErrorCode } from '../../../shared/error-codes';
+import { AuthorizeDocumentUploadDto } from './dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import {
   DocumentQueryDto,
@@ -40,6 +42,7 @@ import { UploadDocumentDto } from './dto/upload-document.dto';
 import { DocumentRepository } from './repositories/document.repository';
 import {
   validateDocumentFile,
+  validateDocumentUploadMetadata,
   type UploadedDocumentFile,
 } from './validation/document-file.validator';
 
@@ -51,6 +54,78 @@ export class DocumentService {
     private readonly documents: DocumentRepository,
     private readonly cloudinary: CloudinaryService,
   ) {}
+
+  async authorizeUpload(
+    projectId: string,
+    dto: AuthorizeDocumentUploadDto,
+    actorId?: string,
+  ) {
+    const actor = await this.resolveActor(actorId);
+    const project = await this.getProject(projectId);
+
+    assertCanModifyProject(actor, project);
+
+    if (
+      project.status === ProjectStatus.COMPLETED ||
+      project.status === ProjectStatus.CANCELLED
+    ) {
+      throw new ConflictException(
+        'Documents cannot be uploaded to completed or cancelled projects.',
+      );
+    }
+
+    const validated = validateDocumentUploadMetadata(dto);
+
+    const category = await this.documents.findActiveCategoryById(
+      dto.categoryId,
+    );
+
+    if (!category) {
+      this.throwCategoryNotFound();
+    }
+
+    const id = randomUUID();
+    const publicId =
+      `constructpro/projects/${projectId}/${id}` +
+      (validated.resourceType === 'raw' ? validated.extension : '');
+
+    let signed: SignedDocumentUpload;
+
+    try {
+      signed = this.cloudinary.createSignedDocumentUpload(
+        publicId,
+        validated.resourceType,
+      );
+    } catch (error: unknown) {
+      this.logFailure(
+        `Unable to authorize document upload for project ${projectId}`,
+        error,
+      );
+
+      throw new ServiceUnavailableException(
+        'Document upload authorization is temporarily unavailable.',
+      );
+    }
+
+    await this.documents.createPending({
+      id,
+      projectId,
+      categoryId: dto.categoryId,
+      originalName: validated.originalName,
+      fileName: validated.originalName,
+      mimeType: validated.mimeType,
+      fileSize: validated.fileSize,
+      cloudinaryPublicId: publicId,
+      cloudinaryResourceType: validated.resourceType,
+      uploadedById: actor.id,
+      description: dto.description ?? null,
+    });
+
+    return {
+      documentId: id,
+      ...signed,
+    };
+  }
 
   async upload(
     projectId: string,

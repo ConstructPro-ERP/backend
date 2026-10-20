@@ -27,6 +27,7 @@ import {
 } from '@nestjs/swagger';
 import { DocumentFileInterceptor } from './interceptors/document-file.interceptor';
 import { DocumentService } from './document.service';
+import { AuthorizeDocumentUploadDto } from './dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
@@ -41,6 +42,20 @@ import { type UploadedDocumentFile } from './validation/document-file.validator'
 @Controller()
 export class DocumentController {
   constructor(private readonly documents: DocumentService) {}
+
+  @Post('projects/:projectId/documents/upload-authorizations')
+  @ApiOperation({ summary: 'Authorize a direct Cloudinary document upload' })
+  @ApiCreatedResponse({
+    description: 'Signed upload authorization and pending document ID',
+  })
+  @ApiConflictResponse({ description: 'Project does not accept new documents' })
+  authorizeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AuthorizeDocumentUploadDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.authorizeUpload(projectId, dto, actorId);
+  }
 
   @Post('projects/:projectId/documents')
   @UseInterceptors(DocumentFileInterceptor)

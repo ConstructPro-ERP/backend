@@ -20,6 +20,7 @@ import {
   CloudinaryService,
   type AuthenticatedUploadResult,
   type DocumentResourceType,
+  type SignedDocumentUpload,
 } from '../../../libs/common/src/cloudinary/cloudinary.service';
 import {
   assertCanModifyProject,
@@ -29,6 +30,7 @@ import {
   type ProjectAccessActor,
 } from '../../../libs/common/src/project-access/project-access.policy';
 import { ErrorCode } from '../../../shared/error-codes';
+import { AuthorizeDocumentUploadDto } from './dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import {
   DocumentQueryDto,
@@ -36,10 +38,14 @@ import {
   DocumentSortOrder,
 } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { DocumentRepository } from './repositories/document.repository';
+import { verifyStoredDocument } from './validation/stored-document.validator';
 import {
   validateDocumentFile,
+  validateDocumentName,
+  validateDocumentUploadMetadata,
   type UploadedDocumentFile,
 } from './validation/document-file.validator';
 
@@ -51,6 +57,171 @@ export class DocumentService {
     private readonly documents: DocumentRepository,
     private readonly cloudinary: CloudinaryService,
   ) {}
+
+  async authorizeUpload(
+    projectId: string,
+    dto: AuthorizeDocumentUploadDto,
+    actorId?: string,
+  ) {
+    const actor = await this.resolveActor(actorId);
+    const project = await this.getProject(projectId);
+
+    assertCanModifyProject(actor, project);
+
+    if (
+      project.status === ProjectStatus.COMPLETED ||
+      project.status === ProjectStatus.CANCELLED
+    ) {
+      throw new ConflictException(
+        'Documents cannot be uploaded to completed or cancelled projects.',
+      );
+    }
+
+    const validated = validateDocumentUploadMetadata(dto);
+
+    const category = await this.documents.findActiveCategoryById(
+      dto.categoryId,
+    );
+
+    if (!category) {
+      this.throwCategoryNotFound();
+    }
+
+    const id = randomUUID();
+    const publicId =
+      `constructpro/projects/${projectId}/${id}` +
+      (validated.resourceType === 'raw' ? validated.extension : '');
+
+    let signed: SignedDocumentUpload;
+
+    try {
+      signed = this.cloudinary.createSignedDocumentUpload(
+        publicId,
+        validated.resourceType,
+      );
+    } catch (error: unknown) {
+      this.logFailure(
+        `Unable to authorize document upload for project ${projectId}`,
+        error,
+      );
+
+      throw new ServiceUnavailableException(
+        'Document upload authorization is temporarily unavailable.',
+      );
+    }
+
+    await this.documents.createPending({
+      id,
+      projectId,
+      categoryId: dto.categoryId,
+      originalName: validated.originalName,
+      fileName: validated.originalName,
+      mimeType: validated.mimeType,
+      fileSize: validated.fileSize,
+      cloudinaryPublicId: publicId,
+      cloudinaryResourceType: validated.resourceType,
+      uploadedById: actor.id,
+      description: dto.description ?? null,
+    });
+
+    return {
+      documentId: id,
+      ...signed,
+    };
+  }
+
+  async completeUpload(
+    projectId: string,
+    documentId: string,
+    actorId?: string,
+  ) {
+    const actor = await this.resolveActor(actorId);
+
+    const document = await this.documents.findByIdForReconciliation(documentId);
+
+    if (
+      !document ||
+      document.projectId !== projectId ||
+      document.deletedAt !== null
+    ) {
+      this.throwDocumentNotFound();
+    }
+
+    const project = await this.getProject(projectId);
+
+    assertCanModifyProject(actor, project);
+
+    if (document.uploadedById !== actor.id) {
+      throw new ForbiddenException(
+        'Only the original uploader can complete this upload.',
+      );
+    }
+
+    if (document.storageStatus === DocumentStorageStatus.ACTIVE) {
+      return this.findOne(documentId, actor.id);
+    }
+
+    if (document.storageStatus !== DocumentStorageStatus.PENDING) {
+      throw new ConflictException(
+        'Document is not awaiting upload completion.',
+      );
+    }
+
+    if (
+      project.status === ProjectStatus.COMPLETED ||
+      project.status === ProjectStatus.CANCELLED
+    ) {
+      throw new ConflictException(
+        'Documents cannot be completed for completed or cancelled projects.',
+      );
+    }
+
+    let verification: Awaited<ReturnType<typeof verifyStoredDocument>>;
+
+    try {
+      verification = await verifyStoredDocument(this.cloudinary, document);
+    } catch (error: unknown) {
+      this.logFailure(`Document ${documentId} verification failed`, error);
+
+      throw new ServiceUnavailableException(
+        'Document verification is temporarily unavailable.',
+      );
+    }
+
+    if (verification === 'missing') {
+      throw new ConflictException(
+        'Document upload has not completed in Cloudinary.',
+      );
+    }
+
+    if (verification === 'invalid') {
+      await this.compensateInvalidUpload(
+        documentId,
+        document.cloudinaryPublicId,
+        this.getResourceType(document.cloudinaryResourceType),
+      );
+
+      throw new BadRequestException({
+        code: ErrorCode.DOCUMENT_INVALID_FILE,
+        message: 'Uploaded document failed content verification.',
+      });
+    }
+
+    const activated = await this.documents.markUploadActive(documentId);
+
+    if (activated.count !== 1) {
+      const current =
+        await this.documents.findByIdForReconciliation(documentId);
+
+      if (current?.storageStatus !== DocumentStorageStatus.ACTIVE) {
+        throw new ConflictException(
+          'Document state changed during upload completion.',
+        );
+      }
+    }
+
+    return this.findOne(documentId, actor.id);
+  }
 
   async upload(
     projectId: string,
@@ -224,9 +395,68 @@ export class DocumentService {
       fileSize: document.fileSize,
       description: document.description,
       uploadedById: document.uploadedById,
+      uploadedBy: document.uploadedBy,
+      category: document.category,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
     };
+  }
+
+  async updateMetadata(id: string, dto: UpdateDocumentDto, actorId?: string) {
+    const actor = await this.resolveActor(actorId);
+    const document = await this.documents.findActiveById(id);
+
+    if (!document) {
+      this.throwDocumentNotFound();
+    }
+
+    const project = await this.getProject(document.projectId);
+    assertCanModifyProject(actor, project);
+
+    if (Object.values(dto).every((value) => value === undefined)) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'At least one document metadata field must be provided.',
+      });
+    }
+
+    if (dto.fileName !== undefined) {
+      validateDocumentName(dto.fileName);
+
+      const currentExtension = extname(document.originalName).toLowerCase();
+      const updatedExtension = extname(dto.fileName).toLowerCase();
+
+      if (currentExtension !== updatedExtension) {
+        throw new BadRequestException({
+          code: ErrorCode.DOCUMENT_INVALID_FILE,
+          message: 'Document filename extension cannot be changed.',
+        });
+      }
+    }
+
+    if (dto.categoryId !== undefined) {
+      const category = await this.documents.findActiveCategoryById(
+        dto.categoryId,
+      );
+
+      if (!category) {
+        this.throwCategoryNotFound();
+      }
+    }
+
+    const updated = await this.documents.updateMetadata(id, {
+      fileName: dto.fileName,
+      categoryId: dto.categoryId,
+      description: dto.description,
+    });
+
+    if (updated.count !== 1) {
+      throw new ConflictException(
+        'Document state changed during metadata update.',
+      );
+    }
+
+    return this.findOne(id, actor.id);
   }
 
   async download(id: string, actorId?: string) {

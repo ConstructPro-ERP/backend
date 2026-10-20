@@ -143,7 +143,7 @@ describe('DocumentRepository', () => {
       categoryId: 'category-1',
       storageStatus: DocumentStorageStatus.ACTIVE,
       deletedAt: null,
-      originalName: {
+      fileName: {
         contains: 'contract',
         mode: Prisma.QueryMode.insensitive,
       },
@@ -172,6 +172,12 @@ describe('DocumentRepository', () => {
             categoryName: true,
           },
         },
+        uploadedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
       },
     });
 
@@ -198,7 +204,7 @@ describe('DocumentRepository', () => {
     );
   });
 
-  it('retrieves visible documents only when active', async () => {
+  it('retrieves active document details including uploader and category', async () => {
     await repository.findActiveById('doc-1');
 
     expect(mockPrisma.document.findFirst).toHaveBeenCalledWith({
@@ -206,6 +212,20 @@ describe('DocumentRepository', () => {
         id: 'doc-1',
         storageStatus: DocumentStorageStatus.ACTIVE,
         deletedAt: null,
+      },
+      include: {
+        category: {
+          select: {
+            id: true,
+            categoryName: true,
+          },
+        },
+        uploadedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
       },
     });
   });
@@ -215,6 +235,27 @@ describe('DocumentRepository', () => {
 
     expect(mockPrisma.document.findUnique).toHaveBeenCalledWith({
       where: { id: 'doc-1' },
+    });
+  });
+
+  it('updates only editable metadata on active documents', async () => {
+    await repository.updateMetadata('doc-1', {
+      fileName: 'Approved Contract.pdf',
+      categoryId: 'category-2',
+      description: null,
+    });
+
+    expect(mockPrisma.document.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'doc-1',
+        storageStatus: DocumentStorageStatus.ACTIVE,
+        deletedAt: null,
+      },
+      data: {
+        fileName: 'Approved Contract.pdf',
+        categoryId: 'category-2',
+        description: null,
+      },
     });
   });
 

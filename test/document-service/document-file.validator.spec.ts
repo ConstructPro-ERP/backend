@@ -2,8 +2,10 @@ import { BadRequestException, PayloadTooLargeException } from '@nestjs/common';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES,
   MAX_DOCUMENT_FILE_SIZE_BYTES,
   validateDocumentFile,
+  validateDocumentUploadMetadata,
   type UploadedDocumentFile,
 } from '../../apps/document-service/src/validation/document-file.validator';
 
@@ -328,5 +330,199 @@ describe('Document file validation', () => {
         ),
       ),
     ).toThrow(BadRequestException);
+  });
+});
+
+describe('Direct document upload metadata validation', () => {
+  const valid = {
+    fileName: 'structural-plan.pdf',
+    mimeType: 'application/pdf',
+    fileSize: 10 * 1024 * 1024,
+  };
+
+  it('accepts valid file metadata above the legacy 4 MiB limit', () => {
+    expect(validateDocumentUploadMetadata(valid)).toEqual({
+      originalName: 'structural-plan.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10 * 1024 * 1024,
+      extension: '.pdf',
+      resourceType: 'raw',
+    });
+  });
+
+  it('accepts files at exactly the 50 MiB limit', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES,
+      }),
+    ).toHaveProperty('fileSize', MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES);
+  });
+
+  it('rejects files larger than 50 MiB', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES + 1,
+      }),
+    ).toThrow(PayloadTooLargeException);
+  });
+
+  it.each([0, -1, 1.5, NaN, Infinity])(
+    'rejects invalid file size %s',
+    (fileSize) => {
+      expect(() =>
+        validateDocumentUploadMetadata({
+          ...valid,
+          fileSize,
+        }),
+      ).toThrow(BadRequestException);
+    },
+  );
+
+  it('rejects missing metadata', () => {
+    expect(() => validateDocumentUploadMetadata(undefined)).toThrow(
+      BadRequestException,
+    );
+  });
+
+  it.each([
+    '../drawing.pdf',
+    'folder\\drawing.pdf',
+    ' drawing.pdf',
+    'drawing.pdf\n',
+    `${'a'.repeat(252)}.pdf`,
+  ])('rejects unsafe filename %s', (fileName) => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName,
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects unsupported file types', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName: 'malware.exe',
+        mimeType: 'application/octet-stream',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects mismatched MIME types', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        ...valid,
+        mimeType: 'image/png',
+      }),
+    ).toThrow(BadRequestException);
+  });
+
+  it('normalizes supported filename extensions', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        ...valid,
+        fileName: 'DRAWING.PDF',
+      }),
+    ).toHaveProperty('extension', '.pdf');
+  });
+
+  it('maps image uploads to Cloudinary image resources', () => {
+    expect(
+      validateDocumentUploadMetadata({
+        fileName: 'site.png',
+        mimeType: 'image/png',
+        fileSize: 2048,
+      }),
+    ).toHaveProperty('resourceType', 'image');
+  });
+});
+
+describe('Opaque construction file validation', () => {
+  const constructionFiles = [
+    ['drawing.dwg', 'application/octet-stream', 'raw'],
+    ['drawing.dxf', 'application/dxf', 'raw'],
+    ['revit-model.rvt', 'application/octet-stream', 'raw'],
+    ['revit-family.rfa', 'application/octet-stream', 'raw'],
+    ['bim-model.ifc', 'application/octet-stream', 'raw'],
+    ['project.max', 'application/octet-stream', 'raw'],
+    ['scene.lsf', 'application/octet-stream', 'raw'],
+    ['legacy-scene.ls12', 'application/octet-stream', 'raw'],
+    ['model.skp', 'application/octet-stream', 'raw'],
+    ['model.fbx', 'application/octet-stream', 'raw'],
+    ['model.glb', 'model/gltf-binary', 'raw'],
+    ['survey.las', 'application/octet-stream', 'raw'],
+    ['spreadsheet.xlsx', 'application/octet-stream', 'raw'],
+    ['presentation.pptx', 'application/octet-stream', 'raw'],
+    ['archive.zip', 'application/zip', 'raw'],
+    ['render.webp', 'image/webp', 'image'],
+    ['site-image.tiff', 'image/tiff', 'image'],
+  ] as const;
+
+  it.each(constructionFiles)(
+    'accepts metadata for %s',
+    (fileName, mimeType, resourceType) => {
+      expect(
+        validateDocumentUploadMetadata({
+          fileName,
+          mimeType,
+          fileSize: 1024,
+        }),
+      ).toMatchObject({
+        resourceType,
+        mimeType,
+        fileSize: 1024,
+      });
+    },
+  );
+
+  it('accepts proprietary file bytes without structure parsing', () => {
+    const file = makeFile(
+      'project.rvt',
+      'application/octet-stream',
+      Buffer.from('opaque project attachment'),
+    );
+
+    expect(validateDocumentFile(file)).toMatchObject({
+      extension: '.rvt',
+      resourceType: 'raw',
+      fileSize: file.buffer.length,
+    });
+  });
+
+  it('rejects unapproved extensions', () => {
+    for (const fileName of ['program.exe', 'script.js', 'shell.bat']) {
+      expect(() =>
+        validateDocumentUploadMetadata({
+          fileName,
+          mimeType: 'application/octet-stream',
+          fileSize: 100,
+        }),
+      ).toThrow(BadRequestException);
+    }
+  });
+
+  it('preserves strict PDF content validation', () => {
+    expect(() =>
+      validateDocumentFile(
+        makeFile(
+          'invalid.pdf',
+          'application/pdf',
+          Buffer.from('not a valid PDF'),
+        ),
+      ),
+    ).toThrow(BadRequestException);
+  });
+
+  it('preserves the 50 MiB direct-upload limit for native project files', () => {
+    expect(() =>
+      validateDocumentUploadMetadata({
+        fileName: 'large-model.rvt',
+        mimeType: 'application/octet-stream',
+        fileSize: MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES + 1,
+      }),
+    ).toThrow(PayloadTooLargeException);
   });
 });

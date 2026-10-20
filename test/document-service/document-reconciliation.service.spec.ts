@@ -11,6 +11,8 @@ const record = {
   storageStatus: DocumentStorageStatus.PENDING,
   cloudinaryPublicId: 'constructpro/projects/project-1/doc-1.pdf',
   cloudinaryResourceType: 'raw',
+  originalName: 'contract.pdf',
+  mimeType: 'application/pdf',
   fileSize: 100,
   updatedAt: new Date(Date.now() - 2 * HOUR),
 };
@@ -26,6 +28,7 @@ const mockRepository = {
 
 const mockCloudinary = {
   findAuthenticatedAsset: jest.fn(),
+  downloadAuthenticatedAssetBytes: jest.fn(),
   deleteAuthenticatedAsset: jest.fn(),
 };
 
@@ -53,6 +56,13 @@ describe('DocumentReconciliationService', () => {
       bytes: record.fileSize,
     });
 
+    const validPdf = Buffer.alloc(record.fileSize, 0x20);
+
+    Buffer.from('%PDF-1.7').copy(validPdf, 0);
+    Buffer.from('%%EOF').copy(validPdf, validPdf.length - 5);
+
+    mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(validPdf);
+
     mockCloudinary.deleteAuthenticatedAsset.mockResolvedValue(undefined);
   });
 
@@ -60,7 +70,7 @@ describe('DocumentReconciliationService', () => {
     jest.restoreAllMocks();
   });
 
-  it('activates recovered uploads with matching Cloudinary metadata', async () => {
+  it('activates recovered uploads only after content verification', async () => {
     const result = await service.reconcile();
 
     expect(result.activated).toBe(1);
@@ -69,6 +79,19 @@ describe('DocumentReconciliationService', () => {
     expect(mockRepository.markUploadActive).toHaveBeenCalledWith(record.id);
 
     expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+  });
+
+  it('does not activate invalid content with otherwise matching metadata', async () => {
+    mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(
+      Buffer.alloc(record.fileSize, 0x41),
+    );
+
+    const result = await service.reconcile();
+
+    expect(result.activated).toBe(0);
+    expect(result.failed).toBe(1);
+    expect(mockRepository.markUploadActive).not.toHaveBeenCalled();
+    expect(mockRepository.markUploadFailed).toHaveBeenCalledWith(record.id);
   });
 
   it('keeps recently missing uploads pending', async () => {

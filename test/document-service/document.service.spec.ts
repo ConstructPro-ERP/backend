@@ -43,6 +43,14 @@ const document = {
   fileSize: pdf.length,
   description: null,
   uploadedById: 'admin-1',
+  category: {
+    id: 'category-1',
+    categoryName: 'Contracts',
+  },
+  uploadedBy: {
+    id: 'admin-1',
+    fullName: 'Document Administrator',
+  },
   createdAt: timestamp,
   updatedAt: timestamp,
   cloudinaryPublicId: 'constructpro/projects/project-1/doc-1.pdf',
@@ -63,6 +71,7 @@ const mockDocuments = {
   findActiveForClient: jest.fn(),
   findByIdForReconciliation: jest.fn(),
   findManyAndCount: jest.fn(),
+  updateMetadata: jest.fn(),
   beginDelete: jest.fn(),
   finishDelete: jest.fn(),
   findCategoryById: jest.fn(),
@@ -75,6 +84,9 @@ const mockDocuments = {
 };
 
 const mockCloudinary = {
+  createSignedDocumentUpload: jest.fn(),
+  findAuthenticatedAsset: jest.fn(),
+  downloadAuthenticatedAssetBytes: jest.fn(),
   uploadAuthenticatedBuffer: jest.fn(),
   deleteAuthenticatedAsset: jest.fn(),
   createAuthenticatedDownloadUrl: jest.fn(),
@@ -120,6 +132,7 @@ describe('DocumentService', () => {
     mockDocuments.findActiveById.mockResolvedValue(document);
     mockDocuments.findByIdForReconciliation.mockResolvedValue(document);
     mockDocuments.findManyAndCount.mockResolvedValue([[], 0]);
+    mockDocuments.updateMetadata.mockResolvedValue({ count: 1 });
 
     mockDocuments.beginDelete.mockResolvedValue({ count: 1 });
     mockDocuments.finishDelete.mockResolvedValue({ count: 1 });
@@ -146,6 +159,31 @@ describe('DocumentService', () => {
     mockDocuments.countCategoryDocuments.mockResolvedValue(0);
     mockDocuments.disableCategory.mockResolvedValue({});
     mockDocuments.deleteUnusedCategory.mockResolvedValue({ count: 1 });
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue({
+      publicId: document.cloudinaryPublicId,
+      resourceType: 'raw',
+      bytes: pdf.length,
+    });
+
+    mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(pdf);
+
+    mockCloudinary.createSignedDocumentUpload.mockImplementation(
+      (publicId: string, resourceType: DocumentResourceType) => ({
+        cloudName: 'test-cloud',
+        apiKey: 'test-key',
+        publicId,
+        resourceType,
+        timestamp: 1790000000,
+        signature: 'test-signature',
+        uploadParameters: {
+          public_id: publicId,
+          timestamp: 1790000000,
+          type: 'authenticated',
+          overwrite: 'false',
+        },
+      }),
+    );
 
     mockCloudinary.uploadAuthenticatedBuffer.mockImplementation(
       (buffer: Buffer, publicId: string, resourceType: DocumentResourceType) =>
@@ -346,6 +384,304 @@ describe('DocumentService', () => {
       await expect(service.findAll('project-1', {}, 'admin-1')).rejects.toThrow(
         NotFoundException,
       );
+    });
+  });
+
+  describe('direct upload authorization', () => {
+    const authorization = {
+      categoryId: 'category-1',
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10 * 1024 * 1024,
+      description: 'Approved contract',
+    };
+
+    it('creates a pending document and returns signed upload credentials', async () => {
+      const result = await service.authorizeUpload(
+        'project-1',
+        authorization,
+        'admin-1',
+      );
+
+      const createPendingCalls = mockDocuments.createPending.mock
+        .calls as unknown as Array<[CreatePendingDocumentData]>;
+
+      const created = createPendingCalls[0]?.[0];
+
+      expect(created).toBeDefined();
+
+      if (!created) {
+        throw new Error('Expected pending document metadata.');
+      }
+
+      expect(created).toMatchObject({
+        projectId: 'project-1',
+        categoryId: 'category-1',
+        originalName: 'contract.pdf',
+        fileName: 'contract.pdf',
+        mimeType: 'application/pdf',
+        fileSize: authorization.fileSize,
+        cloudinaryResourceType: 'raw',
+        uploadedById: 'admin-1',
+        description: 'Approved contract',
+      });
+
+      expect(created.cloudinaryPublicId).toBe(
+        `constructpro/projects/project-1/${created.id}.pdf`,
+      );
+
+      expect(mockCloudinary.createSignedDocumentUpload).toHaveBeenCalledWith(
+        created.cloudinaryPublicId,
+        'raw',
+      );
+
+      expect(result).toMatchObject({
+        documentId: created.id,
+        publicId: created.cloudinaryPublicId,
+        signature: 'test-signature',
+        uploadParameters: {
+          type: 'authenticated',
+          overwrite: 'false',
+        },
+      });
+
+      expect(result).not.toHaveProperty('apiSecret');
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockCloudinary.uploadAuthenticatedBuffer).not.toHaveBeenCalled();
+    });
+
+    it('allows an assigned project manager to authorize uploads', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('PROJECT_MANAGER', 'manager-1'),
+      );
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'manager-1'),
+      ).resolves.toHaveProperty('signature', 'test-signature');
+
+      expect(mockDocuments.createPending).toHaveBeenCalledWith(
+        expect.objectContaining({ uploadedById: 'manager-1' }),
+      );
+    });
+
+    it('rejects unauthorized document upload requests', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('ACCOUNTANT', 'accountant-1'),
+      );
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'accountant-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+      expect(mockCloudinary.createSignedDocumentUpload).not.toHaveBeenCalled();
+    });
+
+    it('rejects unassigned project managers', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('PROJECT_MANAGER', 'manager-2'),
+      );
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'manager-2'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+    });
+
+    it.each([ProjectStatus.COMPLETED, ProjectStatus.CANCELLED])(
+      'rejects authorization for %s projects',
+      async (status) => {
+        mockDocuments.findProject.mockResolvedValue({
+          id: 'project-1',
+          projectManagerId: 'manager-1',
+          status,
+        });
+
+        await expect(
+          service.authorizeUpload('project-1', authorization, 'admin-1'),
+        ).rejects.toThrow(ConflictException);
+
+        expect(mockDocuments.createPending).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects inactive document categories', async () => {
+      mockDocuments.findActiveCategoryById.mockResolvedValue(null);
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsupported file metadata', async () => {
+      await expect(
+        service.authorizeUpload(
+          'project-1',
+          {
+            ...authorization,
+            fileName: 'malware.exe',
+            mimeType: 'application/octet-stream',
+          },
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+    });
+
+    it('rejects oversized files before signing', async () => {
+      await expect(
+        service.authorizeUpload(
+          'project-1',
+          {
+            ...authorization,
+            fileSize: 50 * 1024 * 1024 + 1,
+          },
+          'admin-1',
+        ),
+      ).rejects.toThrow();
+
+      expect(mockCloudinary.createSignedDocumentUpload).not.toHaveBeenCalled();
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+    });
+
+    it('does not create metadata when signing fails', async () => {
+      mockCloudinary.createSignedDocumentUpload.mockImplementation(() => {
+        throw new Error('Cloudinary configuration unavailable');
+      });
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'admin-1'),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(mockDocuments.createPending).not.toHaveBeenCalled();
+    });
+
+    it('does not return authorization when creating metadata fails', async () => {
+      mockDocuments.createPending.mockRejectedValue(
+        new Error('Database unavailable'),
+      );
+
+      await expect(
+        service.authorizeUpload('project-1', authorization, 'admin-1'),
+      ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  describe('direct upload completion', () => {
+    const pending = {
+      ...document,
+      storageStatus: DocumentStorageStatus.PENDING,
+    };
+
+    it('verifies the stored file before activating the document', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).resolves.toHaveProperty('id', 'doc-1');
+
+      expect(mockCloudinary.findAuthenticatedAsset).toHaveBeenCalledWith(
+        pending.cloudinaryPublicId,
+        'raw',
+      );
+
+      expect(mockCloudinary.downloadAuthenticatedAssetBytes).toHaveBeenCalled();
+
+      expect(mockDocuments.markUploadActive).toHaveBeenCalledWith('doc-1');
+    });
+
+    it('keeps incomplete Cloudinary uploads pending', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+      mockCloudinary.findAuthenticatedAsset.mockResolvedValue(null);
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockDocuments.markUploadFailed).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid uploaded contents and marks the document failed', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(
+        Buffer.alloc(pdf.length, 0x41),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.markUploadFailed).toHaveBeenCalledWith('doc-1');
+      expect(mockCloudinary.deleteAuthenticatedAsset).toHaveBeenCalledWith(
+        pending.cloudinaryPublicId,
+        'raw',
+      );
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('keeps the document pending when Cloudinary verification fails', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockCloudinary.downloadAuthenticatedAssetBytes.mockRejectedValue(
+        new Error('Cloudinary unavailable'),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockDocuments.markUploadFailed).not.toHaveBeenCalled();
+    });
+
+    it('allows idempotent completion of active documents', async () => {
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).resolves.toHaveProperty('id', 'doc-1');
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockCloudinary.findAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion by another uploader', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue({
+        ...pending,
+        uploadedById: 'another-user',
+      });
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion for a mismatched project', async () => {
+      await expect(
+        service.completeUpload('different-project', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion by unauthorized roles', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('ACCOUNTANT', 'accountant-1'),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'accountant-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
     });
   });
 
@@ -658,6 +994,185 @@ describe('DocumentService', () => {
 
       expect(mockDocuments.markUploadActive).toHaveBeenCalledTimes(1);
       expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('document metadata updates', () => {
+    it('updates permitted metadata and returns the document', async () => {
+      mockDocuments.findActiveById
+        .mockResolvedValueOnce(document)
+        .mockResolvedValueOnce({
+          ...document,
+          fileName: 'Approved Contract.pdf',
+          categoryId: 'category-2',
+          description: 'Final approved document',
+          category: {
+            id: 'category-2',
+            categoryName: 'Approved Drawings',
+          },
+        });
+
+      const result = await service.updateMetadata(
+        'doc-1',
+        {
+          fileName: 'Approved Contract.pdf',
+          categoryId: 'category-2',
+          description: 'Final approved document',
+        },
+        'admin-1',
+      );
+
+      expect(mockDocuments.findActiveCategoryById).toHaveBeenCalledWith(
+        'category-2',
+      );
+
+      expect(mockDocuments.updateMetadata).toHaveBeenCalledWith('doc-1', {
+        fileName: 'Approved Contract.pdf',
+        categoryId: 'category-2',
+        description: 'Final approved document',
+      });
+
+      expect(result).toMatchObject({
+        fileName: 'Approved Contract.pdf',
+        categoryId: 'category-2',
+        description: 'Final approved document',
+        originalName: 'contract.pdf',
+        uploadedById: 'admin-1',
+        uploadedBy: {
+          id: 'admin-1',
+          fullName: 'Document Administrator',
+        },
+        category: {
+          id: 'category-2',
+          categoryName: 'Approved Drawings',
+        },
+      });
+
+      expect(result).not.toHaveProperty('cloudinaryPublicId');
+      expect(mockCloudinary.uploadAuthenticatedBuffer).not.toHaveBeenCalled();
+      expect(mockCloudinary.deleteAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
+    it('allows an assigned project manager to edit metadata', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('PROJECT_MANAGER', 'manager-1'),
+      );
+
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { description: 'Updated project description' },
+          'manager-1',
+        ),
+      ).resolves.toHaveProperty('id', 'doc-1');
+
+      expect(mockDocuments.updateMetadata).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects accountant metadata edits', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('ACCOUNTANT', 'accountant-1'),
+      );
+
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { description: 'Unauthorized change' },
+          'accountant-1',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects unassigned project managers', async () => {
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('PROJECT_MANAGER', 'manager-2'),
+      );
+
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { fileName: 'Renamed.pdf' },
+          'manager-2',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects updates to documents that are not active', async () => {
+      mockDocuments.findActiveById.mockResolvedValue(null);
+
+      await expect(
+        service.updateMetadata('doc-1', { fileName: 'Renamed.pdf' }, 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects empty metadata updates', async () => {
+      await expect(
+        service.updateMetadata('doc-1', {}, 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsafe filenames', async () => {
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { fileName: '../contract.pdf' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('prevents changing the original file extension', async () => {
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { fileName: 'contract.exe' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects inactive destination categories', async () => {
+      mockDocuments.findActiveCategoryById.mockResolvedValue(null);
+
+      await expect(
+        service.updateMetadata(
+          'doc-1',
+          { categoryId: 'category-2' },
+          'admin-1',
+        ),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+    });
+
+    it('allows clearing an existing description', async () => {
+      await service.updateMetadata('doc-1', { description: null }, 'admin-1');
+
+      expect(mockDocuments.updateMetadata).toHaveBeenCalledWith('doc-1', {
+        fileName: undefined,
+        categoryId: undefined,
+        description: null,
+      });
+    });
+
+    it('rejects a concurrent document status change', async () => {
+      mockDocuments.updateMetadata.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.updateMetadata('doc-1', { description: 'Updated' }, 'admin-1'),
+      ).rejects.toThrow(ConflictException);
     });
   });
 

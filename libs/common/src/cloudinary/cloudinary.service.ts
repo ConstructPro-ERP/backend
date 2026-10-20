@@ -14,6 +14,22 @@ export interface AuthenticatedUploadResult {
   bytes: number;
 }
 
+// Browser upload parameters signed by the backend.
+export interface SignedDocumentUpload {
+  cloudName: string;
+  apiKey: string;
+  publicId: string;
+  resourceType: DocumentResourceType;
+  timestamp: number;
+  signature: string;
+  uploadParameters: {
+    public_id: string;
+    timestamp: number;
+    type: 'authenticated';
+    overwrite: 'false';
+  };
+}
+
 @Injectable()
 export class CloudinaryService {
   private readonly logger = new Logger(CloudinaryService.name);
@@ -134,6 +150,60 @@ export class CloudinaryService {
     });
   }
 
+  createSignedDocumentUpload(
+    publicId: string,
+    resourceType: DocumentResourceType,
+  ): SignedDocumentUpload {
+    this.ensureDocumentStorageConfigured();
+
+    const cloudName = process.env.CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (!cloudName || !apiKey || !apiSecret) {
+      throw new Error('Cloudinary document storage is not configured.');
+    }
+
+    const uuidPattern = '[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}';
+
+    const publicIdPattern = new RegExp(
+      `^constructpro/projects/${uuidPattern}/${uuidPattern}(?:\\.[a-z0-9]{1,10})?$`,
+      'i',
+    );
+
+    if (!publicIdPattern.test(publicId)) {
+      throw new Error('Invalid project document public ID.');
+    }
+
+    if (resourceType !== 'image' && resourceType !== 'raw') {
+      throw new Error('Invalid project document resource type.');
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const uploadParameters = {
+      public_id: publicId,
+      timestamp,
+      type: 'authenticated' as const,
+      overwrite: 'false' as const,
+    };
+
+    const signature = cloudinary.utils.api_sign_request(
+      uploadParameters,
+      apiSecret,
+    );
+
+    return {
+      cloudName,
+      apiKey,
+      publicId,
+      resourceType,
+      timestamp,
+      signature,
+      uploadParameters,
+    };
+  }
+
   async uploadAuthenticatedBuffer(
     buffer: Buffer,
     publicId: string,
@@ -251,6 +321,66 @@ export class CloudinaryService {
       expires_at: expiresAt,
       attachment: true,
     });
+  }
+
+  async downloadAuthenticatedAssetBytes(
+    publicId: string,
+    format: string,
+    resourceType: DocumentResourceType,
+    maxBytes: number,
+  ): Promise<Buffer> {
+    this.ensureDocumentStorageConfigured();
+
+    const url = this.createAuthenticatedDownloadUrl(
+      publicId,
+      format,
+      resourceType,
+    );
+
+    const response = await fetch(url, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(
+        `Cloudinary document verification download failed: ${response.status}`,
+      );
+    }
+
+    const contentLength = Number(response.headers.get('content-length') ?? '0');
+
+    if (contentLength > maxBytes) {
+      throw new Error('Cloudinary verification download exceeds size limit.');
+    }
+
+    const reader = response.body.getReader();
+    const buffers: Buffer[] = [];
+    let totalBytes = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        totalBytes += value.byteLength;
+
+        if (totalBytes > maxBytes) {
+          throw new Error(
+            'Cloudinary verification download exceeds size limit.',
+          );
+        }
+
+        buffers.push(Buffer.from(value));
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+
+    return Buffer.concat(buffers, totalBytes);
   }
 
   async deleteAuthenticatedAsset(

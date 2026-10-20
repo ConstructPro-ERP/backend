@@ -35,9 +35,11 @@ import {
 import { isAxiosError, type AxiosResponse } from 'axios';
 import type { Request } from 'express';
 import { firstValueFrom, type Observable } from 'rxjs';
+import { AuthorizeDocumentUploadDto } from '../../../document-service/src/dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from '../../../document-service/src/dto/create-document-category.dto';
 import { DocumentQueryDto } from '../../../document-service/src/dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from '../../../document-service/src/dto/update-document-category.dto';
+import { UpdateDocumentDto } from '../../../document-service/src/dto/update-document.dto';
 import { UploadDocumentDto } from '../../../document-service/src/dto/upload-document.dto';
 import {
   MAX_DOCUMENT_FILE_SIZE_BYTES,
@@ -73,6 +75,46 @@ interface AuthenticatedRequest extends Request {
 @Controller()
 export class DocumentsGatewayController {
   constructor(private readonly httpService: HttpService) {}
+
+  @Post('projects/:projectId/documents/upload-authorizations')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Authorize a direct project document upload' })
+  @ApiCreatedResponse({
+    description: 'Signed Cloudinary upload authorization',
+  })
+  @ApiConflictResponse({ description: 'Project does not accept new documents' })
+  authorizeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AuthorizeDocumentUploadDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.post<unknown>(
+        this.url(`/projects/${projectId}/documents/upload-authorizations`),
+        dto,
+        { headers: this.forwardHeaders(req) },
+      ),
+    );
+  }
+
+  @Post('projects/:projectId/documents/:documentId/complete')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Verify and complete a direct document upload' })
+  @ApiCreatedResponse({ description: 'Verified document metadata' })
+  @ApiConflictResponse({ description: 'Upload is incomplete or conflicted' })
+  completeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.post<unknown>(
+        this.url(`/projects/${projectId}/documents/${documentId}/complete`),
+        {},
+        { headers: this.forwardHeaders(req) },
+      ),
+    );
+  }
 
   @Post('projects/:projectId/documents')
   @Roles(...DOCUMENT_WRITE_ROLES)
@@ -195,6 +237,23 @@ export class DocumentsGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.get<unknown>(this.url(`/documents/${id}`), {
+        headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
+  @Patch('documents/:id')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Update project document metadata' })
+  @ApiOkResponse({ description: 'Updated document metadata' })
+  @ApiConflictResponse({ description: 'Document state changed during update' })
+  updateMetadata(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDocumentDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.patch<unknown>(this.url(`/documents/${id}`), dto, {
         headers: this.forwardHeaders(req),
       }),
     );

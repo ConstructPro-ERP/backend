@@ -8,6 +8,10 @@ export const MAX_DOCUMENT_FILE_SIZE_BYTES = 4 * 1024 * 1024;
 export const MAX_DOCUMENT_FILE_SIZE_MIB =
   MAX_DOCUMENT_FILE_SIZE_BYTES / (1024 * 1024);
 
+export const MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES = 50 * 1024 * 1024;
+export const MAX_DIRECT_DOCUMENT_FILE_SIZE_MIB =
+  MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES / (1024 * 1024);
+
 interface DocumentTypeRule {
   mimeType: string;
   resourceType: DocumentResourceType;
@@ -37,6 +41,107 @@ const DOCUMENT_TYPES: Record<string, DocumentTypeRule> = {
   },
 };
 
+const OPAQUE_RAW_EXTENSIONS = new Set([
+  '.dwg',
+  '.dxf',
+  '.dwt',
+  '.dws',
+  '.dgn',
+  '.sat',
+  '.step',
+  '.stp',
+  '.iges',
+  '.igs',
+  '.rvt',
+  '.rfa',
+  '.rte',
+  '.rft',
+  '.ifc',
+  '.ifcxml',
+  '.ifczip',
+  '.nwd',
+  '.nwc',
+  '.nwf',
+  '.max',
+  '.3ds',
+  '.fbx',
+  '.obj',
+  '.stl',
+  '.dae',
+  '.skp',
+  '.3dm',
+  '.blend',
+  '.blend1',
+  '.glb',
+  '.gltf',
+  '.lsf',
+  '.pln',
+  '.pla',
+  '.las',
+  '.laz',
+  '.e57',
+  '.rcp',
+  '.rcs',
+  '.doc',
+  '.xls',
+  '.xlsx',
+  '.ppt',
+  '.pptx',
+  '.txt',
+  '.csv',
+  '.rtf',
+  '.odt',
+  '.ods',
+  '.odp',
+  '.zip',
+  '.7z',
+  '.rar',
+]);
+
+const OPAQUE_IMAGE_MIME_TYPES: Record<string, string> = {
+  '.webp': 'image/webp',
+  '.tif': 'image/tiff',
+  '.tiff': 'image/tiff',
+};
+
+const MIME_TYPE_PATTERN = /^[a-z][a-z0-9.+-]*\/[a-z0-9][a-z0-9.+_-]*$/i;
+
+function resolveDocumentType(
+  extension: string,
+  mimeType: string,
+): DocumentTypeRule | null {
+  const strict = DOCUMENT_TYPES[extension];
+
+  if (strict) {
+    return mimeType === strict.mimeType ? strict : null;
+  }
+
+  const imageMimeType = OPAQUE_IMAGE_MIME_TYPES[extension];
+
+  if (imageMimeType) {
+    if (mimeType !== imageMimeType && mimeType !== 'application/octet-stream') {
+      return null;
+    }
+
+    return { mimeType, resourceType: 'image' };
+  }
+
+  const isLegacyLumion = /^\.ls(?:[1-9]|1[0-2])$/.test(extension);
+
+  if (
+    (OPAQUE_RAW_EXTENSIONS.has(extension) || isLegacyLumion) &&
+    MIME_TYPE_PATTERN.test(mimeType)
+  ) {
+    return { mimeType, resourceType: 'raw' };
+  }
+
+  return null;
+}
+
+export function requiresDocumentContentInspection(extension: string): boolean {
+  return Object.hasOwn(DOCUMENT_TYPES, extension.toLowerCase());
+}
+
 export interface UploadedDocumentFile {
   originalname: string;
   mimetype: string;
@@ -50,6 +155,12 @@ export interface ValidatedDocumentFile {
   fileSize: number;
   extension: string;
   resourceType: DocumentResourceType;
+}
+
+export interface DocumentUploadMetadata {
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
 }
 
 function invalidFile(message: string): never {
@@ -236,9 +347,29 @@ function isDocx(buffer: Buffer): boolean {
   }
 }
 
+export function validateDocumentName(name: string): void {
+  if (
+    typeof name !== 'string' ||
+    name.length === 0 ||
+    name.length > 255 ||
+    name !== name.trim() ||
+    name.includes('/') ||
+    name.includes('\\') ||
+    [...name].some((char) => {
+      const code = char.charCodeAt(0);
+      return code <= 31 || code === 127;
+    })
+  ) {
+    invalidFile('Document filename is invalid.');
+  }
+}
+
 export function validateDocumentFile(
   file: UploadedDocumentFile | undefined,
+  maxFileSize = MAX_DOCUMENT_FILE_SIZE_BYTES,
 ): ValidatedDocumentFile {
+  const maxFileSizeMB = maxFileSize / (1024 * 1024);
+
   if (
     !file ||
     !Buffer.isBuffer(file.buffer) ||
@@ -253,53 +384,82 @@ export function validateDocumentFile(
     return invalidFile('Document is empty or has an invalid size.');
   }
 
-  if (file.buffer.length > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+  if (file.buffer.length > maxFileSize) {
     throw new PayloadTooLargeException({
       code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
-      message: `Document exceeds the ${MAX_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
+      message: `Document exceeds the ${maxFileSizeMB} MiB upload limit.`,
     });
   }
 
   const name = file.originalname;
 
-  if (
-    name.length === 0 ||
-    name.length > 255 ||
-    name !== name.trim() ||
-    name.includes('/') ||
-    name.includes('\\') ||
-    [...name].some((char) => {
-      const code = char.charCodeAt(0);
-      return code <= 31 || code === 127;
-    })
-  ) {
-    return invalidFile('Document filename is invalid.');
-  }
+  validateDocumentName(name);
 
   const extension = extname(name).toLowerCase();
-  const rule = DOCUMENT_TYPES[extension];
+  const rule = resolveDocumentType(extension, file.mimetype);
 
-  if (!rule || file.mimetype !== rule.mimeType) {
+  if (!rule) {
     return invalidFile('Unsupported or mismatched document file type.');
   }
 
-  const validContent =
-    extension === '.pdf'
-      ? isPdf(file.buffer)
-      : extension === '.png'
-        ? isPng(file.buffer)
-        : extension === '.jpg' || extension === '.jpeg'
-          ? isJpeg(file.buffer)
-          : isDocx(file.buffer);
+  if (requiresDocumentContentInspection(extension)) {
+    const validContent =
+      extension === '.pdf'
+        ? isPdf(file.buffer)
+        : extension === '.png'
+          ? isPng(file.buffer)
+          : extension === '.jpg' || extension === '.jpeg'
+            ? isJpeg(file.buffer)
+            : isDocx(file.buffer);
 
-  if (!validContent) {
-    return invalidFile('Document content does not match its file type.');
+    if (!validContent) {
+      return invalidFile('Document content does not match its file type.');
+    }
   }
 
   return {
     originalName: name,
     mimeType: rule.mimeType,
     fileSize: file.buffer.length,
+    extension,
+    resourceType: rule.resourceType,
+  };
+}
+
+export function validateDocumentUploadMetadata(
+  metadata: DocumentUploadMetadata | undefined,
+): ValidatedDocumentFile {
+  if (
+    !metadata ||
+    typeof metadata.fileName !== 'string' ||
+    typeof metadata.mimeType !== 'string' ||
+    !Number.isSafeInteger(metadata.fileSize) ||
+    metadata.fileSize <= 0
+  ) {
+    return invalidFile('Valid document metadata is required.');
+  }
+
+  if (metadata.fileSize > MAX_DIRECT_DOCUMENT_FILE_SIZE_BYTES) {
+    throw new PayloadTooLargeException({
+      code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
+      message: `Document exceeds the ${MAX_DIRECT_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
+    });
+  }
+
+  const name = metadata.fileName;
+  validateDocumentName(name);
+
+  const extension = extname(name).toLowerCase();
+  const rule = resolveDocumentType(extension, metadata.mimeType);
+
+  if (!rule) {
+    return invalidFile('Unsupported or mismatched document file type.');
+  }
+
+  return {
+    originalName: name,
+    mimeType: rule.mimeType,
+    fileSize: metadata.fileSize,
     extension,
     resourceType: rule.resourceType,
   };

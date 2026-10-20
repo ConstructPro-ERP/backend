@@ -5,6 +5,7 @@ import {
   type DocumentResourceType,
 } from '../../../libs/common/src/cloudinary/cloudinary.service';
 import { DocumentRepository } from './repositories/document.repository';
+import { verifyStoredDocument } from './validation/stored-document.validator';
 
 const STALE_AFTER_MS = 60 * 60 * 1000;
 const MISSING_UPLOAD_GRACE_MS = 24 * STALE_AFTER_MS;
@@ -55,12 +56,12 @@ export class DocumentReconciliationService {
         const resourceType = this.resourceType(record.cloudinaryResourceType);
 
         if (record.storageStatus === DocumentStorageStatus.PENDING) {
-          const asset = await this.cloudinary.findAuthenticatedAsset(
-            record.cloudinaryPublicId,
-            resourceType,
+          const verification = await verifyStoredDocument(
+            this.cloudinary,
+            record,
           );
 
-          if (!asset) {
+          if (verification === 'missing') {
             if (now - record.updatedAt.getTime() < MISSING_UPLOAD_GRACE_MS) {
               result.pending += 1;
               continue;
@@ -77,7 +78,7 @@ export class DocumentReconciliationService {
             continue;
           }
 
-          if (asset.bytes !== record.fileSize) {
+          if (verification === 'invalid') {
             const failed = await this.documents.markUploadFailed(record.id);
 
             if (failed.count === 1) {

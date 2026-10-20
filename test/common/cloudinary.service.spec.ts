@@ -17,6 +17,7 @@ jest.mock('cloudinary', () => ({
     config: jest.fn(),
     utils: {
       private_download_url: jest.fn(),
+      api_sign_request: jest.fn(),
     },
     uploader: {
       upload_stream: jest.fn(),
@@ -53,6 +54,119 @@ describe('CloudinaryService', () => {
       api_secret: 'test-secret',
       secure: true,
     });
+  });
+
+  it('generates restricted credentials for a project document upload', () => {
+    const now = jest.spyOn(Date, 'now').mockReturnValue(1790000000000);
+
+    try {
+      const publicId =
+        'constructpro/projects/' +
+        '11111111-1111-4111-8111-111111111111/' +
+        '22222222-2222-4222-8222-222222222222.pdf';
+
+      (cloudinary.utils.api_sign_request as jest.Mock).mockReturnValue(
+        'test-signature',
+      );
+
+      const service = new CloudinaryService();
+
+      const result = service.createSignedDocumentUpload(publicId, 'raw');
+
+      expect(result).toEqual({
+        cloudName: 'test-cloud',
+        apiKey: 'test-key',
+        publicId,
+        resourceType: 'raw',
+        timestamp: 1790000000,
+        signature: 'test-signature',
+        uploadParameters: {
+          public_id: publicId,
+          timestamp: 1790000000,
+          type: 'authenticated',
+          overwrite: 'false',
+        },
+      });
+
+      expect(cloudinary.utils.api_sign_request).toHaveBeenCalledWith(
+        result.uploadParameters,
+        'test-secret',
+      );
+
+      expect(JSON.stringify(result)).not.toContain('test-secret');
+    } finally {
+      now.mockRestore();
+    }
+  });
+
+  it('rejects invalid project document public IDs', () => {
+    const service = new CloudinaryService();
+
+    expect(() =>
+      service.createSignedDocumentUpload(
+        'constructpro/quotations/quotation-1.pdf',
+        'raw',
+      ),
+    ).toThrow('Invalid project document public ID.');
+
+    expect(() =>
+      service.createSignedDocumentUpload(
+        'constructpro/projects/../../../other-file.pdf',
+        'raw',
+      ),
+    ).toThrow('Invalid project document public ID.');
+
+    expect(cloudinary.utils.api_sign_request).not.toHaveBeenCalled();
+  });
+
+  it('signs separate document uploads independently', () => {
+    const service = new CloudinaryService();
+
+    const projectId = '11111111-1111-4111-8111-111111111111';
+    const firstId = '22222222-2222-4222-8222-222222222222';
+    const secondId = '33333333-3333-4333-8333-333333333333';
+
+    const firstPublicId = `constructpro/projects/${projectId}/${firstId}.pdf`;
+
+    const secondPublicId = `constructpro/projects/${projectId}/${secondId}.pdf`;
+
+    const sign = cloudinary.utils.api_sign_request as jest.Mock;
+
+    sign
+      .mockReturnValueOnce('signature-one')
+      .mockReturnValueOnce('signature-two');
+
+    const first = service.createSignedDocumentUpload(firstPublicId, 'raw');
+
+    const second = service.createSignedDocumentUpload(secondPublicId, 'raw');
+
+    expect(first.publicId).not.toBe(second.publicId);
+    expect(first.signature).toBe('signature-one');
+    expect(second.signature).toBe('signature-two');
+
+    expect(first.uploadParameters.overwrite).toBe('false');
+    expect(second.uploadParameters.overwrite).toBe('false');
+
+    expect(sign).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects signing when Cloudinary credentials are missing', () => {
+    delete process.env.CLOUDINARY_CLOUD_NAME;
+    delete process.env.CLOUDINARY_API_KEY;
+    delete process.env.CLOUDINARY_API_SECRET;
+
+    const service = new CloudinaryService();
+
+    expect(() =>
+      service.createSignedDocumentUpload(
+        'constructpro/projects/' +
+          '11111111-1111-4111-8111-111111111111/' +
+          '22222222-2222-4222-8222-222222222222.pdf',
+        'raw',
+      ),
+    ).toThrow('Cloudinary document storage is not configured.');
+
+    expect(cloudinary.utils.api_sign_request).not.toHaveBeenCalled();
   });
 
   it('uploads a buffer successfully and returns the secure URL', async () => {
@@ -288,6 +402,93 @@ describe('CloudinaryService', () => {
       );
     } finally {
       now.mockRestore();
+    }
+  });
+
+  it('downloads authenticated document bytes for verification', async () => {
+    const buffer = Buffer.from('verified PDF content');
+
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(buffer, { status: 200 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      const result = await service.downloadAuthenticatedAssetBytes(
+        'constructpro/projects/project-1/doc-1.pdf',
+        'pdf',
+        'raw',
+        1024,
+      );
+
+      expect(result.equals(buffer)).toBe(true);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.cloudinary.com/test-download',
+        {
+          redirect: 'error',
+          signal: expect.any(AbortSignal) as AbortSignal,
+        },
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('rejects verification downloads larger than the configured limit', async () => {
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(Buffer.alloc(1025), { status: 200 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      await expect(
+        service.downloadAuthenticatedAssetBytes(
+          'constructpro/projects/project-1/doc-1.pdf',
+          'pdf',
+          'raw',
+          1024,
+        ),
+      ).rejects.toThrow('Cloudinary verification download exceeds size limit.');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('rejects unsuccessful Cloudinary verification downloads', async () => {
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 503 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      await expect(
+        service.downloadAuthenticatedAssetBytes(
+          'constructpro/projects/project-1/doc-1.pdf',
+          'pdf',
+          'raw',
+          1024,
+        ),
+      ).rejects.toThrow(
+        'Cloudinary document verification download failed: 503',
+      );
+    } finally {
+      fetchMock.mockRestore();
     }
   });
 

@@ -16,9 +16,12 @@ const categoryId = 'b649b52f-69e5-43e1-8a56-f81c5f8f5a92';
 const actorId = 'admin-1';
 
 const mockDocuments = {
+  authorizeUpload: jest.fn(),
+  completeUpload: jest.fn(),
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+  updateMetadata: jest.fn(),
   download: jest.fn(),
   downloadForClient: jest.fn(),
   remove: jest.fn(),
@@ -60,6 +63,14 @@ describe('DocumentController', () => {
   beforeEach(() => {
     jest.resetAllMocks();
 
+    mockDocuments.authorizeUpload.mockResolvedValue({
+      documentId,
+      signature: 'test-signature',
+    });
+    mockDocuments.completeUpload.mockResolvedValue({
+      id: documentId,
+      projectId,
+    });
     mockDocuments.upload.mockResolvedValue({ id: documentId });
     mockDocuments.findAll.mockResolvedValue({
       data: [],
@@ -71,6 +82,10 @@ describe('DocumentController', () => {
       },
     });
     mockDocuments.findOne.mockResolvedValue({ id: documentId });
+    mockDocuments.updateMetadata.mockResolvedValue({
+      id: documentId,
+      fileName: 'Approved Contract.pdf',
+    });
     mockDocuments.download.mockResolvedValue({
       downloadUrl: 'https://example.com/signed',
       expiresInSeconds: 300,
@@ -95,6 +110,66 @@ describe('DocumentController', () => {
 
   afterAll(async () => {
     await app.close();
+  });
+
+  it('accepts valid direct upload authorization requests', async () => {
+    const payload = {
+      categoryId,
+      fileName: 'contract.pdf',
+      mimeType: 'application/pdf',
+      fileSize: 10485760,
+    };
+
+    await request(server)
+      .post(`/projects/${projectId}/documents/upload-authorizations`)
+      .set('x-user-id', actorId)
+      .send(payload)
+      .expect(201);
+
+    expect(mockDocuments.authorizeUpload).toHaveBeenCalledWith(
+      projectId,
+      payload,
+      actorId,
+    );
+  });
+
+  it('rejects invalid direct upload authorization metadata', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/upload-authorizations`)
+      .set('x-user-id', actorId)
+      .send({
+        categoryId,
+        fileName: 'contract.pdf',
+        mimeType: 'application/pdf',
+        fileSize: -1,
+      })
+      .expect(400);
+
+    expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
+  });
+
+  it('forwards valid upload completion requests', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/${documentId}/complete`)
+      .set('x-user-id', actorId)
+      .send({})
+      .expect(201);
+
+    expect(mockDocuments.completeUpload).toHaveBeenCalledWith(
+      projectId,
+      documentId,
+      actorId,
+    );
+  });
+
+  it('rejects invalid document IDs during completion', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/invalid-id/complete`)
+      .set('x-user-id', actorId)
+      .send({})
+      .expect(400);
+
+    expect(mockDocuments.completeUpload).not.toHaveBeenCalled();
   });
 
   it('accepts multipart document uploads', async () => {
@@ -201,6 +276,38 @@ describe('DocumentController', () => {
       .expect(200);
 
     expect(mockDocuments.findOne).toHaveBeenCalledWith(documentId, actorId);
+  });
+
+  it('accepts valid document metadata updates', async () => {
+    const payload = {
+      fileName: 'Approved Contract.pdf',
+      description: 'Final contract',
+    };
+
+    await request(server)
+      .patch(`/documents/${documentId}`)
+      .set('x-user-id', actorId)
+      .send(payload)
+      .expect(200);
+
+    expect(mockDocuments.updateMetadata).toHaveBeenCalledWith(
+      documentId,
+      payload,
+      actorId,
+    );
+  });
+
+  it('rejects invalid document metadata updates', async () => {
+    await request(server)
+      .patch(`/documents/${documentId}`)
+      .set('x-user-id', actorId)
+      .send({
+        fileName: 'Renamed.pdf',
+        uploadedById: actorId,
+      })
+      .expect(400);
+
+    expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
   });
 
   it('returns a temporary signed download URL', async () => {

@@ -27,9 +27,11 @@ import {
 } from '@nestjs/swagger';
 import { DocumentFileInterceptor } from './interceptors/document-file.interceptor';
 import { DocumentService } from './document.service';
+import { AuthorizeDocumentUploadDto } from './dto/authorize-document-upload.dto';
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { type UploadedDocumentFile } from './validation/document-file.validator';
 
@@ -41,6 +43,32 @@ import { type UploadedDocumentFile } from './validation/document-file.validator'
 @Controller()
 export class DocumentController {
   constructor(private readonly documents: DocumentService) {}
+
+  @Post('projects/:projectId/documents/upload-authorizations')
+  @ApiOperation({ summary: 'Authorize a direct Cloudinary document upload' })
+  @ApiCreatedResponse({
+    description: 'Signed upload authorization and pending document ID',
+  })
+  @ApiConflictResponse({ description: 'Project does not accept new documents' })
+  authorizeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Body() dto: AuthorizeDocumentUploadDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.authorizeUpload(projectId, dto, actorId);
+  }
+
+  @Post('projects/:projectId/documents/:documentId/complete')
+  @ApiOperation({ summary: 'Verify and complete a direct document upload' })
+  @ApiCreatedResponse({ description: 'Verified active document metadata' })
+  @ApiConflictResponse({ description: 'Upload is incomplete or conflicted' })
+  completeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.completeUpload(projectId, documentId, actorId);
+  }
 
   @Post('projects/:projectId/documents')
   @UseInterceptors(DocumentFileInterceptor)
@@ -87,6 +115,18 @@ export class DocumentController {
     @Headers('x-user-id') actorId?: string,
   ) {
     return this.documents.findOne(id, actorId);
+  }
+
+  @Patch('documents/:id')
+  @ApiOperation({ summary: 'Update project document metadata' })
+  @ApiOkResponse({ description: 'Updated document metadata' })
+  @ApiConflictResponse({ description: 'Document state changed during update' })
+  updateMetadata(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDocumentDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.updateMetadata(id, dto, actorId);
   }
 
   @Get('documents/:id/download')

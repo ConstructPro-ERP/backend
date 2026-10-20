@@ -9,6 +9,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DDP-91 — Secure direct document uploads and expanded file support** ([issue #137](https://github.com/ConstructPro-ERP/backend/issues/137))
+  - Added per-upload signed Cloudinary authorization with unique document identifiers, authenticated delivery, and non-overwriting uploads.
+  - Added verified upload completion and recovery using the existing PENDING, ACTIVE, and FAILED document lifecycle.
+  - Supported direct uploads up to 50 MiB while preserving the legacy 4 MiB multipart endpoint.
+  - Expanded document support to CAD, Revit, Lumion, 3ds Max, BIM, office, image, and archive attachments under the documented internal-use policy.
+  - Added metadata editing and uploader/category details to document responses.
+  - Added unit, integration, Gateway E2E, and opt-in live Cloudinary test coverage.
+
 - **DDP-86 — Client Portal ownership-filtered read-only access** ([issue #123](https://github.com/ConstructPro-ERP/backend/issues/123))
   - Added nullable unique `Customer.userId` relationship and Admin-only Customer–User account linking.
   - Introduced authenticated Client Portal endpoints for quotations, projects, progress, milestones and document browsing.

@@ -20,7 +20,7 @@ The backend uses a shared Prisma schema and Neon PostgreSQL database. `libs/comm
 ## Decision
 
 1. **Runtime and domain ownership:** `apps/document-service` owns project-uploaded document metadata, validation, file lifecycle, categories, and recovery. The existing quotation/invoice document-generation workflows remain in their current services. `server.ts` starts this service when `DEPLOY_APP=document-service`.
-2. **API boundary:** The API Gateway exposes the nine DDP-83 document/category routes, checks authenticated user role, and forwards server-resolved actor identity to Document Service. Document Service resolves the current actor against PostgreSQL before enforcing project/document rules. This is not a separate database-per-service architecture.
+2. **API boundary:** The API Gateway exposes the DDP-83 document/category routes and the DDP-91 signed upload authorization, completion, and metadata-editing routes. It verifies JWT authentication and route permissions before forwarding the verified actor identity. Document Service resolves the current actor against PostgreSQL and enforces project-level authorization. This is not a separate database-per-service architecture.
 3. **Storage:** Use authenticated Cloudinary delivery for project-uploaded binary assets; keep PostgreSQL as the metadata source of truth. Do not use knowledge of a Cloudinary URL or public ID as proof of authorization. Generate a short-lived signed download URL only after server-side authorization. Preserve the existing public Cloudinary upload behavior for quotation/invoice consumers.
 4. **Validation and lifecycle:** Legacy multipart uploads remain limited to 4 MiB, while direct Cloudinary uploads support files up to 50 MiB. PDF, PNG, JPEG, and DOCX retain strict binary-content validation. Approved CAD, BIM, 3D design, office, image, and archive files are supported as opaque attachments under the DDP-91 internal organization policy. Validation includes allowed extensions, MIME declarations, safe filenames, file sizes, and authenticated Cloudinary asset verification. Persist PENDING metadata before uploading, promote documents to ACTIVE only after the applicable verification succeeds, and retain DELETING, DELETED, and FAILED states for recovery and cleanup.
 5. **Recovery:** Reconcile stale PENDING, FAILED and DELETING records through `DocumentReconciliationService`. The dedicated HTTP cron endpoint requires `CRON_SECRET`. `vercel.mjs` enables daily scheduling only when `DEPLOY_APP=document-service`; production scheduling must be verified after creating the Document Service Vercel project. Current reconciliation processes bounded batches, not an unbounded drain.
@@ -45,6 +45,23 @@ Recovery:
   -> Vercel scheduled request + CRON_SECRET
   -> DocumentReconciliationService -> Neon + Cloudinary
 ```
+
+### Signed direct-upload flow
+
+1. The authenticated frontend requests upload authorization through the API Gateway.
+2. Document Service validates the user, project, category, filename, MIME declaration, and file size.
+3. Document Service creates a PENDING record and returns a unique Cloudinary public ID with signed upload parameters.
+4. The frontend uploads file bytes directly to Cloudinary using authenticated delivery and `overwrite: false`.
+5. The original uploader requests completion through the API Gateway.
+6. Document Service verifies the authenticated Cloudinary asset against the persisted metadata.
+7. Approved PDF, PNG, JPEG, and DOCX files undergo binary-content verification; other approved formats follow the documented opaque-attachment policy.
+8. The document becomes ACTIVE only after successful verification.
+
+The direct-upload limit is 50 MiB. The legacy multipart endpoint retains its 4 MiB limit.
+
+The `npm run test:cloudinary-live` command runs opt-in tests against a real Cloudinary account. It requires the Cloudinary environment variables and must not run automatically in ordinary CI. Test assets use unique identifiers and are deleted after testing.
+
+This smoke test verifies Cloudinary transport and storage behavior, not the complete frontend-to-Gateway-to-PostgreSQL workflow. The database integration and Gateway tests cover those components separately.
 
 ## Rationale
 

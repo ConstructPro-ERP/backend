@@ -40,6 +40,7 @@ import {
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { DocumentRepository } from './repositories/document.repository';
+import { verifyStoredDocument } from './validation/stored-document.validator';
 import {
   validateDocumentFile,
   validateDocumentUploadMetadata,
@@ -125,6 +126,99 @@ export class DocumentService {
       documentId: id,
       ...signed,
     };
+  }
+
+  async completeUpload(
+    projectId: string,
+    documentId: string,
+    actorId?: string,
+  ) {
+    const actor = await this.resolveActor(actorId);
+
+    const document = await this.documents.findByIdForReconciliation(documentId);
+
+    if (
+      !document ||
+      document.projectId !== projectId ||
+      document.deletedAt !== null
+    ) {
+      this.throwDocumentNotFound();
+    }
+
+    const project = await this.getProject(projectId);
+
+    assertCanModifyProject(actor, project);
+
+    if (document.uploadedById !== actor.id) {
+      throw new ForbiddenException(
+        'Only the original uploader can complete this upload.',
+      );
+    }
+
+    if (document.storageStatus === DocumentStorageStatus.ACTIVE) {
+      return this.findOne(documentId, actor.id);
+    }
+
+    if (document.storageStatus !== DocumentStorageStatus.PENDING) {
+      throw new ConflictException(
+        'Document is not awaiting upload completion.',
+      );
+    }
+
+    if (
+      project.status === ProjectStatus.COMPLETED ||
+      project.status === ProjectStatus.CANCELLED
+    ) {
+      throw new ConflictException(
+        'Documents cannot be completed for completed or cancelled projects.',
+      );
+    }
+
+    let verification: Awaited<ReturnType<typeof verifyStoredDocument>>;
+
+    try {
+      verification = await verifyStoredDocument(this.cloudinary, document);
+    } catch (error: unknown) {
+      this.logFailure(`Document ${documentId} verification failed`, error);
+
+      throw new ServiceUnavailableException(
+        'Document verification is temporarily unavailable.',
+      );
+    }
+
+    if (verification === 'missing') {
+      throw new ConflictException(
+        'Document upload has not completed in Cloudinary.',
+      );
+    }
+
+    if (verification === 'invalid') {
+      await this.compensateInvalidUpload(
+        documentId,
+        document.cloudinaryPublicId,
+        this.getResourceType(document.cloudinaryResourceType),
+      );
+
+      throw new BadRequestException({
+        code: ErrorCode.DOCUMENT_INVALID_FILE,
+        message: 'Uploaded document failed content verification.',
+      });
+    }
+
+    const activated = await this.documents.markUploadActive(documentId);
+
+    if (activated.count !== 1) {
+      const current =
+        await this.documents.findByIdForReconciliation(documentId);
+
+      if (current?.storageStatus !== DocumentStorageStatus.ACTIVE) {
+        throw new ConflictException(
+          'Document state changed during upload completion.',
+        );
+      }
+    }
+
+    return this.findOne(documentId, actor.id);
   }
 
   async upload(

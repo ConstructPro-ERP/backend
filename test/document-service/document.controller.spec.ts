@@ -17,6 +17,7 @@ const actorId = 'admin-1';
 
 const mockDocuments = {
   authorizeUpload: jest.fn(),
+  completeUpload: jest.fn(),
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
@@ -64,6 +65,10 @@ describe('DocumentController', () => {
     mockDocuments.authorizeUpload.mockResolvedValue({
       documentId,
       signature: 'test-signature',
+    });
+    mockDocuments.completeUpload.mockResolvedValue({
+      id: documentId,
+      projectId,
     });
     mockDocuments.upload.mockResolvedValue({ id: documentId });
     mockDocuments.findAll.mockResolvedValue({
@@ -136,6 +141,30 @@ describe('DocumentController', () => {
       .expect(400);
 
     expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
+  });
+
+  it('forwards valid upload completion requests', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/${documentId}/complete`)
+      .set('x-user-id', actorId)
+      .send({})
+      .expect(201);
+
+    expect(mockDocuments.completeUpload).toHaveBeenCalledWith(
+      projectId,
+      documentId,
+      actorId,
+    );
+  });
+
+  it('rejects invalid document IDs during completion', async () => {
+    await request(server)
+      .post(`/projects/${projectId}/documents/invalid-id/complete`)
+      .set('x-user-id', actorId)
+      .send({})
+      .expect(400);
+
+    expect(mockDocuments.completeUpload).not.toHaveBeenCalled();
   });
 
   it('accepts multipart document uploads', async () => {

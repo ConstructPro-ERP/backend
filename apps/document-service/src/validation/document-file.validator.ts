@@ -265,7 +265,10 @@ function validateDocumentName(name: string): void {
 
 export function validateDocumentFile(
   file: UploadedDocumentFile | undefined,
+  maxFileSize = MAX_DOCUMENT_FILE_SIZE_BYTES,
 ): ValidatedDocumentFile {
+  const maxFileSizeMB = maxFileSize / (1024 * 1024);
+
   if (
     !file ||
     !Buffer.isBuffer(file.buffer) ||
@@ -280,10 +283,10 @@ export function validateDocumentFile(
     return invalidFile('Document is empty or has an invalid size.');
   }
 
-  if (file.buffer.length > MAX_DOCUMENT_FILE_SIZE_BYTES) {
+  if (file.buffer.length > maxFileSize) {
     throw new PayloadTooLargeException({
       code: ErrorCode.DOCUMENT_FILE_TOO_LARGE,
-      message: `Document exceeds the ${MAX_DOCUMENT_FILE_SIZE_MIB} MiB upload limit.`,
+      message: `Document exceeds the ${maxFileSizeMB} MiB upload limit.`,
     });
   }
 

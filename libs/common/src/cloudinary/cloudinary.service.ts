@@ -323,6 +323,66 @@ export class CloudinaryService {
     });
   }
 
+  async downloadAuthenticatedAssetBytes(
+    publicId: string,
+    format: string,
+    resourceType: DocumentResourceType,
+    maxBytes: number,
+  ): Promise<Buffer> {
+    this.ensureDocumentStorageConfigured();
+
+    const url = this.createAuthenticatedDownloadUrl(
+      publicId,
+      format,
+      resourceType,
+    );
+
+    const response = await fetch(url, {
+      redirect: 'error',
+      signal: AbortSignal.timeout(120000),
+    });
+
+    if (!response.ok || !response.body) {
+      throw new Error(
+        `Cloudinary document verification download failed: ${response.status}`,
+      );
+    }
+
+    const contentLength = Number(response.headers.get('content-length') ?? '0');
+
+    if (contentLength > maxBytes) {
+      throw new Error('Cloudinary verification download exceeds size limit.');
+    }
+
+    const reader = response.body.getReader();
+    const buffers: Buffer[] = [];
+    let totalBytes = 0;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          break;
+        }
+
+        totalBytes += value.byteLength;
+
+        if (totalBytes > maxBytes) {
+          throw new Error(
+            'Cloudinary verification download exceeds size limit.',
+          );
+        }
+
+        buffers.push(Buffer.from(value));
+      }
+    } finally {
+      await reader.cancel().catch(() => undefined);
+    }
+
+    return Buffer.concat(buffers, totalBytes);
+  }
+
   async deleteAuthenticatedAsset(
     publicId: string,
     resourceType: DocumentResourceType,

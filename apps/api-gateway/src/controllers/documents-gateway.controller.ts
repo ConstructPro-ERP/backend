@@ -96,6 +96,25 @@ export class DocumentsGatewayController {
     );
   }
 
+  @Post('projects/:projectId/documents/:documentId/complete')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Verify and complete a direct document upload' })
+  @ApiCreatedResponse({ description: 'Verified document metadata' })
+  @ApiConflictResponse({ description: 'Upload is incomplete or conflicted' })
+  completeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.post<unknown>(
+        this.url(`/projects/${projectId}/documents/${documentId}/complete`),
+        {},
+        { headers: this.forwardHeaders(req) },
+      ),
+    );
+  }
+
   @Post('projects/:projectId/documents')
   @Roles(...DOCUMENT_WRITE_ROLES)
   @UseInterceptors(DocumentFileInterceptor)

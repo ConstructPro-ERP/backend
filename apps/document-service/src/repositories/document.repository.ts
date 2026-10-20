@@ -179,6 +179,8 @@ export class DocumentRepository {
             storageStatus: true,
             cloudinaryPublicId: true,
             cloudinaryResourceType: true,
+            originalName: true,
+            mimeType: true,
             fileSize: true,
             updatedAt: true,
           },

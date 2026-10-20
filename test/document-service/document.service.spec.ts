@@ -76,6 +76,8 @@ const mockDocuments = {
 
 const mockCloudinary = {
   createSignedDocumentUpload: jest.fn(),
+  findAuthenticatedAsset: jest.fn(),
+  downloadAuthenticatedAssetBytes: jest.fn(),
   uploadAuthenticatedBuffer: jest.fn(),
   deleteAuthenticatedAsset: jest.fn(),
   createAuthenticatedDownloadUrl: jest.fn(),
@@ -147,6 +149,14 @@ describe('DocumentService', () => {
     mockDocuments.countCategoryDocuments.mockResolvedValue(0);
     mockDocuments.disableCategory.mockResolvedValue({});
     mockDocuments.deleteUnusedCategory.mockResolvedValue({ count: 1 });
+
+    mockCloudinary.findAuthenticatedAsset.mockResolvedValue({
+      publicId: document.cloudinaryPublicId,
+      resourceType: 'raw',
+      bytes: pdf.length,
+    });
+
+    mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(pdf);
 
     mockCloudinary.createSignedDocumentUpload.mockImplementation(
       (publicId: string, resourceType: DocumentResourceType) => ({
@@ -548,6 +558,120 @@ describe('DocumentService', () => {
       await expect(
         service.authorizeUpload('project-1', authorization, 'admin-1'),
       ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  describe('direct upload completion', () => {
+    const pending = {
+      ...document,
+      storageStatus: DocumentStorageStatus.PENDING,
+    };
+
+    it('verifies the stored file before activating the document', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).resolves.toHaveProperty('id', 'doc-1');
+
+      expect(mockCloudinary.findAuthenticatedAsset).toHaveBeenCalledWith(
+        pending.cloudinaryPublicId,
+        'raw',
+      );
+
+      expect(mockCloudinary.downloadAuthenticatedAssetBytes).toHaveBeenCalled();
+
+      expect(mockDocuments.markUploadActive).toHaveBeenCalledWith('doc-1');
+    });
+
+    it('keeps incomplete Cloudinary uploads pending', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+      mockCloudinary.findAuthenticatedAsset.mockResolvedValue(null);
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ConflictException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockDocuments.markUploadFailed).not.toHaveBeenCalled();
+    });
+
+    it('rejects invalid uploaded contents and marks the document failed', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(
+        Buffer.alloc(pdf.length, 0x41),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockDocuments.markUploadFailed).toHaveBeenCalledWith('doc-1');
+      expect(mockCloudinary.deleteAuthenticatedAsset).toHaveBeenCalledWith(
+        pending.cloudinaryPublicId,
+        'raw',
+      );
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('keeps the document pending when Cloudinary verification fails', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockCloudinary.downloadAuthenticatedAssetBytes.mockRejectedValue(
+        new Error('Cloudinary unavailable'),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ServiceUnavailableException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockDocuments.markUploadFailed).not.toHaveBeenCalled();
+    });
+
+    it('allows idempotent completion of active documents', async () => {
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).resolves.toHaveProperty('id', 'doc-1');
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+      expect(mockCloudinary.findAuthenticatedAsset).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion by another uploader', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue({
+        ...pending,
+        uploadedById: 'another-user',
+      });
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion for a mismatched project', async () => {
+      await expect(
+        service.completeUpload('different-project', 'doc-1', 'admin-1'),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
+    });
+
+    it('rejects completion by unauthorized roles', async () => {
+      mockDocuments.findByIdForReconciliation.mockResolvedValue(pending);
+
+      mockDocuments.findUserWithRole.mockResolvedValue(
+        makeUser('ACCOUNTANT', 'accountant-1'),
+      );
+
+      await expect(
+        service.completeUpload('project-1', 'doc-1', 'accountant-1'),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockDocuments.markUploadActive).not.toHaveBeenCalled();
     });
   });
 

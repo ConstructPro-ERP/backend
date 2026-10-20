@@ -57,6 +57,18 @@ export class DocumentController {
     return this.documents.authorizeUpload(projectId, dto, actorId);
   }
 
+  @Post('projects/:projectId/documents/:documentId/complete')
+  @ApiOperation({ summary: 'Verify and complete a direct document upload' })
+  @ApiCreatedResponse({ description: 'Verified active document metadata' })
+  @ApiConflictResponse({ description: 'Upload is incomplete or conflicted' })
+  completeUpload(
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.completeUpload(projectId, documentId, actorId);
+  }
+
   @Post('projects/:projectId/documents')
   @UseInterceptors(DocumentFileInterceptor)
   @ApiOperation({ summary: 'Upload a project document' })

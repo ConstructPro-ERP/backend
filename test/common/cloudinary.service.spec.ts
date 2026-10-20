@@ -405,6 +405,93 @@ describe('CloudinaryService', () => {
     }
   });
 
+  it('downloads authenticated document bytes for verification', async () => {
+    const buffer = Buffer.from('verified PDF content');
+
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(buffer, { status: 200 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      const result = await service.downloadAuthenticatedAssetBytes(
+        'constructpro/projects/project-1/doc-1.pdf',
+        'pdf',
+        'raw',
+        1024,
+      );
+
+      expect(result.equals(buffer)).toBe(true);
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://api.cloudinary.com/test-download',
+        {
+          redirect: 'error',
+          signal: expect.any(AbortSignal) as AbortSignal,
+        },
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('rejects verification downloads larger than the configured limit', async () => {
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(Buffer.alloc(1025), { status: 200 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      await expect(
+        service.downloadAuthenticatedAssetBytes(
+          'constructpro/projects/project-1/doc-1.pdf',
+          'pdf',
+          'raw',
+          1024,
+        ),
+      ).rejects.toThrow('Cloudinary verification download exceeds size limit.');
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it('rejects unsuccessful Cloudinary verification downloads', async () => {
+    (cloudinary.utils.private_download_url as jest.Mock).mockReturnValue(
+      'https://api.cloudinary.com/test-download',
+    );
+
+    const fetchMock = jest
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(null, { status: 503 }));
+
+    try {
+      const service = new CloudinaryService();
+
+      await expect(
+        service.downloadAuthenticatedAssetBytes(
+          'constructpro/projects/project-1/doc-1.pdf',
+          'pdf',
+          'raw',
+          1024,
+        ),
+      ).rejects.toThrow(
+        'Cloudinary document verification download failed: 503',
+      );
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it('deletes authenticated assets successfully', async () => {
     (cloudinary.uploader.destroy as jest.Mock).mockResolvedValue({
       result: 'ok',

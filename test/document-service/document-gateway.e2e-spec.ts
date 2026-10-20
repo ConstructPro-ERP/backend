@@ -37,6 +37,7 @@ const actors: Record<string, { id: string; role: string }> = {
 
 const mockDocuments = {
   authorizeUpload: jest.fn(),
+  completeUpload: jest.fn(),
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
@@ -163,6 +164,10 @@ describe('Documents — Gateway to Document Service E2E', () => {
       documentId,
       signature: 'test-signature',
     });
+    mockDocuments.completeUpload.mockResolvedValue({
+      id: documentId,
+      projectId,
+    });
     mockDocuments.upload.mockResolvedValue({ id: documentId });
     mockDocuments.findAll.mockResolvedValue({
       data: [{ id: documentId }],
@@ -276,6 +281,58 @@ describe('Documents — Gateway to Document Service E2E', () => {
       .expect(401);
 
     expect(mockDocuments.authorizeUpload).not.toHaveBeenCalled();
+  });
+
+  it('forwards upload completion with the authenticated actor', async () => {
+    const response = await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/${documentId}/complete`)
+      .set('authorization', token('manager'))
+      .set('x-user-id', actors.admin.id)
+      .send({})
+      .expect(201);
+
+    const body = response.body as GatewayBody<{
+      id: string;
+      projectId: string;
+    }>;
+
+    expect(body.success).toBe(true);
+    expect(body.data.id).toBe(documentId);
+
+    expect(mockDocuments.completeUpload).toHaveBeenCalledWith(
+      projectId,
+      documentId,
+      actors.manager.id,
+    );
+  });
+
+  it('rejects accountant upload completion requests', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/${documentId}/complete`)
+      .set('authorization', token('accountant'))
+      .send({})
+      .expect(403);
+
+    expect(mockDocuments.completeUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated upload completion requests', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/${documentId}/complete`)
+      .send({})
+      .expect(401);
+
+    expect(mockDocuments.completeUpload).not.toHaveBeenCalled();
+  });
+
+  it('rejects invalid completion document IDs before forwarding', async () => {
+    await request(gatewayServer)
+      .post(`/api/projects/${projectId}/documents/invalid-id/complete`)
+      .set('authorization', token('admin'))
+      .send({})
+      .expect(400);
+
+    expect(mockDocuments.completeUpload).not.toHaveBeenCalled();
   });
 
   it('forwards multipart bytes and the verified manager identity', async () => {

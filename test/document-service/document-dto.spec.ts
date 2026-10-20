@@ -9,6 +9,7 @@ import {
 import { CreateDocumentCategoryDto } from '../../apps/document-service/src/dto/create-document-category.dto';
 import { UpdateDocumentCategoryDto } from '../../apps/document-service/src/dto/update-document-category.dto';
 import { AuthorizeDocumentUploadDto } from '../../apps/document-service/src/dto/authorize-document-upload.dto';
+import { UpdateDocumentDto } from '../../apps/document-service/src/dto/update-document.dto';
 
 const categoryId = 'b390c2c8-86f5-484f-ad9f-170bca22703d';
 
@@ -166,6 +167,71 @@ describe('Document DTO validation', () => {
           description: ' ',
         }),
       ).toEqual(expect.arrayContaining(['categoryId', 'description']));
+    });
+  });
+
+  describe('UpdateDocumentDto', () => {
+    it('accepts valid partial updates', () => {
+      expect(
+        errors(UpdateDocumentDto, {
+          fileName: 'Approved Plan.pdf',
+        }),
+      ).toEqual([]);
+
+      expect(errors(UpdateDocumentDto, { categoryId })).toEqual([]);
+
+      expect(
+        errors(UpdateDocumentDto, {
+          description: 'Final approved drawing',
+        }),
+      ).toEqual([]);
+
+      expect(errors(UpdateDocumentDto, { description: null })).toEqual([]);
+    });
+
+    it('rejects invalid names and descriptions', () => {
+      expect(
+        errors(UpdateDocumentDto, {
+          fileName: ' ',
+          description: ' ',
+        }),
+      ).toEqual(expect.arrayContaining(['fileName', 'description']));
+
+      expect(
+        errors(UpdateDocumentDto, {
+          fileName: 'A'.repeat(256),
+          description: 'B'.repeat(1001),
+        }),
+      ).toEqual(expect.arrayContaining(['fileName', 'description']));
+    });
+
+    it('rejects invalid category identifiers', () => {
+      expect(
+        errors(UpdateDocumentDto, {
+          categoryId: 'invalid',
+        }),
+      ).toContain('categoryId');
+    });
+
+    it('rejects server-controlled document fields', () => {
+      expect(
+        errors(UpdateDocumentDto, {
+          fileName: 'Approved.pdf',
+          uploadedById: categoryId,
+          originalName: 'forged.pdf',
+          cloudinaryPublicId: 'forged',
+          fileSize: 100,
+          storageStatus: 'ACTIVE',
+        }),
+      ).toEqual(
+        expect.arrayContaining([
+          'uploadedById',
+          'originalName',
+          'cloudinaryPublicId',
+          'fileSize',
+          'storageStatus',
+        ]),
+      );
     });
   });
 

@@ -38,11 +38,13 @@ import {
   DocumentSortOrder,
 } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { DocumentRepository } from './repositories/document.repository';
 import { verifyStoredDocument } from './validation/stored-document.validator';
 import {
   validateDocumentFile,
+  validateDocumentName,
   validateDocumentUploadMetadata,
   type UploadedDocumentFile,
 } from './validation/document-file.validator';
@@ -393,9 +395,68 @@ export class DocumentService {
       fileSize: document.fileSize,
       description: document.description,
       uploadedById: document.uploadedById,
+      uploadedBy: document.uploadedBy,
+      category: document.category,
       createdAt: document.createdAt,
       updatedAt: document.updatedAt,
     };
+  }
+
+  async updateMetadata(id: string, dto: UpdateDocumentDto, actorId?: string) {
+    const actor = await this.resolveActor(actorId);
+    const document = await this.documents.findActiveById(id);
+
+    if (!document) {
+      this.throwDocumentNotFound();
+    }
+
+    const project = await this.getProject(document.projectId);
+    assertCanModifyProject(actor, project);
+
+    if (Object.values(dto).every((value) => value === undefined)) {
+      throw new BadRequestException({
+        code: ErrorCode.VALIDATION_ERROR,
+        message: 'At least one document metadata field must be provided.',
+      });
+    }
+
+    if (dto.fileName !== undefined) {
+      validateDocumentName(dto.fileName);
+
+      const currentExtension = extname(document.originalName).toLowerCase();
+      const updatedExtension = extname(dto.fileName).toLowerCase();
+
+      if (currentExtension !== updatedExtension) {
+        throw new BadRequestException({
+          code: ErrorCode.DOCUMENT_INVALID_FILE,
+          message: 'Document filename extension cannot be changed.',
+        });
+      }
+    }
+
+    if (dto.categoryId !== undefined) {
+      const category = await this.documents.findActiveCategoryById(
+        dto.categoryId,
+      );
+
+      if (!category) {
+        this.throwCategoryNotFound();
+      }
+    }
+
+    const updated = await this.documents.updateMetadata(id, {
+      fileName: dto.fileName,
+      categoryId: dto.categoryId,
+      description: dto.description,
+    });
+
+    if (updated.count !== 1) {
+      throw new ConflictException(
+        'Document state changed during metadata update.',
+      );
+    }
+
+    return this.findOne(id, actor.id);
   }
 
   async download(id: string, actorId?: string) {

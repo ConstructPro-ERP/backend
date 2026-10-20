@@ -31,6 +31,7 @@ import { AuthorizeDocumentUploadDto } from './dto/authorize-document-upload.dto'
 import { CreateDocumentCategoryDto } from './dto/create-document-category.dto';
 import { DocumentQueryDto } from './dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from './dto/update-document-category.dto';
+import { UpdateDocumentDto } from './dto/update-document.dto';
 import { UploadDocumentDto } from './dto/upload-document.dto';
 import { type UploadedDocumentFile } from './validation/document-file.validator';
 
@@ -114,6 +115,18 @@ export class DocumentController {
     @Headers('x-user-id') actorId?: string,
   ) {
     return this.documents.findOne(id, actorId);
+  }
+
+  @Patch('documents/:id')
+  @ApiOperation({ summary: 'Update project document metadata' })
+  @ApiOkResponse({ description: 'Updated document metadata' })
+  @ApiConflictResponse({ description: 'Document state changed during update' })
+  updateMetadata(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDocumentDto,
+    @Headers('x-user-id') actorId?: string,
+  ) {
+    return this.documents.updateMetadata(id, dto, actorId);
   }
 
   @Get('documents/:id/download')

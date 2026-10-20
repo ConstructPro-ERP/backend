@@ -21,6 +21,7 @@ const mockDocuments = {
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+  updateMetadata: jest.fn(),
   download: jest.fn(),
   downloadForClient: jest.fn(),
   remove: jest.fn(),
@@ -81,6 +82,10 @@ describe('DocumentController', () => {
       },
     });
     mockDocuments.findOne.mockResolvedValue({ id: documentId });
+    mockDocuments.updateMetadata.mockResolvedValue({
+      id: documentId,
+      fileName: 'Approved Contract.pdf',
+    });
     mockDocuments.download.mockResolvedValue({
       downloadUrl: 'https://example.com/signed',
       expiresInSeconds: 300,
@@ -271,6 +276,38 @@ describe('DocumentController', () => {
       .expect(200);
 
     expect(mockDocuments.findOne).toHaveBeenCalledWith(documentId, actorId);
+  });
+
+  it('accepts valid document metadata updates', async () => {
+    const payload = {
+      fileName: 'Approved Contract.pdf',
+      description: 'Final contract',
+    };
+
+    await request(server)
+      .patch(`/documents/${documentId}`)
+      .set('x-user-id', actorId)
+      .send(payload)
+      .expect(200);
+
+    expect(mockDocuments.updateMetadata).toHaveBeenCalledWith(
+      documentId,
+      payload,
+      actorId,
+    );
+  });
+
+  it('rejects invalid document metadata updates', async () => {
+    await request(server)
+      .patch(`/documents/${documentId}`)
+      .set('x-user-id', actorId)
+      .send({
+        fileName: 'Renamed.pdf',
+        uploadedById: actorId,
+      })
+      .expect(400);
+
+    expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
   });
 
   it('returns a temporary signed download URL', async () => {

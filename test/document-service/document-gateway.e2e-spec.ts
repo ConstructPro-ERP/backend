@@ -41,6 +41,7 @@ const mockDocuments = {
   upload: jest.fn(),
   findAll: jest.fn(),
   findOne: jest.fn(),
+  updateMetadata: jest.fn(),
   download: jest.fn(),
   downloadForClient: jest.fn(),
   remove: jest.fn(),
@@ -179,6 +180,10 @@ describe('Documents — Gateway to Document Service E2E', () => {
       },
     });
     mockDocuments.findOne.mockResolvedValue({ id: documentId });
+    mockDocuments.updateMetadata.mockResolvedValue({
+      id: documentId,
+      fileName: 'Approved Contract.pdf',
+    });
     mockDocuments.download.mockResolvedValue({
       downloadUrl: 'https://example.com/signed-document',
       expiresInSeconds: 300,
@@ -559,6 +564,66 @@ describe('Documents — Gateway to Document Service E2E', () => {
       documentId,
       actors.accountant.id,
     );
+  });
+
+  it('allows managers to update document metadata with verified identity', async () => {
+    const payload = {
+      fileName: 'Approved Contract.pdf',
+      description: 'Final approved contract',
+    };
+
+    const response = await request(gatewayServer)
+      .patch(`/api/documents/${documentId}`)
+      .set('authorization', token('manager'))
+      .set('x-user-id', actors.admin.id)
+      .send(payload)
+      .expect(200);
+
+    const body = response.body as GatewayBody<{
+      id: string;
+      fileName: string;
+    }>;
+
+    expect(body.success).toBe(true);
+    expect(body.data.fileName).toBe('Approved Contract.pdf');
+
+    expect(mockDocuments.updateMetadata).toHaveBeenCalledWith(
+      documentId,
+      payload,
+      actors.manager.id,
+    );
+  });
+
+  it('rejects accountant document metadata edits', async () => {
+    await request(gatewayServer)
+      .patch(`/api/documents/${documentId}`)
+      .set('authorization', token('accountant'))
+      .send({ description: 'Unauthorized edit' })
+      .expect(403);
+
+    expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects unauthenticated metadata updates', async () => {
+    await request(gatewayServer)
+      .patch(`/api/documents/${documentId}`)
+      .send({ description: 'Unauthorized edit' })
+      .expect(401);
+
+    expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
+  });
+
+  it('rejects attempts to change immutable document fields', async () => {
+    await request(gatewayServer)
+      .patch(`/api/documents/${documentId}`)
+      .set('authorization', token('admin'))
+      .send({
+        fileName: 'Approved Contract.pdf',
+        cloudinaryPublicId: 'forged',
+      })
+      .expect(400);
+
+    expect(mockDocuments.updateMetadata).not.toHaveBeenCalled();
   });
 
   it('forwards signed download requests', async () => {

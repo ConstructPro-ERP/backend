@@ -39,6 +39,7 @@ import { AuthorizeDocumentUploadDto } from '../../../document-service/src/dto/au
 import { CreateDocumentCategoryDto } from '../../../document-service/src/dto/create-document-category.dto';
 import { DocumentQueryDto } from '../../../document-service/src/dto/document-query.dto';
 import { UpdateDocumentCategoryDto } from '../../../document-service/src/dto/update-document-category.dto';
+import { UpdateDocumentDto } from '../../../document-service/src/dto/update-document.dto';
 import { UploadDocumentDto } from '../../../document-service/src/dto/upload-document.dto';
 import {
   MAX_DOCUMENT_FILE_SIZE_BYTES,
@@ -236,6 +237,23 @@ export class DocumentsGatewayController {
   ) {
     return this.forward(() =>
       this.httpService.get<unknown>(this.url(`/documents/${id}`), {
+        headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
+  @Patch('documents/:id')
+  @Roles(...DOCUMENT_WRITE_ROLES)
+  @ApiOperation({ summary: 'Update project document metadata' })
+  @ApiOkResponse({ description: 'Updated document metadata' })
+  @ApiConflictResponse({ description: 'Document state changed during update' })
+  updateMetadata(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateDocumentDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.forward(() =>
+      this.httpService.patch<unknown>(this.url(`/documents/${id}`), dto, {
         headers: this.forwardHeaders(req),
       }),
     );

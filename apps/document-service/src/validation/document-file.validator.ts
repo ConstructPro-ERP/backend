@@ -246,7 +246,7 @@ function isDocx(buffer: Buffer): boolean {
   }
 }
 
-function validateDocumentName(name: string): void {
+export function validateDocumentName(name: string): void {
   if (
     typeof name !== 'string' ||
     name.length === 0 ||

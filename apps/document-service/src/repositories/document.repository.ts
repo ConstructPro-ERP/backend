@@ -56,6 +56,12 @@ const documentListSelect = {
       categoryName: true,
     },
   },
+  uploadedBy: {
+    select: {
+      id: true,
+      fullName: true,
+    },
+  },
 } as const;
 
 @Injectable()
@@ -143,6 +149,20 @@ export class DocumentRepository {
         storageStatus: DocumentStorageStatus.ACTIVE,
         deletedAt: null,
       },
+      include: {
+        category: {
+          select: {
+            id: true,
+            categoryName: true,
+          },
+        },
+        uploadedBy: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+      },
     });
   }
 
@@ -214,7 +234,7 @@ export class DocumentRepository {
       ...(args.categoryId ? { categoryId: args.categoryId } : {}),
       ...(args.search
         ? {
-            originalName: {
+            fileName: {
               contains: args.search,
               mode: Prisma.QueryMode.insensitive,
             },
@@ -271,6 +291,28 @@ export class DocumentRepository {
       },
       data: {
         storageStatus: DocumentStorageStatus.FAILED,
+      },
+    });
+  }
+
+  updateMetadata(
+    id: string,
+    data: {
+      fileName?: string;
+      categoryId?: string;
+      description?: string | null;
+    },
+  ) {
+    return this.prisma.document.updateMany({
+      where: {
+        id,
+        storageStatus: DocumentStorageStatus.ACTIVE,
+        deletedAt: null,
+      },
+      data: {
+        fileName: data.fileName,
+        categoryId: data.categoryId,
+        description: data.description,
       },
     });
   }

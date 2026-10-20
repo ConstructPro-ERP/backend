@@ -139,7 +139,7 @@ describe('Calendar service HTTP integration: project events', () => {
     },
   );
 
-  it.each(['ACCOUNTANT', 'SALES_MANAGER', 'CLIENT'])(
+  it.each(['ACCOUNTANT', 'SALES_MANAGER', 'CLIENT_PORTAL_USER'])(
     'rejects %s project writes',
     async (role) => {
       actor(role);

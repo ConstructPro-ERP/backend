@@ -34,6 +34,7 @@ const validDocx = readFileSync(
 const mockCloudinary = {
   uploadAuthenticatedBuffer: jest.fn(),
   findAuthenticatedAsset: jest.fn(),
+  downloadAuthenticatedAssetBytes: jest.fn(),
   createAuthenticatedDownloadUrl: jest.fn(),
   deleteAuthenticatedAsset: jest.fn(),
 };
@@ -130,6 +131,8 @@ describe('Document Service — Neon database integration', () => {
           storageStatus: true,
           cloudinaryPublicId: true,
           cloudinaryResourceType: true,
+          originalName: true,
+          mimeType: true,
           fileSize: true,
           updatedAt: true,
         },
@@ -218,6 +221,7 @@ describe('Document Service — Neon database integration', () => {
     mockCloudinary.createAuthenticatedDownloadUrl.mockReturnValue(signedUrl);
     mockCloudinary.deleteAuthenticatedAsset.mockResolvedValue(undefined);
     mockCloudinary.findAuthenticatedAsset.mockResolvedValue(null);
+    mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(pdf);
   });
 
   afterEach(async () => {
@@ -538,7 +542,16 @@ describe('Document Service — Neon database integration', () => {
     });
 
     const outcome = await reconcileTestDocuments();
+
+    expect(mockCloudinary.downloadAuthenticatedAssetBytes).toHaveBeenCalledWith(
+      pending.cloudinaryPublicId,
+      'pdf',
+      'raw',
+      50 * 1024 * 1024,
+    );
+
     expect(outcome).toMatchObject({ activated: 1, errors: 0 });
+
     const recovered = await prisma.document.findUniqueOrThrow({
       where: { id: pending.id },
     });

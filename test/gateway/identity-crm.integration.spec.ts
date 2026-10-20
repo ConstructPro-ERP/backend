@@ -1,7 +1,12 @@
 import { HttpModule } from '@nestjs/axios';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { createServer, Server } from 'node:http';
+import {
+  createServer,
+  IncomingMessage,
+  Server,
+  ServerResponse,
+} from 'node:http';
 import request from 'supertest';
 import { JwtAuthGuard } from '../../apps/api-gateway/src/guards/jwt-auth.guard';
 import { RolesGuard } from '../../apps/api-gateway/src/guards/roles.guard';
@@ -21,6 +26,14 @@ const staff = roles.slice(0, 5);
 const sales = roles.slice(0, 3);
 type Method = 'get' | 'post' | 'patch' | 'delete';
 type Route = { method: Method; path: string; allowed: string[]; body?: object };
+
+function responseBody(response: { body: unknown }): Record<string, unknown> {
+  const body = response.body;
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) {
+    throw new Error('Expected a JSON response object');
+  }
+  return body as Record<string, unknown>;
+}
 const routes: Route[] = [
   { method: 'get', path: '/users', allowed: ['ADMIN'] },
   {
@@ -120,7 +133,7 @@ const routes: Route[] = [
 ];
 
 describe('Identity and CRM gateway HTTP integration (stub downstream services)', () => {
-  let app: INestApplication;
+  let app: INestApplication<Server>;
   let upstream: Server;
   const envKeys = [
     'AUTH_SERVICE_URL',
@@ -140,7 +153,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
   let disconnect = false;
 
   beforeAll(async () => {
-    upstream = createServer(async (req, res) => {
+    async function handleRequest(req: IncomingMessage, res: ServerResponse) {
       // Identity lookup is a stub; the gateway's authentication and role guards are real.
       if (req.url === '/auth/me') {
         const role = req.headers.authorization?.replace('Bearer ', '');
@@ -160,7 +173,12 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
         return;
       }
       let raw = '';
-      for await (const chunk of req) raw += chunk.toString();
+      for await (const chunk of req as AsyncIterable<unknown>) {
+        if (!Buffer.isBuffer(chunk)) {
+          throw new Error('Expected a request body buffer');
+        }
+        raw += chunk.toString('utf8');
+      }
       calls.push({
         method: req.method!,
         path: req.url!,
@@ -177,6 +195,11 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
         ...(reply.location ? { location: reply.location } : {}),
       });
       res.end(JSON.stringify(reply.body));
+    }
+    upstream = createServer((req, res) => {
+      void handleRequest(req, res).catch((error: unknown) => {
+        res.destroy(error instanceof Error ? error : new Error(String(error)));
+      });
     });
     await new Promise<void>((resolve) =>
       upstream.listen(0, '127.0.0.1', resolve),
@@ -297,7 +320,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
 
   it.each(['invalid', 'expired'])('rejects %s tokens', async (token) => {
     const response = await call('get', '/users', token).expect(401);
-    expect(response.body.code).toBe(
+    expect(responseBody(response).code).toBe(
       token === 'expired' ? 'TOKEN_EXPIRED' : 'TOKEN_INVALID',
     );
     expect(calls).toHaveLength(0);
@@ -358,7 +381,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
         code: 'VALIDATION_ERROR',
       });
       if (path !== '/clients/invalid/portal-user') {
-        expect(response.body.details).toEqual(expect.any(Array));
+        expect(responseBody(response).details).toEqual(expect.any(Array));
       }
       expect(calls).toHaveLength(0);
     },
@@ -391,7 +414,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
       refreshToken: 'test-refresh-token',
     };
     const response = await call('post', path, undefined, body).expect(status);
-    expect(response.body.data).toEqual(reply.body);
+    expect(responseBody(response).data).toEqual(reply.body);
     expect(calls).toEqual([
       expect.objectContaining({ method: 'POST', path, body }),
     ]);
@@ -399,7 +422,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
 
   it('returns the authenticated profile', async () => {
     const response = await call('get', '/auth/me', 'ADMIN').expect(200);
-    expect(response.body.data).toEqual({ id, role: 'ADMIN' });
+    expect(responseBody(response).data).toEqual({ id, role: 'ADMIN' });
     await call('get', '/auth/me').expect(401);
   });
 
@@ -425,8 +448,8 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
       expect(response.body).toMatchObject({
         success: false,
         ...reply.body,
-        traceId: expect.any(String),
       });
+      expect(responseBody(response).traceId).toEqual(expect.any(String));
     },
   );
 
@@ -493,7 +516,7 @@ describe('Identity and CRM gateway HTTP integration (stub downstream services)',
       location: 'https://unexpected.example.test/login',
     };
     const response = await call('get', '/auth/google').expect(502);
-    expect(response.body.code).toBe('OAUTH_FAILED');
+    expect(responseBody(response).code).toBe('OAUTH_FAILED');
     expect(response.headers.location).toBeUndefined();
   });
 });

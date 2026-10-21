@@ -107,6 +107,7 @@ interface CloudinaryUploadResponse {
   resource_type?: string;
   type?: string;
   bytes?: number;
+  display_name?: string;
 }
 
 async function uploadWithSignature(
@@ -185,6 +186,7 @@ describe('Document Service real Cloudinary integration', () => {
           buffer,
           publicId,
           resourceType,
+          `project-document.${format}`,
         );
 
         expect(uploaded).toEqual({
@@ -246,12 +248,14 @@ describe('Document Service real Cloudinary integration', () => {
       const authorization = cloudinary.createSignedDocumentUpload(
         publicId,
         resourceType,
+        fileName,
       );
 
       expect(authorization.uploadParameters).toMatchObject({
         public_id: publicId,
         type: 'authenticated',
         overwrite: 'false',
+        display_name: fileName,
       });
 
       expect(authorization).not.toHaveProperty('apiSecret');
@@ -271,6 +275,7 @@ describe('Document Service real Cloudinary integration', () => {
           resource_type: resourceType,
           type: 'authenticated',
           bytes: buffer.length,
+          display_name: fileName,
         });
 
         const stored = await cloudinary.findAuthenticatedAsset(
@@ -336,6 +341,7 @@ describe('Document Service real Cloudinary integration', () => {
     const authorization = cloudinary.createSignedDocumentUpload(
       publicId,
       'raw',
+      'contract.pdf',
     );
 
     try {
@@ -366,6 +372,7 @@ describe('Document Service real Cloudinary integration', () => {
     const authorization = cloudinary.createSignedDocumentUpload(
       publicId,
       'raw',
+      'contract.pdf',
     );
 
     try {

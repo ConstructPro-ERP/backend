@@ -27,6 +27,7 @@ export interface SignedDocumentUpload {
     timestamp: number;
     type: 'authenticated';
     overwrite: 'false';
+    display_name: string;
   };
 }
 
@@ -153,6 +154,7 @@ export class CloudinaryService {
   createSignedDocumentUpload(
     publicId: string,
     resourceType: DocumentResourceType,
+    displayName: string,
   ): SignedDocumentUpload {
     this.ensureDocumentStorageConfigured();
 
@@ -186,6 +188,7 @@ export class CloudinaryService {
       timestamp,
       type: 'authenticated' as const,
       overwrite: 'false' as const,
+      display_name: displayName,
     };
 
     const signature = cloudinary.utils.api_sign_request(
@@ -208,6 +211,7 @@ export class CloudinaryService {
     buffer: Buffer,
     publicId: string,
     resourceType: DocumentResourceType,
+    displayName: string,
   ): Promise<AuthenticatedUploadResult> {
     this.ensureDocumentStorageConfigured();
 
@@ -226,6 +230,7 @@ export class CloudinaryService {
           resource_type: resourceType,
           type: 'authenticated',
           overwrite: false,
+          display_name: displayName,
         },
         (
           error: UploadApiErrorResponse | undefined,

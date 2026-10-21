@@ -71,7 +71,11 @@ describe('CloudinaryService', () => {
 
       const service = new CloudinaryService();
 
-      const result = service.createSignedDocumentUpload(publicId, 'raw');
+      const result = service.createSignedDocumentUpload(
+        publicId,
+        'raw',
+        'Approved Contract.pdf',
+      );
 
       expect(result).toEqual({
         cloudName: 'test-cloud',
@@ -85,6 +89,7 @@ describe('CloudinaryService', () => {
           timestamp: 1790000000,
           type: 'authenticated',
           overwrite: 'false',
+          display_name: 'Approved Contract.pdf',
         },
       });
 
@@ -106,6 +111,7 @@ describe('CloudinaryService', () => {
       service.createSignedDocumentUpload(
         'constructpro/quotations/quotation-1.pdf',
         'raw',
+        'quotation-1.pdf',
       ),
     ).toThrow('Invalid project document public ID.');
 
@@ -113,6 +119,7 @@ describe('CloudinaryService', () => {
       service.createSignedDocumentUpload(
         'constructpro/projects/../../../other-file.pdf',
         'raw',
+        'other-file.pdf',
       ),
     ).toThrow('Invalid project document public ID.');
 
@@ -136,9 +143,17 @@ describe('CloudinaryService', () => {
       .mockReturnValueOnce('signature-one')
       .mockReturnValueOnce('signature-two');
 
-    const first = service.createSignedDocumentUpload(firstPublicId, 'raw');
+    const first = service.createSignedDocumentUpload(
+      firstPublicId,
+      'raw',
+      'First Drawing.pdf',
+    );
 
-    const second = service.createSignedDocumentUpload(secondPublicId, 'raw');
+    const second = service.createSignedDocumentUpload(
+      secondPublicId,
+      'raw',
+      'Second Drawing.pdf',
+    );
 
     expect(first.publicId).not.toBe(second.publicId);
     expect(first.signature).toBe('signature-one');
@@ -146,6 +161,9 @@ describe('CloudinaryService', () => {
 
     expect(first.uploadParameters.overwrite).toBe('false');
     expect(second.uploadParameters.overwrite).toBe('false');
+
+    expect(first.uploadParameters.display_name).toBe('First Drawing.pdf');
+    expect(second.uploadParameters.display_name).toBe('Second Drawing.pdf');
 
     expect(sign).toHaveBeenCalledTimes(2);
   });
@@ -163,6 +181,7 @@ describe('CloudinaryService', () => {
           '11111111-1111-4111-8111-111111111111/' +
           '22222222-2222-4222-8222-222222222222.pdf',
         'raw',
+        'contract.pdf',
       ),
     ).toThrow('Cloudinary document storage is not configured.');
 
@@ -269,7 +288,12 @@ describe('CloudinaryService', () => {
     const service = new CloudinaryService();
 
     await expect(
-      service.uploadAuthenticatedBuffer(buffer, publicId, 'raw'),
+      service.uploadAuthenticatedBuffer(
+        buffer,
+        publicId,
+        'raw',
+        'Approved Contract.pdf',
+      ),
     ).resolves.toEqual({
       publicId,
       resourceType: 'raw',
@@ -282,6 +306,7 @@ describe('CloudinaryService', () => {
         resource_type: 'raw',
         type: 'authenticated',
         overwrite: false,
+        display_name: 'Approved Contract.pdf',
       },
       expect.any(Function),
     );
@@ -295,6 +320,7 @@ describe('CloudinaryService', () => {
         Buffer.alloc(0),
         'constructpro/projects/project-1/doc-1.pdf',
         'raw',
+        'doc-1.pdf',
       ),
     ).rejects.toThrow('Cannot upload an empty document.');
 
@@ -309,6 +335,7 @@ describe('CloudinaryService', () => {
         Buffer.from('file'),
         'constructpro/quotations/quotation-1',
         'raw',
+        'quotation-1.pdf',
       ),
     ).rejects.toThrow('Invalid project document public ID.');
   });
@@ -337,6 +364,7 @@ describe('CloudinaryService', () => {
         Buffer.from('document'),
         'constructpro/projects/project-1/doc-2.pdf',
         'raw',
+        'doc-2.pdf',
       ),
     ).rejects.toThrow('Storage unavailable');
   });
@@ -367,6 +395,7 @@ describe('CloudinaryService', () => {
         Buffer.from('document'),
         publicId,
         'raw',
+        'doc-3.pdf',
       ),
     ).rejects.toThrow('Cloudinary returned unexpected asset metadata.');
   });

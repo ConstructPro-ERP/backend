@@ -169,7 +169,11 @@ describe('DocumentService', () => {
     mockCloudinary.downloadAuthenticatedAssetBytes.mockResolvedValue(pdf);
 
     mockCloudinary.createSignedDocumentUpload.mockImplementation(
-      (publicId: string, resourceType: DocumentResourceType) => ({
+      (
+        publicId: string,
+        resourceType: DocumentResourceType,
+        displayName: string,
+      ) => ({
         cloudName: 'test-cloud',
         apiKey: 'test-key',
         publicId,
@@ -181,6 +185,7 @@ describe('DocumentService', () => {
           timestamp: 1790000000,
           type: 'authenticated',
           overwrite: 'false',
+          display_name: displayName,
         },
       }),
     );
@@ -433,6 +438,7 @@ describe('DocumentService', () => {
       expect(mockCloudinary.createSignedDocumentUpload).toHaveBeenCalledWith(
         created.cloudinaryPublicId,
         'raw',
+        'contract.pdf',
       );
 
       expect(result).toMatchObject({
@@ -442,6 +448,7 @@ describe('DocumentService', () => {
         uploadParameters: {
           type: 'authenticated',
           overwrite: 'false',
+          display_name: 'contract.pdf',
         },
       });
 
@@ -721,6 +728,7 @@ describe('DocumentService', () => {
         pdf,
         reservation.cloudinaryPublicId,
         'raw',
+        'contract.pdf',
       );
 
       expect(mockDocuments.markUploadActive).toHaveBeenCalledWith(

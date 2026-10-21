@@ -98,6 +98,7 @@ export class DocumentService {
       signed = this.cloudinary.createSignedDocumentUpload(
         publicId,
         validated.resourceType,
+        validated.originalName,
       );
     } catch (error: unknown) {
       this.logFailure(
@@ -286,6 +287,7 @@ export class DocumentService {
         file.buffer,
         publicId,
         resourceType,
+        validated.originalName,
       );
     } catch (error: unknown) {
       this.logFailure(

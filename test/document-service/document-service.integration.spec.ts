@@ -282,6 +282,7 @@ describe('Document Service — Neon database integration', () => {
       pdf,
       saved.cloudinaryPublicId,
       'raw',
+      'contract.pdf',
     );
 
     const list = await request(server)
@@ -653,6 +654,7 @@ describe('Document Service — Neon database integration', () => {
       validDocx,
       saved.cloudinaryPublicId,
       'raw',
+      'approved-contract.docx',
     );
 
     const download = await request(server)

@@ -349,6 +349,7 @@ describe('Tasks — Gateway to Task Service E2E', () => {
       .set('authorization', token('manager'))
       .query({
         projectId: project.id,
+        search: 'FOUNDATION',
         status: TaskStatus.COMPLETED,
         page: 1,
         limit: 10,
@@ -368,6 +369,7 @@ describe('Tasks — Gateway to Task Service E2E', () => {
       .get(`/api/projects/${project.id}/tasks`)
       .set('authorization', token('manager'))
       .query({
+        search: 'FOUNDATION',
         milestoneId: milestone.id,
         status: TaskStatus.COMPLETED,
         page: 1,
@@ -408,6 +410,24 @@ describe('Tasks — Gateway to Task Service E2E', () => {
     expect(storedTask.description).toBe('Updated foundation preparation');
     expect(storedMilestone.progressPercentage).toBe(40);
     expect(storedProject.progressPercentage).toBe(40);
+
+    const unassignResponse = await request(gatewayServer)
+      .patch(`/api/tasks/${taskId}/assign`)
+      .set('authorization', token('manager'))
+      .send({ assignedToId: null })
+      .expect(200);
+
+    const unassignResult = unassignResponse.body as GatewayBody<{
+      assignedToId: string | null;
+    }>;
+
+    expect(unassignResult.data.assignedToId).toBeNull();
+
+    const unassignedTask = await prisma.task.findUniqueOrThrow({
+      where: { id: taskId },
+    });
+
+    expect(unassignedTask.assignedToId).toBeNull();
 
     // DELETE /tasks/:id
     for (const id of [taskId, plain.data.id]) {

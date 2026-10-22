@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **DDP-95 — Backend task search and nullable assignment support** ([issue #142](https://github.com/ConstructPro-ERP/backend/issues/142))
+  - Added case-insensitive task-name searching across authorized tasks, compatible with existing categorical filters, sorting, and pagination.
+  - Extended task query validation and API Gateway forwarding to support the optional `search` parameter.
+  - Enabled task unassignment using an explicit `assignedToId: null` while preserving UUID validation for assignments.
+  - Added DTO, service, repository, database integration, and API Gateway regression tests for search and unassignment.
+
 - **DDP-91 — Secure direct document uploads and expanded file support** ([issue #137](https://github.com/ConstructPro-ERP/backend/issues/137))
   - Added per-upload signed Cloudinary authorization with unique document identifiers, authenticated delivery, and non-overwriting uploads.
   - Added verified upload completion and recovery using the existing PENDING, ACTIVE, and FAILED document lifecycle.

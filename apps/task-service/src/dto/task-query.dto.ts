@@ -6,8 +6,10 @@ import {
   IsIn,
   IsInt,
   IsOptional,
+  IsString,
   IsUUID,
   Max,
+  MaxLength,
   Min,
 } from 'class-validator';
 
@@ -42,6 +44,16 @@ export class TaskQueryDto {
   @IsOptional()
   @IsEnum(TaskStatus)
   status?: TaskStatus;
+
+  @ApiPropertyOptional({
+    description: 'Case-insensitive partial task-name search',
+    maxLength: 200,
+    example: 'foundation',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  search?: string;
 
   @ApiPropertyOptional({ default: 1, minimum: 1 })
   @Type(() => Number)

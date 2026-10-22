@@ -175,7 +175,15 @@ describe('Task DTO validation', () => {
       ).toEqual([]);
     });
 
-    it.each([null, 'invalid', undefined])(
+    it('accepts null to clear an assignment', () => {
+      expect(
+        validateDto(AssignTaskDto, {
+          assignedToId: null,
+        }),
+      ).toEqual([]);
+    });
+
+    it.each(['invalid', undefined, ''])(
       'rejects invalid assignee %s',
       (assignedToId) => {
         expect(
@@ -185,6 +193,10 @@ describe('Task DTO validation', () => {
         ).toContain('assignedToId');
       },
     );
+
+    it('rejects a missing assignment field', () => {
+      expect(validateDto(AssignTaskDto, {})).toContain('assignedToId');
+    });
   });
 
   describe('TaskQueryDto', () => {
@@ -201,6 +213,25 @@ describe('Task DTO validation', () => {
         }),
       ).toEqual([]);
     });
+
+    it('accepts valid task-name search values', () => {
+      for (const search of [
+        'foundation',
+        'FOUNDATION',
+        '  foundation  ',
+        '',
+        '   ',
+      ]) {
+        expect(validateDto(TaskQueryDto, { search })).toEqual([]);
+      }
+    });
+
+    it.each(['a'.repeat(201), 123, [], {}])(
+      'rejects invalid search input',
+      (search) => {
+        expect(validateDto(TaskQueryDto, { search })).toContain('search');
+      },
+    );
 
     it.each([0, -1, 1.5, 'invalid'])('rejects invalid page %s', (page) => {
       expect(validateDto(TaskQueryDto, { page })).toContain('page');

@@ -186,12 +186,13 @@ describe('TasksGatewayController', () => {
     });
   });
 
-  it('forwards list filters and pagination', async () => {
+  it('forwards list search, filters and pagination', async () => {
     await request(server)
       .get('/api/tasks')
       .set('authorization', AUTHORIZATION)
       .query({
         projectId: PROJECT_ID,
+        search: 'foundation',
         milestoneId: TASK_ID,
         status: 'BLOCKED',
         page: 2,
@@ -208,6 +209,7 @@ describe('TasksGatewayController', () => {
           headers: expectedHeaders,
           params: {
             projectId: PROJECT_ID,
+            search: 'foundation',
             milestoneId: TASK_ID,
             status: 'BLOCKED',
             page: 2,
@@ -220,11 +222,15 @@ describe('TasksGatewayController', () => {
     ]);
   });
 
-  it('forwards project-scoped task queries', async () => {
+  it('forwards project-scoped task searches', async () => {
     await request(server)
       .get(`/api/projects/${PROJECT_ID}/tasks`)
       .set('authorization', AUTHORIZATION)
-      .query({ status: 'TODO', page: 1 })
+      .query({
+        search: 'foundation',
+        status: 'TODO',
+        page: 1,
+      })
       .expect(200);
 
     expect(mockHttp.get.mock.calls).toMatchObject([
@@ -233,6 +239,7 @@ describe('TasksGatewayController', () => {
         {
           headers: expectedHeaders,
           params: {
+            search: 'foundation',
             status: 'TODO',
             page: 1,
           },
@@ -302,6 +309,35 @@ describe('TasksGatewayController', () => {
       { headers: expectedHeaders },
     );
   });
+
+  it('forwards explicit task unassignment', async () => {
+    const body = { assignedToId: null };
+
+    await request(server)
+      .patch(`/api/tasks/${TASK_ID}/assign`)
+      .set('authorization', AUTHORIZATION)
+      .send(body)
+      .expect(200);
+
+    expect(mockHttp.patch).toHaveBeenCalledWith(
+      `${SERVICE_URL}/tasks/${TASK_ID}/assign`,
+      body,
+      { headers: expectedHeaders },
+    );
+  });
+
+  it.each([{}, { assignedToId: 'invalid' }])(
+    'rejects missing or invalid task assignments',
+    async (body) => {
+      await request(server)
+        .patch(`/api/tasks/${TASK_ID}/assign`)
+        .set('authorization', AUTHORIZATION)
+        .send(body)
+        .expect(400);
+
+      expect(mockHttp.patch).not.toHaveBeenCalled();
+    },
+  );
 
   it('forwards task deletion', async () => {
     actorRole = 'ADMIN';

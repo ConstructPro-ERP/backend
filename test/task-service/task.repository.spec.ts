@@ -250,6 +250,15 @@ describe('TaskRepository', () => {
     });
   });
 
+  it('clears a task assignment using null', async () => {
+    await repository.assignInTransaction(transactionClient, 'task-1', null);
+
+    expect(mockTx.task.update).toHaveBeenCalledWith({
+      where: { id: 'task-1' },
+      data: { assignedToId: null },
+    });
+  });
+
   it('deletes a task inside a transaction', async () => {
     await repository.deleteInTransaction(transactionClient, 'task-1');
 

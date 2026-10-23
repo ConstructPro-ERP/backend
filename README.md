@@ -1,9 +1,6 @@
 # ConstructPro Backend
 
-![CI Status](https://img.shields.io/badge/CI-Passing-brightgreen)
-![Coverage](https://img.shields.io/badge/Coverage-TBD-success)
 
-<!-- ![Coverage](https://img.shields.io/badge/Coverage-80%25+-success) -->
 
 ## Overview
 
@@ -69,8 +66,8 @@ Before running the backend locally, ensure the following software is installed:
 
 | Software   | Version                |
 | ---------- | ---------------------- |
-| Node.js    | 20+                    |
-| pnpm       | Latest                 |
+| Node.js    | 22+                    |
+| npm        | Latest                 |
 | Git        | Latest                 |
 | PostgreSQL | 16+ (or Neon Database) |
 
@@ -96,7 +93,7 @@ cd backend
 Install dependencies:
 
 ```bash
-npm install
+npm ci
 ```
 
 ---
@@ -109,7 +106,7 @@ Example:
 
 ```env
 # Application
-PORT=3000
+PORT=4000
 
 # Database
 DATABASE_URL=postgresql://username:password@host/database
@@ -151,13 +148,13 @@ DATABASE_URL=postgresql://username:password@host/database
 Start the development server:
 
 ```bash
-npm start:dev
+npm run dev:api-gateway
 ```
 
 Default local URL:
 
 ```text
-http://localhost:3000
+http://localhost:4000
 ```
 
 ---
@@ -167,7 +164,7 @@ http://localhost:3000
 Build the application:
 
 ```bash
-npm build
+npm run build
 ```
 
 ---
@@ -177,7 +174,7 @@ npm build
 Start the compiled production application:
 
 ```bash
-npm start:prod
+npm run start:prod
 ```
 
 ---
@@ -187,34 +184,30 @@ npm start:prod
 ### Lint
 
 ```bash
-npm lint
+npm run lint
 ```
 
 ### Format Check
 
 ```bash
-npm format:check
+npm run format:check
 ```
 
 ### Dependency Security Scan
 
 ```bash
-pm audit --audit-level=high
+npm audit --audit-level=high
 ```
 
 ---
 
-<!-- ## API Documentation
+## API Documentation
 
-If Swagger is configured, API documentation can be accessed at:
+With the gateway on port 4000, Swagger is available at
+[http://localhost:4000/api/docs](http://localhost:4000/api/docs).
+The frontend API base is `http://localhost:4000/api`.
 
-```text
-http://localhost:3000/api/docs
-```
-
-If Swagger is not currently enabled, this section should be updated once API documentation becomes available.
-
---- -->
+## Contribution workflow
 
 ### Main Branches
 
@@ -299,3 +292,80 @@ Developed as part of:
 **SENG 34213 – System Development Project**  
 **Bachelor of Science (Hons.) in Software Engineering**  
 **University of Kelaniya**
+
+## Multi-service setup
+
+This is a NestJS multi-application repository. The gateway does not start its
+upstream services. Run each required `dev:<service>` command in a separate
+terminal from the repository root.
+
+Copy `.env.example` to `.env` only if no local file exists (PowerShell:
+`Copy-Item .env.example .env`), then replace placeholders. Set `PORT=4000` for the
+gateway to avoid the frontend's port 3000. The gateway reads `PORT`, not
+`API_GATEWAY_PORT`. Set `FRONTEND_URL=http://localhost:3000` for local redirects.
+
+| Command | Local port to configure |
+| --- | --- |
+| `npm run dev:api-gateway` | 4000 |
+| `npm run dev:auth-service` | 3333 |
+| `npm run dev:user-service` | 3334 |
+| `npm run dev:project-service` | 3003 |
+| `npm run dev:task-service` | 3004 |
+| `npm run dev:payment-service` | 3005 |
+| `npm run dev:document-service` | 3006 |
+| `npm run dev:quotation-service` | 4009 |
+| `npm run dev:invoice-service` | 4010 |
+| `npm run dev:analytics-service` | 4011 |
+| `npm run dev:ai-service` | 4012 |
+| `npm run dev:calendar-service` | 4013 |
+| `npm run dev:lead-service` | 4020 |
+| `npm run dev:client-service` | 4021 |
+
+Match `<SERVICE>_URL` values to the corresponding service listeners. Add missing
+lead, client, and calendar variables as needed. Explicitly set
+`CALENDAR_SERVICE_PORT=4013`: calendar falls back to the shared `PORT` otherwise.
+The calendar source directory is spelled `apps/calender-service`.
+
+Runtime database access uses `DATABASE_URL` with the Neon adapter. Prisma CLI
+configuration uses `DIRECT_URL_TEST` in preference to `DIRECT_URL`; check the
+target before applying schema changes. Configure `JWT_REFRESH_SECRET` as well as
+`JWT_SECRET`. Document uploads require the Cloudinary variables above.
+
+```bash
+npx prisma generate
+```
+
+Client generation does not provision tables or seed accounts. Follow the
+[Prisma workflow](docs/prisma-workflow.md) and
+[migration guide](docs/data-layer/migration-guide.md) to initialize a development
+database. See [Cloudinary setup](docs/cloudinary-setup-guide.md) for storage.
+
+`npm run build:all` compiles the multi-application tree. Then use
+`npm run start:prod` for the gateway and `start:<service>` for domain services.
+`npm start` runs `dist/server.js` with `DEPLOY_APP` selecting the application.
+`npm run vercel-build` generates Prisma and compiles all applications.
+The current Docker Compose file includes only gateway, auth, and quotation
+services, with separate port mappings; it is not the full ERP stack.
+
+## Test commands and source layout
+
+| Command | Purpose |
+| --- | --- |
+| `npm run test:unit` | Dedicated Jest unit suite |
+| `npm run test:e2e` | Backend end-to-end suite |
+| `npm run test:quotation-quality` | Quotation tests with coverage |
+| `npm run test:coverage` | Unit/E2E coverage and merged report |
+| `npm run test:cloudinary-live` | Live Cloudinary integration tests |
+
+Database suites require an isolated test database. See
+[database test setup](docs/data-layer/database-tests.md) before running them.
+`npm run test:db:reset` resets test data. `npm run lint` also modifies files
+because its ESLint invocation includes `--fix`.
+
+Services live in `apps/`, shared code in `libs/` and `shared/`, database schema
+and seeds in `prisma/`, and tests in `test/`. See
+[backend architecture](docs/backend-architecture.md) for service boundaries.
+
+[Backend CI](.github/workflows/ci.yml) runs a quotation quality job using Node.js
+24 and delegates broader checks to
+`ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v2.0.0`.

@@ -9,6 +9,7 @@ import { MilestoneService } from '../../apps/project-service/src/milestone.servi
 import { ProjectAccessService } from '../../apps/project-service/src/project-access.service';
 import { MilestoneRepository } from '../../apps/project-service/src/repositories/milestone.repository';
 import type { ProjectTransaction } from '../../apps/project-service/src/repositories/project.repository';
+import { MAX_TRANSACTION_ATTEMPTS } from '../../shared/utils/transaction-error.util';
 
 const tx = {} as ProjectTransaction;
 
@@ -421,7 +422,7 @@ describe('MilestoneService', () => {
     expect(mockMilestones.createInTransaction).not.toHaveBeenCalled();
   });
 
-  it('returns a concurrency conflict after four P2034 failures', async () => {
+  it('returns a concurrency conflict after exhausting P2034 retries', async () => {
     const conflict = new Prisma.PrismaClientKnownRequestError(
       'Transaction serialization conflict',
       {
@@ -444,7 +445,9 @@ describe('MilestoneService', () => {
       },
     });
 
-    expect(mockMilestones.transaction).toHaveBeenCalledTimes(4);
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(
+      MAX_TRANSACTION_ATTEMPTS,
+    );
   }, 15000);
 
   it('retries a Neon serialization failure reported as P2010', async () => {
@@ -503,7 +506,7 @@ describe('MilestoneService', () => {
     expect(mockMilestones.createInTransaction).toHaveBeenCalledTimes(1);
   });
 
-  it('returns a concurrency conflict when all four raw Neon retries fail', async () => {
+  it('returns a concurrency conflict when all raw Neon retries fail', async () => {
     const conflict = Object.assign(new Error('TransactionWriteConflict'), {
       name: 'DriverAdapterError',
       cause: {
@@ -526,7 +529,9 @@ describe('MilestoneService', () => {
       },
     });
 
-    expect(mockMilestones.transaction).toHaveBeenCalledTimes(4);
+    expect(mockMilestones.transaction).toHaveBeenCalledTimes(
+      MAX_TRANSACTION_ATTEMPTS,
+    );
   }, 15000);
 
   it('does not retry unrelated Neon adapter errors', async () => {

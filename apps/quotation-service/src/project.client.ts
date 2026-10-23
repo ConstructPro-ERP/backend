@@ -41,7 +41,7 @@ export class ProjectClient {
         this.httpService.post<CreateProjectFromQuotationResponse>(
           `${this.baseUrl}/projects/from-quotation`,
           payload,
-          { timeout: 10000 },
+          { timeout: 30000 },
         ),
       );
 

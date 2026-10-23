@@ -135,6 +135,15 @@ export class TaskService {
       where.status = query.status;
     }
 
+    const search = query.search?.trim();
+
+    if (search) {
+      where.taskName = {
+        contains: search,
+        mode: 'insensitive',
+      };
+    }
+
     const page = query.page ?? 1;
     const limit = query.limit ?? 10;
     const sortBy = query.sortBy ?? TaskSortField.CREATED_AT;

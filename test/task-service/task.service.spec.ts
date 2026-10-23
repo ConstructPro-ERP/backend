@@ -383,6 +383,7 @@ describe('TaskService', () => {
     it('applies ownership restrictions and list filters', async () => {
       const result = await service.findAll(
         {
+          search: '  FOUNDATION  ',
           milestoneId: 'milestone-1',
           assignedToId: 'user-1',
           status: TaskStatus.BLOCKED,
@@ -400,6 +401,10 @@ describe('TaskService', () => {
           milestoneId: 'milestone-1',
           assignedToId: 'user-1',
           status: TaskStatus.BLOCKED,
+          taskName: {
+            contains: 'FOUNDATION',
+            mode: 'insensitive',
+          },
         },
         skip: 5,
         take: 5,
@@ -412,6 +417,18 @@ describe('TaskService', () => {
         total: 1,
         totalPages: 1,
       });
+    });
+
+    it('ignores whitespace-only task searches', async () => {
+      await service.findAll({ search: '   ' }, manager.id);
+
+      expect(mockTasks.findManyAndCount).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            project: { projectManagerId: manager.id },
+          },
+        }),
+      );
     });
 
     it('uses default pagination for administrators', async () => {
@@ -590,6 +607,18 @@ describe('TaskService', () => {
         tx,
         task.id,
         'user-1',
+      );
+    });
+
+    it('clears an existing task assignment', async () => {
+      await service.assign(task.id, { assignedToId: null }, manager.id);
+
+      expect(mockTasks.findAssigneeInTransaction).not.toHaveBeenCalled();
+
+      expect(mockTasks.assignInTransaction).toHaveBeenCalledWith(
+        tx,
+        task.id,
+        null,
       );
     });
 

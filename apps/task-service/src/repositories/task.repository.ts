@@ -149,7 +149,11 @@ export class TaskRepository {
     return tx.task.update({ where: { id }, data: { status } });
   }
 
-  assignInTransaction(tx: TaskTransaction, id: string, assignedToId: string) {
+  assignInTransaction(
+    tx: TaskTransaction,
+    id: string,
+    assignedToId: string | null,
+  ) {
     return tx.task.update({ where: { id }, data: { assignedToId } });
   }
 

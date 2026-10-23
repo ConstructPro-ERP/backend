@@ -166,6 +166,14 @@ describe('Task Service — database integration', () => {
       'Foundation preparation',
       'Order materials',
     ]);
+
+    await tasks.assign(linked.id, { assignedToId: null }, managerId);
+
+    const unassigned = await prisma.task.findUniqueOrThrow({
+      where: { id: linked.id },
+    });
+
+    expect(unassigned.assignedToId).toBeNull();
   });
 
   it('rejects invalid milestone relationships and assignees', async () => {
@@ -375,6 +383,17 @@ describe('Task Service — database integration', () => {
       managerId,
     );
 
+    await tasks.create(
+      {
+        projectId: project.id,
+        milestoneId: milestone.id,
+        assignedToId: managerId,
+        taskName: 'Zeta inspection',
+        status: TaskStatus.TODO,
+      },
+      managerId,
+    );
+
     // Same milestone and status, but a different assignee.
     await tasks.create(
       {
@@ -422,6 +441,7 @@ describe('Task Service — database integration', () => {
     );
 
     const filters = {
+      search: '  FOUNDATION  ',
       milestoneId: milestone.id,
       assignedToId: managerId,
       status: TaskStatus.TODO,
@@ -476,6 +496,15 @@ describe('Task Service — database integration', () => {
     expect(thirdPage.data).toHaveLength(0);
     expect(thirdPage.meta.total).toBe(2);
     expect(thirdPage.meta.totalPages).toBe(2);
+
+    const withoutSearch = await tasks.findByProject(
+      project.id,
+      { ...filters, search: undefined, page: 1, limit: 10 },
+      managerId,
+    );
+
+    expect(withoutSearch.meta.total).toBe(3);
+    expect(withoutSearch.data).toHaveLength(3);
 
     // Verify that the assignee filter actually selects
     // different persisted records.

@@ -60,7 +60,7 @@ describe('ProjectClient', () => {
     expect(mockHttpService.post).toHaveBeenCalledWith(
       'http://project-service.test/projects/from-quotation',
       payload,
-      { timeout: 10000 },
+      { timeout: 30000 },
     );
 
     expect(result).toEqual({

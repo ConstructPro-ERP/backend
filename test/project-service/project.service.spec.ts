@@ -19,7 +19,10 @@ import {
   SortOrder,
 } from '../../apps/project-service/src/dto/project-query.dto';
 import { ErrorCode } from '../../shared/error-codes';
-import { TRANSACTION_RETRY_DELAY_OPTIONS } from '../../shared/utils/transaction-error.util';
+import {
+  MAX_TRANSACTION_ATTEMPTS,
+  TRANSACTION_RETRY_DELAY_OPTIONS,
+} from '../../shared/utils/transaction-error.util';
 
 const mockProjectRepository = {
   create: jest.fn(),
@@ -812,7 +815,7 @@ describe('ProjectService', () => {
       expect(result.status).toBe(ProjectStatus.ON_HOLD);
     });
 
-    it('returns a lifecycle concurrency error after four failed attempts', async () => {
+    it('returns a lifecycle concurrency error after exhausting retries', async () => {
       mockProjectRepository.transaction.mockRejectedValue(
         createNeonSerializationConflict(),
       );
@@ -829,7 +832,9 @@ describe('ProjectService', () => {
         status: 409,
       });
 
-      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(4);
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(
+        MAX_TRANSACTION_ATTEMPTS,
+      );
 
       expect(mockProjectRepository.updateInTransaction).not.toHaveBeenCalled();
     }, 15000);
@@ -1739,7 +1744,7 @@ describe('ProjectService', () => {
       expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(1);
     });
 
-    it('throws a concurrency conflict after four serialization failures', async () => {
+    it('throws a concurrency conflict after exhausting serialization retries', async () => {
       mockProjectRepository.transaction.mockRejectedValue(
         createNeonSerializationConflict(),
       );
@@ -1757,7 +1762,9 @@ describe('ProjectService', () => {
         status: 409,
       });
 
-      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(4);
+      expect(mockProjectRepository.transaction).toHaveBeenCalledTimes(
+        MAX_TRANSACTION_ATTEMPTS,
+      );
     }, 15000);
 
     it('activates the existing PLANNING project during retry', async () => {

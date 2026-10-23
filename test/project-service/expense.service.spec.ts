@@ -12,6 +12,7 @@ import {
   type CreateExpenseData,
 } from '../../apps/project-service/src/repositories/expense.repository';
 import type { ProjectTransaction } from '../../apps/project-service/src/repositories/project.repository';
+import { MAX_TRANSACTION_ATTEMPTS } from '../../shared/utils/transaction-error.util';
 
 const tx = {} as ProjectTransaction;
 
@@ -479,7 +480,7 @@ describe('ExpenseService', () => {
     expect(mockExpenses.transaction).toHaveBeenCalledTimes(2);
   });
 
-  it('stops after four serialization conflicts', async () => {
+  it('stops after exhausting serialization retries', async () => {
     const error = new Prisma.PrismaClientKnownRequestError('Conflict', {
       code: 'P2034',
       clientVersion: '7.10.0',
@@ -491,6 +492,8 @@ describe('ExpenseService', () => {
       ConflictException,
     );
 
-    expect(mockExpenses.transaction).toHaveBeenCalledTimes(4);
-  });
+    expect(mockExpenses.transaction).toHaveBeenCalledTimes(
+      MAX_TRANSACTION_ATTEMPTS,
+    );
+  }, 15000);
 });

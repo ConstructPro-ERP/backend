@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
 const SERIALIZATION_FAILURE_CODE = '40001';
-export const MAX_TRANSACTION_ATTEMPTS = 4;
+export const MAX_TRANSACTION_ATTEMPTS = 6;
 
 export const TRANSACTION_RETRY_DELAY_OPTIONS =
   'TRANSACTION_RETRY_DELAY_OPTIONS';

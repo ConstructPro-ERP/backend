@@ -10,7 +10,7 @@ import { NotificationClient } from '../../apps/quotation-service/src/notificatio
 import { QuotationModule } from '../../apps/quotation-service/src/quotation.module';
 import { PrismaService } from '../../prisma/prisma.service';
 
-jest.setTimeout(30000);
+jest.setTimeout(45000);
 
 interface QuotationConversionResponseBody {
   projectId: string;

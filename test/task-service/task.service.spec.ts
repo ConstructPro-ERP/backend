@@ -7,6 +7,7 @@ import {
 import { TaskRepository } from '../../apps/task-service/src/repositories/task.repository';
 import type { TaskTransaction } from '../../apps/task-service/src/repositories/task.repository';
 import { ErrorCode } from '../../shared/error-codes';
+import { MAX_TRANSACTION_ATTEMPTS } from '../../shared/utils/transaction-error.util';
 
 const project = {
   id: 'project-1',
@@ -693,7 +694,7 @@ describe('TaskService', () => {
       expect(mockTasks.transaction).toHaveBeenCalledTimes(2);
     });
 
-    it('stops after four serialization failures', async () => {
+    it('stops after exhausting serialization retries', async () => {
       const conflict = new Prisma.PrismaClientKnownRequestError(
         'Serialization conflict',
         {
@@ -712,8 +713,10 @@ describe('TaskService', () => {
         },
       );
 
-      expect(mockTasks.transaction).toHaveBeenCalledTimes(4);
-    });
+      expect(mockTasks.transaction).toHaveBeenCalledTimes(
+        MAX_TRANSACTION_ATTEMPTS,
+      );
+    }, 15000);
 
     it('does not retry unrelated database errors', async () => {
       const error = new Prisma.PrismaClientKnownRequestError(

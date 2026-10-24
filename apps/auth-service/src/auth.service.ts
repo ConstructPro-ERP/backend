@@ -43,7 +43,7 @@ export class AuthService {
     const role = await this.prisma.role.findUnique({
       where: { id: roleId },
     });
-    if (!role) {
+    if (!role || role.roleName !== 'CLIENT_PORTAL_USER') {
       throw new HttpException(
         {
           code: ErrorCode.ROLE_NOT_FOUND,
@@ -167,23 +167,27 @@ export class AuthService {
       where: {
         OR: [{ googleId: payload.googleId }, { email: payload.email }],
       },
+      include: { role: { select: { roleName: true } } },
     });
 
     if (existing) {
-      // Attach googleId if the user previously registered with email/password
-      if (!existing.googleId) {
+      const needsDefaultRole = !existing.role;
+      const defaultRole = needsDefaultRole ? await this.getSignupRole() : null;
+      // Link email/password accounts without replacing an assigned role.
+      if (!existing.googleId || needsDefaultRole) {
         return this.prisma.user.update({
           where: { id: existing.id },
-          data: { googleId: payload.googleId, avatar: payload.avatar },
+          data: {
+            googleId: payload.googleId,
+            avatar: payload.avatar,
+            ...(defaultRole ? { roleId: defaultRole.id } : {}),
+          },
         });
       }
       return existing;
     }
 
-    // New user — fetch the default "user" role to avoid requiring roleId
-    const defaultRole = await this.prisma.role.findFirst({
-      where: { roleName: 'user' },
-    });
+    const defaultRole = await this.getSignupRole();
 
     return this.prisma.user.create({
       data: {
@@ -194,9 +198,22 @@ export class AuthService {
         status: 'ACTIVE',
         // Google users have no local password; null is intentional
         password: null,
-        roleId: defaultRole?.id ?? null,
+        roleId: defaultRole.id,
       },
     });
+  }
+
+  private async getSignupRole() {
+    const role = await this.prisma.role.findFirst({
+      where: { roleName: 'CLIENT_PORTAL_USER' },
+    });
+    if (!role) {
+      throw new HttpException(
+        'Signup role is not configured.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return role;
   }
 
   // Google establishes identity; our own tokens maintain the application session.

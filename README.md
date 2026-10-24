@@ -1,6 +1,9 @@
 # ConstructPro Backend
 
+[![CI](https://github.com/ConstructPro-ERP/backend/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/ConstructPro-ERP/backend/actions/workflows/ci.yml) ![Unit test coverage](https://img.shields.io/badge/coverage-76.4%25-yellow)
 
+**Live application:** https://construct-pro-teal.vercel.app/  
+**API documentation (Swagger):** https://construct-pro-api-gateway.vercel.app/api/docs
 
 ## Overview
 
@@ -86,7 +89,7 @@ git --version
 Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ConstructPro-ERP/backend.git
 cd backend
 ```
 
@@ -124,8 +127,6 @@ CLOUDINARY_CLOUD_NAME=your-cloud-name
 CLOUDINARY_API_KEY=your-api-key
 CLOUDINARY_API_SECRET=your-api-secret
 ```
-
-> Never commit `.env` files to source control.
 
 ---
 
@@ -304,22 +305,22 @@ Copy `.env.example` to `.env` only if no local file exists (PowerShell:
 gateway to avoid the frontend's port 3000. The gateway reads `PORT`, not
 `API_GATEWAY_PORT`. Set `FRONTEND_URL=http://localhost:3000` for local redirects.
 
-| Command | Local port to configure |
-| --- | --- |
-| `npm run dev:api-gateway` | 4000 |
-| `npm run dev:auth-service` | 3333 |
-| `npm run dev:user-service` | 3334 |
-| `npm run dev:project-service` | 3003 |
-| `npm run dev:task-service` | 3004 |
-| `npm run dev:payment-service` | 3005 |
-| `npm run dev:document-service` | 3006 |
-| `npm run dev:quotation-service` | 4009 |
-| `npm run dev:invoice-service` | 4010 |
-| `npm run dev:analytics-service` | 4011 |
-| `npm run dev:ai-service` | 4012 |
-| `npm run dev:calendar-service` | 4013 |
-| `npm run dev:lead-service` | 4020 |
-| `npm run dev:client-service` | 4021 |
+| Command                         | Local port to configure |
+| ------------------------------- | ----------------------- |
+| `npm run dev:api-gateway`       | 4000                    |
+| `npm run dev:auth-service`      | 3333                    |
+| `npm run dev:user-service`      | 3334                    |
+| `npm run dev:project-service`   | 3003                    |
+| `npm run dev:task-service`      | 3004                    |
+| `npm run dev:payment-service`   | 3005                    |
+| `npm run dev:document-service`  | 3006                    |
+| `npm run dev:quotation-service` | 4009                    |
+| `npm run dev:invoice-service`   | 4010                    |
+| `npm run dev:analytics-service` | 4011                    |
+| `npm run dev:ai-service`        | 4012                    |
+| `npm run dev:calendar-service`  | 4013                    |
+| `npm run dev:lead-service`      | 4020                    |
+| `npm run dev:client-service`    | 4021                    |
 
 Match `<SERVICE>_URL` values to the corresponding service listeners. Add missing
 lead, client, and calendar variables as needed. Explicitly set
@@ -349,13 +350,13 @@ services, with separate port mappings; it is not the full ERP stack.
 
 ## Test commands and source layout
 
-| Command | Purpose |
-| --- | --- |
-| `npm run test:unit` | Dedicated Jest unit suite |
-| `npm run test:e2e` | Backend end-to-end suite |
-| `npm run test:quotation-quality` | Quotation tests with coverage |
-| `npm run test:coverage` | Unit/E2E coverage and merged report |
-| `npm run test:cloudinary-live` | Live Cloudinary integration tests |
+| Command                          | Purpose                             |
+| -------------------------------- | ----------------------------------- |
+| `npm run test:unit`              | Dedicated Jest unit suite           |
+| `npm run test:e2e`               | Backend end-to-end suite            |
+| `npm run test:quotation-quality` | Quotation tests with coverage       |
+| `npm run test:coverage`          | Unit/E2E coverage and merged report |
+| `npm run test:cloudinary-live`   | Live Cloudinary integration tests   |
 
 Database suites require an isolated test database. See
 [database test setup](docs/data-layer/database-tests.md) before running them.

@@ -1,7 +1,7 @@
 # ADR-17: Direct LLM Calls Instead of LangChain
 
 **Status:** Proposed — implemented, pending team/supervisor approval  
-**Date:** YYYY-MM-DD  
+**Date:** 2026-10-17
 **Deciders:** ConstructPro ERP team and academic supervisor  
 **Related ADRs:** none  
 **Requirement traceability:** FR-010 (AI risk prediction), SDS AI design.

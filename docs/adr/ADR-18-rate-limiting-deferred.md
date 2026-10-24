@@ -1,7 +1,7 @@
 # ADR-18: Rate Limiting and Account Lockout Deferred
 
 **Status:** Proposed — implemented, pending team/supervisor approval  
-**Date:** YYYY-MM-DD  
+**Date:** 2026-10-20  
 **Deciders:** ConstructPro ERP team and academic supervisor  
 **Related ADRs:** ADR-16  
 **Requirement traceability:** SDS API gateway design, OWASP A07.

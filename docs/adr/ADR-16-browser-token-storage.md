@@ -1,7 +1,7 @@
 # ADR-16: Browser Token Storage Instead of HTTP-only Cookies
 
 **Status:** Proposed — implemented, pending team/supervisor approval  
-**Date:** YYYY-MM-DD  
+**Date:** 2026-10-15  
 **Deciders:** ConstructPro ERP team and academic supervisor  
 **Related ADRs:** ADR-18  
 **Requirement traceability:** JWT authentication (NFR-07), SDS security design, OWASP A07.

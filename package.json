@@ -81,7 +81,7 @@
     "@nestjs/jwt": "^11.0.2",
     "@nestjs/microservices": "^11.1.24",
     "@nestjs/passport": "^11.0.5",
-    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-express": "^11.2.8",
     "@nestjs/swagger": "^11.4.4",
     "@prisma/adapter-neon": "^7.10.1",
     "@prisma/adapter-pg": "^7.10.1",
@@ -100,7 +100,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "ws": "^8.21.0",
-    "zod": "^4.4.3"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -165,6 +165,9 @@
     ]
   },
   "overrides": {
-    "js-yaml": "5.4.3"
+    "js-yaml": "5.4.3",
+    "@nestjs/platform-express": {
+      "multer": "^2.5.0"
+    }
   }
 }

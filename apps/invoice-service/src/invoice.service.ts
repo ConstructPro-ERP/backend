@@ -31,6 +31,10 @@ export class InvoiceService {
     private readonly invoicePdfService: InvoicePdfService,
   ) {}
 
+  creationOptions() {
+    return this.invoices.creationOptions();
+  }
+
   async create(dto: CreateInvoiceDto, actorId?: string) {
     await this.validateProjectCustomer(dto.projectId, dto.customerId);
     this.validateDates(dto.invoiceDate, dto.dueDate);

@@ -17,6 +17,7 @@ describe('Invoice controllers', () => {
     cancel: jest.fn(),
     generatePdf: jest.fn(),
     createForProject: jest.fn(),
+    creationOptions: jest.fn(),
   };
 
   const financeSummaryService = {
@@ -56,6 +57,12 @@ describe('Invoice controllers', () => {
       response,
     );
     expect(invoiceService.create).toHaveBeenCalledWith(dto, 'actor-1');
+  });
+
+  it('delegates invoice creation choices', async () => {
+    const choices = { projects: [], customers: [] };
+    invoiceService.creationOptions.mockResolvedValue(choices);
+    await expect(invoiceController.creationOptions()).resolves.toEqual(choices);
   });
 
   it('delegates invoice listing', async () => {

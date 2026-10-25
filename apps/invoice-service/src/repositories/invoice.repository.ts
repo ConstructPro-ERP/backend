@@ -34,6 +34,40 @@ export type InvoiceWithDetails = Prisma.InvoiceGetPayload<{
 export class InvoiceRepository {
   constructor(private readonly prisma: PrismaService) {}
 
+  async creationOptions() {
+    const [projects, customers] = await Promise.all([
+      this.prisma.project.findMany({
+        orderBy: { projectName: 'asc' },
+        select: {
+          id: true,
+          projectName: true,
+          quotations: {
+            select: {
+              lead: { select: { customer: { select: { id: true } } } },
+            },
+          },
+        },
+      }),
+      this.prisma.customer.findMany({
+        orderBy: { fullName: 'asc' },
+        select: { id: true, fullName: true },
+      }),
+    ]);
+    return {
+      projects: projects.map(({ quotations, ...project }) => ({
+        ...project,
+        customerIds: [
+          ...new Set(
+            quotations.flatMap(({ lead }) =>
+              lead.customer ? [lead.customer.id] : [],
+            ),
+          ),
+        ],
+      })),
+      customers,
+    };
+  }
+
   findProjectWithCustomer(projectId: string) {
     return this.prisma.project.findUnique({
       where: { id: projectId },

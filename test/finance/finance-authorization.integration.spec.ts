@@ -33,6 +33,7 @@ describe('Finance, dashboard and AI gateway authorization over HTTP', () => {
   };
   const paths = [
     '/invoices',
+    '/invoices/creation-options',
     '/payments',
     '/analytics/dashboard/summary',
     '/ai-forecasting/projects/00000000-0000-4000-8000-000000000001/risk',

@@ -1,0 +1,173 @@
+{
+  "name": "construct-pro-api",
+  "version": "0.0.1",
+  "main": "server.ts",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "nest build",
+    "build:all": "tsc -p tsconfig.build.json",
+    "vercel-build": "prisma generate && npm run build:all",
+    "format": "prettier --write \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
+    "format:check": "prettier --check \"apps/**/*.ts\" \"libs/**/*.ts\" \"test/**/*.ts\" \"*.ts\"",
+
+    "dev:api-gateway": "ts-node -r tsconfig-paths/register apps/api-gateway/src/main.ts",
+    "dev:auth-service": "ts-node -r tsconfig-paths/register apps/auth-service/src/main.ts",
+    "dev:quotation-service": "ts-node -r tsconfig-paths/register apps/quotation-service/src/main.ts",
+    "dev:invoice-service": "ts-node -r tsconfig-paths/register apps/invoice-service/src/main.ts",
+    "dev:payment-service": "ts-node -r tsconfig-paths/register apps/payment-service/src/main.ts",
+    "dev:analytics-service": "ts-node -r tsconfig-paths/register apps/analytics-service/src/main.ts",
+    "dev:user-service": "ts-node -r tsconfig-paths/register apps/user-service/src/main.ts",
+    "dev:ai-service": "ts-node -r tsconfig-paths/register apps/ai-service/src/main.ts",
+    "dev:client-service": "ts-node -r tsconfig-paths/register apps/client-service/src/main.ts",
+    "dev:lead-service": "ts-node -r tsconfig-paths/register apps/lead-service/src/main.ts",
+    "dev:project-service": "ts-node -r tsconfig-paths/register apps/project-service/src/main.ts",
+    "dev:document-service": "ts-node -r tsconfig-paths/register apps/document-service/src/main.ts",
+    "dev:task-service": "ts-node -r tsconfig-paths/register apps/task-service/src/main.ts",
+    "dev:calendar-service": "ts-node -r tsconfig-paths/register apps/calender-service/src/main.ts",
+
+    "start": "node dist/server.js",
+    "start:api-gateway": "node dist/apps/api-gateway/src/main.js",
+    "start:auth-service": "node dist/apps/auth-service/src/main.js",
+    "start:user-service": "node dist/apps/user-service/src/main.js",
+    "start:quotation-service": "node dist/apps/quotation-service/src/main.js",
+    "start:invoice-service": "node dist/apps/invoice-service/src/main.js",
+    "start:payment-service": "node dist/apps/payment-service/src/main.js",
+    "start:analytics-service": "node dist/apps/analytics-service/src/main.js",
+    "start:ai-service": "node dist/apps/ai-service/src/main.js",
+    "start:client-service": "node dist/apps/client-service/src/main.js",
+    "start:lead-service": "node dist/apps/lead-service/src/main.js",
+    "start:project-service": "node dist/apps/project-service/src/main.js",
+    "start:document-service": "node dist/apps/document-service/src/main.js",
+    "start:task-service": "node dist/apps/task-service/src/main.js",
+    "start:calendar-service": "node dist/apps/calender-service/src/main.js",
+    "start:vercel": "node dist/server.js",
+    "start:debug": "node --inspect-brk -r ts-node/register -r tsconfig-paths/register apps/api-gateway/src/main.ts",
+    "start:prod": "node dist/apps/api-gateway/src/main.js",
+
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" \"*.ts\" --fix",
+
+    "test": "jest",
+    "test:unit": "jest --config ./jest.unit.config.js",
+    "test:finance-quality": "jest --config ./jest.finance-analytics-ai.config.js --runInBand",
+    "test:quality-routes": "jest --config ./jest.quality-routes.config.js --runInBand",
+    "test:finance-workflow": "jest --config ./jest.finance-workflow.config.js --runInBand",
+    "test:quality:typecheck": "tsc -p tsconfig.quality.json",
+    "test:quality:lint": "eslint apps/ai-service/src/ai-provider.service.ts \"test/{invoice-service,payment-service,analytics-service,ai-service,finance}/**/*.ts\"",
+    "test:quotation-quality": "jest --config ./jest.quotation-quality.config.js --runInBand --coverage",
+    "test:watch": "jest --watch",
+    "test:cov": "jest --coverage",
+    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:cloudinary-live": "jest --config ./test/jest-cloudinary.json --runInBand",
+    "test:db:reset": "node scripts/reset-test-db.js",
+
+    "test:coverage:unit": "jest --config ./jest.unit.config.js --coverage --coverageDirectory=coverage/unit --maxWorkers=5",
+    "test:coverage:e2e": "jest --config ./test/jest-e2e.json --coverage --maxWorkers=3",
+    "test:coverage:merge": "node scripts/coverage-report.mjs",
+    "test:coverage": "npm run test:coverage:unit && npm run test:coverage:e2e && npm run test:coverage:merge"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "@nestjs/axios": "^4.0.1",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/microservices": "^11.1.24",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.2.8",
+    "@nestjs/swagger": "^11.4.4",
+    "@prisma/adapter-neon": "^7.10.1",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
+    "bcrypt": "^6.0.0",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.15.1",
+    "cloudinary": "^2.11.0",
+    "cookie-parser": "^1.4.7",
+    "googleapis": "^183.0.0",
+    "joi": "^18.2.1",
+    "passport": "^0.7.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-jwt": "^4.0.1",
+    "pg": "^8.22.0",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "ws": "^8.21.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/bcrypt": "^6.0.0",
+    "@types/cookie-parser": "^1.4.10",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@types/passport-google-oauth20": "^2.0.17",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^7.0.0",
+    "@types/ws": "^8.18.1",
+    "eslint": "^9.18.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^17.0.0",
+    "istanbul-lib-coverage": "^3.2.2",
+    "istanbul-lib-report": "^3.0.1",
+    "istanbul-reports": "^3.2.0",
+    "jest": "^30.0.0",
+    "prettier": "^3.4.2",
+    "prisma": "^7.10.1",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0"
+  },
+  "prisma": {
+    "seed": "ts-node --compiler-options {\"module\":\"CommonJS\"} prisma/seed.ts"
+  },
+  "jest": {
+    "moduleFileExtensions": [
+      "js",
+      "json",
+      "ts"
+    ],
+    "rootDir": ".",
+    "testRegex": ".*\\.spec\\.ts$",
+    "testPathIgnorePatterns": [
+      "\\.e2e-spec\\.ts$",
+      "\\.db\\.spec\\.ts$",
+      "document-cloudinary\\.integration\\.spec\\.ts$"
+    ],
+    "transform": {
+      "^.+\\.(t|j)s$": "ts-jest"
+    },
+    "collectCoverageFrom": [
+      "**/*.(t|j)s"
+    ],
+    "coverageDirectory": "./coverage",
+    "testEnvironment": "node",
+    "setupFiles": [
+      "dotenv/config"
+    ]
+  },
+  "overrides": {
+    "js-yaml": "5.4.3",
+    "@nestjs/platform-express": {
+      "multer": "^2.5.0"
+    }
+  }
+}

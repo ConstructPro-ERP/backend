@@ -1,0 +1,455 @@
+import { NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import {
+  InvoiceStatus,
+  MilestoneStatus,
+  Prisma,
+  ProjectStatus,
+} from '@prisma/client';
+import { AiPromptService } from '../../apps/ai-service/src/ai-prompt.service';
+import { AiProviderService } from '../../apps/ai-service/src/ai-provider.service';
+import { AiForecastingService } from '../../apps/ai-service/src/ai-forecasting.service';
+import {
+  PredictionSourceDto,
+  RevenueTrendDto,
+  RiskLevelDto,
+} from '../../apps/ai-service/src/dto/ai-forecasting.dto';
+import { AiRepository } from '../../apps/ai-service/src/repositories/ai.repository';
+
+const repository = {
+  findProjectForRiskForecast: jest.fn(),
+  findPaymentsForRiskForecast: jest.fn(),
+  findVectorKnowledgeChunks: jest.fn(),
+};
+
+const configService = {
+  get: jest.fn(),
+};
+
+const aiPromptService = {
+  buildRiskPredictionPrompt: jest.fn(),
+};
+
+const aiProviderService = {
+  predictViaProvider: jest.fn(),
+};
+
+describe('AiForecastingService', () => {
+  let service: AiForecastingService;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'RAG_TOP_K') return '5';
+      return undefined;
+    });
+    repository.findPaymentsForRiskForecast.mockResolvedValue([]);
+    repository.findVectorKnowledgeChunks.mockResolvedValue([]);
+    aiPromptService.buildRiskPredictionPrompt.mockReturnValue({
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      warnings: [],
+      chunks: [],
+    });
+    aiProviderService.predictViaProvider.mockResolvedValue(null);
+    service = new AiForecastingService(
+      repository as unknown as AiRepository,
+      configService as unknown as ConfigService,
+      aiPromptService as unknown as AiPromptService,
+      aiProviderService as unknown as AiProviderService,
+    );
+  });
+
+  it.each([
+    {
+      amount: 1000,
+      outstanding: 0,
+      expense: 100,
+      trend: RevenueTrendDto.GROWING,
+      milestone: MilestoneStatus.COMPLETED,
+    },
+    {
+      amount: 1000,
+      outstanding: 500,
+      expense: 1000,
+      trend: RevenueTrendDto.DECLINING,
+      milestone: MilestoneStatus.PENDING,
+    },
+    {
+      amount: 1000,
+      outstanding: 500,
+      expense: 500,
+      trend: RevenueTrendDto.STABLE,
+      milestone: MilestoneStatus.COMPLETED,
+    },
+  ])(
+    'predicts revenue $trend from deterministic ERP amounts',
+    async ({ amount, outstanding, expense, trend, milestone }) => {
+      repository.findProjectForRiskForecast.mockResolvedValue({
+        id: 'project-1',
+        projectName: 'Tower',
+        status: ProjectStatus.ACTIVE,
+        budget: null,
+        milestones: [
+          {
+            id: 'ms-1',
+            milestoneName: 'Foundation',
+            status: milestone,
+            dueDate: null,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+        invoices: [
+          {
+            id: 'inv-1',
+            invoiceNumber: null,
+            dueDate: null,
+            status: InvoiceStatus.ISSUED,
+            totalAmount: amount,
+            outstandingAmount: outstanding,
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+        expenses: [
+          {
+            id: 'expense-1',
+            amount: new Prisma.Decimal(expense),
+            createdAt: new Date('2026-01-01'),
+          },
+        ],
+      });
+      const result = await service.predictProjectRisk('project-1');
+      expect(result.revenueTrend).toBe(trend);
+      expect(result.predictionSource).toBe(PredictionSourceDto.RULE_BASED);
+      expect(result.sufficientData).toBe(true);
+      expect(result.milestoneDelayRisk).toBe(
+        milestone === MilestoneStatus.COMPLETED
+          ? RiskLevelDto.LOW
+          : RiskLevelDto.MEDIUM,
+      );
+      expect(result.recommendedAction).toContain(
+        outstanding >= 350 ? 'payment follow-up' : 'Keep monitoring',
+      );
+    },
+  );
+
+  it('uses relational context when enabled vector retrieval has no matches', async () => {
+    configService.get.mockImplementation((key: string) =>
+      key === 'AI_VECTOR_SEARCH_ENABLED'
+        ? 'true'
+        : key === 'RAG_TOP_K'
+          ? 'invalid'
+          : undefined,
+    );
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: 'project-1',
+      projectName: 'Tower',
+      status: ProjectStatus.ACTIVE,
+      budget: 0,
+      milestones: [],
+      invoices: [],
+      expenses: [
+        {
+          id: 'exp-1',
+          amount: new Prisma.Decimal('0.00'),
+          createdAt: new Date('2026-01-01'),
+        },
+      ],
+    });
+    const result = await service.predictProjectRisk('project-1');
+    expect(repository.findVectorKnowledgeChunks).toHaveBeenCalledWith(
+      'project-1',
+      5,
+    );
+    expect(result.predictionSource).toBe(PredictionSourceDto.SAFE_FALLBACK);
+    expect(result.confidenceScore).toBe(0.25);
+  });
+
+  it('rejects invalid project ids when the project does not exist', async () => {
+    repository.findProjectForRiskForecast.mockResolvedValue(null);
+
+    await expect(
+      service.predictProjectRisk('missing-project'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('uses default context limits and accepts provider predictions without optional warnings', async () => {
+    configService.get.mockReturnValue(undefined);
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: 'p1',
+      projectName: 'Tower',
+      status: ProjectStatus.ACTIVE,
+      budget: 100,
+      milestones: [],
+      invoices: [],
+      expenses: [1, 2, 3].map((index) => ({
+        id: `e${index}`,
+        amount: 10,
+        createdAt: new Date('2026-10-01'),
+      })),
+    });
+    aiProviderService.predictViaProvider.mockResolvedValue({
+      projectRiskLevel: RiskLevelDto.LOW,
+      paymentDelayRisk: RiskLevelDto.LOW,
+      milestoneDelayRisk: RiskLevelDto.LOW,
+      revenueTrend: RevenueTrendDto.STABLE,
+      explanation: 'Provider explanation',
+      recommendedAction: 'Monitor',
+      confidenceScore: 0.8,
+    });
+    const result = await service.predictProjectRisk('p1');
+    expect(result.predictionSource).toBe(PredictionSourceDto.AI_PROVIDER);
+    expect(result.context.retrievedChunks).toHaveLength(4);
+    expect(result.warnings).toEqual([
+      expect.stringContaining('relational fallback'),
+    ]);
+  });
+
+  it('returns an insufficient-data safe fallback when history is too sparse', async () => {
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: '8df76ed3-983b-4648-b421-e8d98484e234',
+      projectName: 'Minimal Project',
+      status: ProjectStatus.PLANNING,
+      budget: 50000,
+      milestones: [],
+      invoices: [],
+      expenses: [],
+    });
+
+    const result = await service.predictProjectRisk(
+      '8df76ed3-983b-4648-b421-e8d98484e234',
+    );
+
+    expect(result.predictionSource).toBe(PredictionSourceDto.SAFE_FALLBACK);
+    expect(result.sufficientData).toBe(false);
+    expect(result.warnings).toContain(
+      'Neon pgvector retrieval is not configured; using relational fallback retrieval.',
+    );
+    expect(result.futureAdaptations.length).toBeGreaterThan(0);
+  });
+
+  it('returns a rule-based prediction when project history is available', async () => {
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+      projectName: 'Tower A',
+      status: ProjectStatus.ACTIVE,
+      budget: 100000,
+      milestones: [
+        {
+          id: 'ms-1',
+          milestoneName: 'Foundation',
+          dueDate: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+          status: MilestoneStatus.IN_PROGRESS,
+          createdAt: new Date('2026-06-01T00:00:00Z'),
+        },
+        {
+          id: 'ms-2',
+          milestoneName: 'Roofing',
+          dueDate: new Date('2026-07-10T00:00:00Z'),
+          status: MilestoneStatus.COMPLETED,
+          createdAt: new Date('2026-06-02T00:00:00Z'),
+        },
+      ],
+      invoices: [
+        {
+          id: 'inv-1',
+          invoiceNumber: 'INV-001',
+          dueDate: new Date('2026-06-10T00:00:00Z'),
+          status: InvoiceStatus.OVERDUE,
+          totalAmount: { toNumber: () => 10000 },
+          outstandingAmount: { toNumber: () => 4000 },
+          createdAt: new Date('2026-06-05T00:00:00Z'),
+        },
+      ],
+      expenses: [
+        {
+          id: 'exp-1',
+          amount: new Prisma.Decimal('2500.00'),
+          createdAt: new Date('2026-06-03T00:00:00Z'),
+        },
+      ],
+    });
+    repository.findPaymentsForRiskForecast.mockResolvedValue([
+      {
+        id: 'pay-1',
+        amount: { toNumber: () => 6000 },
+        paymentDate: new Date('2026-06-08T00:00:00Z'),
+        referenceNumber: 'PAY-001',
+      },
+    ]);
+
+    const result = await service.predictProjectRisk(
+      '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+    );
+
+    expect(result.predictionSource).toBe(PredictionSourceDto.RULE_BASED);
+    expect(result.projectRiskLevel).toBe(RiskLevelDto.MEDIUM);
+    expect(result.paymentDelayRisk).toBe(RiskLevelDto.HIGH);
+    expect(result.milestoneDelayRisk).toBe(RiskLevelDto.HIGH);
+    expect(result.revenueTrend).toBe(RevenueTrendDto.GROWING);
+    expect(result.context.retrievedChunks.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('uses provider output when the provider returns a valid structured prediction', async () => {
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+      projectName: 'Tower A',
+      status: ProjectStatus.ACTIVE,
+      budget: 100000,
+      milestones: [
+        {
+          id: 'ms-1',
+          milestoneName: 'Foundation',
+          dueDate: new Date('2026-07-10T00:00:00Z'),
+          status: MilestoneStatus.IN_PROGRESS,
+          createdAt: new Date('2026-06-01T00:00:00Z'),
+        },
+      ],
+      invoices: [
+        {
+          id: 'inv-1',
+          invoiceNumber: 'INV-001',
+          dueDate: new Date('2026-06-10T00:00:00Z'),
+          status: InvoiceStatus.OVERDUE,
+          totalAmount: { toNumber: () => 10000 },
+          outstandingAmount: { toNumber: () => 4000 },
+          createdAt: new Date('2026-06-05T00:00:00Z'),
+        },
+      ],
+      expenses: [
+        {
+          id: 'exp-1',
+          amount: new Prisma.Decimal('2500.00'),
+          createdAt: new Date('2026-06-03T00:00:00Z'),
+        },
+      ],
+    });
+    repository.findPaymentsForRiskForecast.mockResolvedValue([
+      {
+        id: 'pay-1',
+        amount: { toNumber: () => 6000 },
+        paymentDate: new Date('2026-06-08T00:00:00Z'),
+        referenceNumber: 'PAY-001',
+      },
+    ]);
+    aiPromptService.buildRiskPredictionPrompt.mockReturnValue({
+      systemPrompt: 'system',
+      userPrompt: 'user',
+      warnings: [
+        'Prompt context was limited to 1 chunks by AI_MAX_CONTEXT_CHUNKS.',
+      ],
+      chunks: [],
+    });
+    aiProviderService.predictViaProvider.mockResolvedValue({
+      projectRiskLevel: RiskLevelDto.HIGH,
+      paymentDelayRisk: RiskLevelDto.MEDIUM,
+      milestoneDelayRisk: RiskLevelDto.HIGH,
+      revenueTrend: RevenueTrendDto.STABLE,
+      explanation: 'Provider explanation',
+      recommendedAction: 'Provider action',
+      confidenceScore: 0.82,
+      warnings: ['Provider warning'],
+    });
+
+    const result = await service.predictProjectRisk(
+      '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+    );
+
+    expect(result.predictionSource).toBe(PredictionSourceDto.AI_PROVIDER);
+    expect(result.explanation).toBe('Provider explanation');
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        'Prompt context was limited to 1 chunks by AI_MAX_CONTEXT_CHUNKS.',
+        'Provider warning',
+      ]),
+    );
+  });
+
+  it('falls back safely when the provider request fails', async () => {
+    configService.get.mockImplementation((key: string) => {
+      if (key === 'RAG_TOP_K') return '5';
+      if (key === 'AI_VECTOR_SEARCH_ENABLED') return 'true';
+      return undefined;
+    });
+    repository.findProjectForRiskForecast.mockResolvedValue({
+      id: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+      projectName: 'Tower A',
+      status: ProjectStatus.ACTIVE,
+      budget: 100000,
+      milestones: [
+        {
+          id: 'ms-1',
+          milestoneName: 'Foundation',
+          dueDate: new Date('2026-07-10T00:00:00Z'),
+          status: MilestoneStatus.IN_PROGRESS,
+          createdAt: new Date('2026-06-01T00:00:00Z'),
+        },
+      ],
+      invoices: [
+        {
+          id: 'inv-1',
+          invoiceNumber: 'INV-001',
+          dueDate: new Date('2026-06-10T00:00:00Z'),
+          status: InvoiceStatus.OVERDUE,
+          totalAmount: { toNumber: () => 10000 },
+          outstandingAmount: { toNumber: () => 4000 },
+          createdAt: new Date('2026-06-05T00:00:00Z'),
+        },
+      ],
+      expenses: [
+        {
+          id: 'exp-1',
+          amount: new Prisma.Decimal('2500.00'),
+          createdAt: new Date('2026-06-03T00:00:00Z'),
+        },
+      ],
+    });
+    repository.findPaymentsForRiskForecast.mockResolvedValue([
+      {
+        id: 'pay-1',
+        amount: { toNumber: () => 6000 },
+        paymentDate: new Date('2026-06-08T00:00:00Z'),
+        referenceNumber: 'PAY-001',
+      },
+    ]);
+    repository.findVectorKnowledgeChunks.mockResolvedValue([
+      {
+        id: 'chunk-1',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'project',
+        sourceId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        content: 'Project Tower A is active.',
+        similarityScore: 0.9,
+      },
+      {
+        id: 'chunk-2',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'invoice',
+        sourceId: 'inv-1',
+        content: 'Invoice INV-001 is overdue.',
+        similarityScore: 0.87,
+      },
+      {
+        id: 'chunk-3',
+        projectId: '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+        sourceType: 'payment',
+        sourceId: 'pay-1',
+        content: 'Payment PAY-001 was recorded.',
+        similarityScore: 0.85,
+      },
+    ]);
+    aiProviderService.predictViaProvider.mockRejectedValue(
+      new Error('provider-down'),
+    );
+
+    const result = await service.predictProjectRisk(
+      '4d2d9cd8-9772-4ab0-a55a-504cb9c5e4e9',
+    );
+
+    expect(result.predictionSource).toBe(PredictionSourceDto.SAFE_FALLBACK);
+    expect(result.sufficientData).toBe(true);
+    expect(result.warnings).toContain(
+      'AI provider request failed; safe rule-based fallback was returned.',
+    );
+  });
+});

@@ -1,0 +1,25 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - "feature/**"
+      - "fix/**"
+      - "sprint8/**"
+
+  pull_request:
+    branches:
+      - develop
+      - main
+
+concurrency:
+  group: backend-neon-test-database
+  cancel-in-progress: false
+  queue: max
+
+jobs:
+  backend-ci:
+    uses: ConstructPro-ERP/infra/.github/workflows/backend-ci.yml@v3
+    secrets: inherit

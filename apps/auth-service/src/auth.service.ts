@@ -1,0 +1,235 @@
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import type { SignOptions } from 'jsonwebtoken';
+import * as bcrypt from 'bcrypt';
+import { PrismaService } from '../../../prisma/prisma.service';
+import { ErrorCode } from '../../../shared/error-codes';
+import { RoleDto } from './dto/getRoles.dto';
+
+interface GoogleUserPayload {
+  googleId: string;
+  email: string;
+  displayName: string;
+  avatar?: string;
+}
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly prisma: PrismaService,
+    private readonly configService: ConfigService,
+  ) {}
+
+  async register(
+    username: string,
+    password: string,
+    email: string,
+    roleId: string,
+  ) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      throw new HttpException(
+        {
+          code: ErrorCode.USER_ALREADY_EXISTS,
+          message: 'An account with this email already exists.',
+        },
+        HttpStatus.CONFLICT, // 409
+      );
+    }
+    const role = await this.prisma.role.findUnique({
+      where: { id: roleId },
+    });
+    if (!role || role.roleName !== 'CLIENT_PORTAL_USER') {
+      throw new HttpException(
+        {
+          code: ErrorCode.ROLE_NOT_FOUND,
+          message: 'Role you assigned is incorrect.',
+        },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const user = await this.prisma.user.create({
+      data: {
+        fullName: username,
+        password: hashedPassword,
+        email,
+        roleId: roleId,
+        status: 'ACTIVE',
+      },
+    });
+
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+          '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+          '7d') as SignOptions['expiresIn'],
+      }),
+      user: { id: user.id, username: user.fullName, email: user.email },
+    };
+  }
+
+  async validateUser(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user || !user.password) return null;
+    const isMatch = await bcrypt.compare(password, user.password);
+    return isMatch ? user : null;
+  }
+
+  async login(email: string, password: string) {
+    const user = await this.validateUser(email, password);
+    if (!user) {
+      throw new HttpException(
+        {
+          code: ErrorCode.INVALID_CREDENTIALS,
+          message: 'Email or password is incorrect.',
+        },
+        HttpStatus.UNAUTHORIZED, // 401
+      );
+    }
+
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+          '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+          '7d') as SignOptions['expiresIn'],
+      }),
+      user: { id: user.id, username: user.fullName, email: user.email },
+    };
+  }
+
+  findById(id: string) {
+    return this.prisma.user.findUnique({
+      where: { id },
+      include: { role: { select: { roleName: true } } },
+    });
+  }
+
+  async refreshTokens(refreshToken: string) {
+    try {
+      const payload = await this.jwtService.verifyAsync<{
+        sub: string;
+        username: string;
+      }>(refreshToken, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+      });
+
+      const newPayload = { sub: payload.sub, username: payload.username };
+      return {
+        accessToken: this.jwtService.sign(newPayload, {
+          expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+            '15m') as SignOptions['expiresIn'],
+        }),
+        refreshToken: this.jwtService.sign(newPayload, {
+          secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+          expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+            '7d') as SignOptions['expiresIn'],
+        }),
+      };
+    } catch {
+      throw new HttpException(
+        {
+          code: ErrorCode.TOKEN_INVALID,
+          message: 'Invalid or expired refresh token',
+        },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+  }
+
+  async getRoles(): Promise<RoleDto[]> {
+    return this.prisma.role.findMany({
+      select: {
+        id: true,
+        roleName: true,
+        description: true,
+      },
+    });
+  }
+
+  async findOrCreateGoogleUser(payload: GoogleUserPayload) {
+    const existing = await this.prisma.user.findFirst({
+      where: {
+        OR: [{ googleId: payload.googleId }, { email: payload.email }],
+      },
+      include: { role: { select: { roleName: true } } },
+    });
+
+    if (existing) {
+      const needsDefaultRole = !existing.role;
+      const defaultRole = needsDefaultRole ? await this.getSignupRole() : null;
+      // Link email/password accounts without replacing an assigned role.
+      if (!existing.googleId || needsDefaultRole) {
+        return this.prisma.user.update({
+          where: { id: existing.id },
+          data: {
+            googleId: payload.googleId,
+            avatar: payload.avatar,
+            ...(defaultRole ? { roleId: defaultRole.id } : {}),
+          },
+        });
+      }
+      return existing;
+    }
+
+    const defaultRole = await this.getSignupRole();
+
+    return this.prisma.user.create({
+      data: {
+        googleId: payload.googleId,
+        email: payload.email,
+        fullName: payload.displayName,
+        avatar: payload.avatar,
+        status: 'ACTIVE',
+        // Google users have no local password; null is intentional
+        password: null,
+        roleId: defaultRole.id,
+      },
+    });
+  }
+
+  private async getSignupRole() {
+    const role = await this.prisma.role.findFirst({
+      where: { roleName: 'CLIENT_PORTAL_USER' },
+    });
+    if (!role) {
+      throw new HttpException(
+        'Signup role is not configured.',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    }
+    return role;
+  }
+
+  // Google establishes identity; our own tokens maintain the application session.
+  issueTokenForUser(user: { id: string; fullName: string }) {
+    const payload = { sub: user.id, username: user.fullName };
+    return {
+      accessToken: this.jwtService.sign(payload, {
+        expiresIn: (this.configService.get<string>('JWT_EXPIRY') ||
+          '15m') as SignOptions['expiresIn'],
+      }),
+      refreshToken: this.jwtService.sign(payload, {
+        secret: this.configService.get<string>('JWT_REFRESH_SECRET'),
+        expiresIn: (this.configService.get<string>('JWT_REFRESH_EXPIRY') ||
+          '7d') as SignOptions['expiresIn'],
+      }),
+      user: { id: user.id, username: user.fullName },
+    };
+  }
+}

@@ -28,6 +28,35 @@ describe('Invoice repositories', () => {
     });
   });
 
+  it('exposes minimal creation choices and deduplicates project customer relationships', async () => {
+    prisma.project.findMany.mockResolvedValue([
+      {
+        id: 'p1',
+        projectName: 'Site A',
+        quotations: [
+          { lead: { customer: { id: 'c1' } } },
+          { lead: { customer: { id: 'c1' } } },
+          { lead: { customer: null } },
+        ],
+      },
+      { id: 'p2', projectName: 'Site B', quotations: [] },
+    ]);
+    prisma.customer.findMany.mockResolvedValue([
+      { id: 'c1', fullName: 'Alice' },
+    ]);
+    await expect(invoices.creationOptions()).resolves.toEqual({
+      projects: [
+        { id: 'p1', projectName: 'Site A', customerIds: ['c1'] },
+        { id: 'p2', projectName: 'Site B', customerIds: [] },
+      ],
+      customers: [{ id: 'c1', fullName: 'Alice' }],
+    });
+    expect(prisma.customer.findMany).toHaveBeenCalledWith({
+      orderBy: { fullName: 'asc' },
+      select: { id: true, fullName: true },
+    });
+  });
+
   it('preserves invoice data, joined details and PDF metadata during create/read/update', async () => {
     const data = {
       projectId: 'p1',

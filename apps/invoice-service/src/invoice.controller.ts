@@ -62,6 +62,14 @@ export class InvoiceController {
     return this.invoiceService.findAll(query);
   }
 
+  @Get('creation-options')
+  @ApiOperation({
+    summary: 'Get project and customer choices for invoice creation',
+  })
+  creationOptions() {
+    return this.invoiceService.creationOptions();
+  }
+
   @Get(':id')
   @ApiOkResponse({ type: InvoiceEntity })
   findOne(@Param('id', new ParseUUIDPipe()) id: string) {

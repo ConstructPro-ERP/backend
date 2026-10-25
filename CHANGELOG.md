@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added `GET /invoices/creation-options` through the API gateway and invoice service for the existing invoice roles. Returns minimal project/customer choices and project ownership associations for the invoice creation UI, without expanding project management access.
+
 - **DDP-95 — Backend task search and nullable assignment support** ([issue #142](https://github.com/ConstructPro-ERP/backend/issues/142))
   - Added case-insensitive task-name searching across authorized tasks, compatible with existing categorical filters, sorting, and pagination.
   - Extended task query validation and API Gateway forwarding to support the optional `search` parameter.

@@ -99,6 +99,16 @@ export class InvoicesGatewayController {
     );
   }
 
+  @Get('invoices/creation-options')
+  @ApiOperation({ summary: 'Get invoice project and customer choices' })
+  creationOptions(@Req() req: AuthenticatedRequest) {
+    return this.forward(() =>
+      this.httpService.get(this.url('/invoices/creation-options'), {
+        headers: this.forwardHeaders(req),
+      }),
+    );
+  }
+
   @Get('invoices/:id')
   findOne(@Param('id') id: string, @Req() req: AuthenticatedRequest) {
     return this.forward(() =>
